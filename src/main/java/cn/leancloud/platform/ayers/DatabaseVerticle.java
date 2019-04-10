@@ -43,7 +43,7 @@ public class DatabaseVerticle extends AbstractVerticle {
             .put("port", 13306)
             .put("username", "test")
             .put("password", "itsnothing")
-            .put("database", "playdb")
+            .put("database", "uluru")
             .put("charset", "utf-8")
             .put("connectTimeout", 10000)
             .put("testTimeout", 5000)

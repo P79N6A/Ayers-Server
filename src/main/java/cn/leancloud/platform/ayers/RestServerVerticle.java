@@ -40,61 +40,49 @@ public class RestServerVerticle extends AbstractVerticle {
   private HttpServer httpServer;
 
   private void queryInstallation(RoutingContext context) {
-    String jobId = context.pathParam("jobId");
-    logger.debug("fetch job with jobId: " + jobId);
-    this.redisClient.get(jobId, res -> {
-      logger.debug("result from redis cache: " + res.toString());
-      if (res.succeeded() && null != res.result()) {
-        CommonResult result = new CommonResult();
-        result.setStatus("ok");
-        result.setDetails(res.result().toString());
-        context.response().putHeader("Content-Type", "application/json; charset=utf-8")
-                .end(Json.encodePrettily(result));
-      } else {
-        // retrieve job status from database;
-        JsonObject request = new JsonObject().put("jobId", jobId);
-        logger.debug("send message: " + request.toString());
-        DeliveryOptions options = new DeliveryOptions().addHeader("operation", "fetch");
-        vertx.eventBus().send(this.dbQueue, request, options, reply -> {
-          logger.debug("received response from db queue.");
-          if (reply.failed()) {
-            logger.warn("db operationn failed. cause: ", reply.cause());
-            context.fail(reply.cause());
-          } else {
-            CommonResult result = new CommonResult();
-            result.setStatus("ok");
-            result.setDetails(reply.result().toString());
-            context.response().putHeader("Content-Type", "application/json; charset=utf-8")
-                    .end(Json.encodePrettily(result));
-          }
-        });
-
-      }
-    });
-  }
-
-  private void upsertInstallation(RoutingContext context) {
-    JsonObject param = new JsonObject(context.getBodyAsString());
-    String sql = param.getJsonObject("jobConfig").getString("sql");
-    logger.debug("create query job with request: " + param.toString() + " sql=" + sql);
-
-    String appId = "appId";//RequestParse.getAppId(context);
-    long curHourTime = new Date().getTime() / 3600000;
-    String jobId = StringUtils.computeMD5(String.format("%s-%d-%s", appId, curHourTime, sql));
-    param.put("id", jobId);
-    param.put("appId", appId);
-    logger.debug("send message: " + param.toString());
-
-    DeliveryOptions options = new DeliveryOptions().addHeader("operation", "create");
-    vertx.eventBus().send(this.dbQueue, param, options, reply -> {
-      logger.debug("received response from db queue.");
+    String objectId = context.request().getParam("objectId");
+    logger.debug("fetch installation with id: " + objectId);
+    JsonObject param = null;
+    JsonObject request = new JsonObject();
+    if (null != param) {
+      request.mergeIn(param);
+    }
+    if (!StringUtils.isEmpty(objectId)) {
+      request.put("objectId", objectId);
+    }
+    DeliveryOptions options = new DeliveryOptions().addHeader("operation", "query");
+    logger.debug("send message to " + this.mongoQueue);
+    vertx.eventBus().send(this.mongoQueue, request, options, reply -> {
       if (reply.failed()) {
         logger.warn("db operationn failed. cause: ", reply.cause());
         context.fail(reply.cause());
       } else {
         CommonResult result = new CommonResult();
         result.setStatus("ok");
-        result.setDetails(reply.result().toString());
+        result.setDetails(Json.encodePrettily(reply.result().body()));
+        context.response().putHeader("Content-Type", "application/json; charset=utf-8")
+                .end(Json.encodePrettily(result));
+      }
+    });
+  }
+
+  private void upsertInstallation(RoutingContext context) {
+    String objectId = context.request().getParam("objectId");
+    logger.debug("upsert installation with id: " + objectId);
+    JsonObject param = context.getBodyAsJson();
+    if (!StringUtils.isEmpty(objectId)) {
+      param.put("objectId", objectId);
+    }
+    DeliveryOptions options = new DeliveryOptions().addHeader("operation", "upsert");
+    vertx.eventBus().send(this.mongoQueue, param, options, reply -> {
+      logger.debug("received response from db queue.");
+      if (reply.failed()) {
+        logger.warn("mongo operationn failed. cause: ", reply.cause());
+        context.fail(reply.cause());
+      } else {
+        CommonResult result = new CommonResult();
+        result.setStatus("ok");
+        result.setDetails(reply.result().body().toString());
         context.response().putHeader("Content-Type", "application/json; charset=utf-8")
                 .end(Json.encodePrettily(result));
       }
@@ -102,10 +90,13 @@ public class RestServerVerticle extends AbstractVerticle {
   }
 
   private void deleteInstallation(RoutingContext context) {
-    JsonObject request = context.getBodyAsJson();
-    DeliveryOptions options = new DeliveryOptions().addHeader("operation", "create");
-    vertx.eventBus().send(this.dbQueue, request, options, reply -> {
+    String objectId = context.request().getParam("objectId");
+    logger.debug("upsert installation with id: " + objectId);
+    JsonObject request = new JsonObject().put("objectId", objectId);
+    DeliveryOptions options = new DeliveryOptions().addHeader("operation", "delete");
+    vertx.eventBus().send(this.mongoQueue, request, options, reply -> {
       if (reply.failed()) {
+        logger.warn("mongo operationn failed. cause: ", reply.cause());
         context.fail(reply.cause());
       } else {
         CommonResult result = new CommonResult();
@@ -208,7 +199,7 @@ public class RestServerVerticle extends AbstractVerticle {
     this.dbQueue = config().getString(CONFIG_DB_QUEUE, "db.queue");
     this.mongoQueue = config().getString(CONFIG_MONGO_QUEUE, "mongo.queue");
     String redisHost = config().getString(CONFIG_REDIS_HOST, "localhost");
-    int redisPort = config().getInteger(CONFIG_REDIS_PORT, 16379);
+    int redisPort = config().getInteger(CONFIG_REDIS_PORT, 6379);
     startHttpServer().compose(ar -> {
       Future<Void> future = Future.future();
       redisClient.connect(vertx, redisHost, redisPort, future);

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 export LAUNCHER="io.vertx.core.Launcher"
-export VERTICLE="cn.leancloud.insight.master.MainVerticle"
+export VERTICLE="cn.leancloud.platform.ayers.MainVerticle"
 export CMD="mvn compile"
 export VERTX_CMD="run"
 

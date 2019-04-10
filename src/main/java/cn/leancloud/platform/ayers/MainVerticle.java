@@ -16,9 +16,15 @@ public class MainVerticle extends CommonVerticle {
     httpVerticleDeployment.compose(id -> {
       Future<String> dbVerticleDeployment = Future.future();
       vertx.deployVerticle(DatabaseVerticle.class,
-              new DeploymentOptions().setInstances(2),
+              new DeploymentOptions().setInstances(1),
               dbVerticleDeployment);
       return dbVerticleDeployment;
+    }).compose(id -> {
+      Future<String> mongoVerticleDeployment = Future.future();
+      vertx.deployVerticle(MongoDBVerticle.class,
+              new DeploymentOptions().setInstances(1),
+              mongoVerticleDeployment);
+      return mongoVerticleDeployment;
     }).setHandler(ar -> {
       if (ar.succeeded()) {
         logger.info("main verticle start!");
