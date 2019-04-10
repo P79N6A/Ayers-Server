@@ -1,0 +1,38 @@
+# Java class files
+*.class
+
+# Generated files
+bin/
+gen/
+
+# ADT
+.classpath
+.project
+.settings
+local.properties
+bin
+gen
+_layouts
+proguard.cfg
+
+.DS_Store
+
+# Gradle files
+.gradle/
+build/
+
+# IDEA
+**/*.iml
+*.ipr
+*.iws
+out
+.idea
+
+# Maven
+target
+release.properties
+pom.xml.*
+
+# VIM
+*~
+*.swp
