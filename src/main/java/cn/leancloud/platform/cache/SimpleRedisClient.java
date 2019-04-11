@@ -41,6 +41,9 @@ public class SimpleRedisClient {
   }
 
   public void connect(Vertx vertx, String host, int port, Handler<AsyncResult<Void>> handler) {
+    // TODO:
+    // we can change options to support redis cluster or sentinel.
+    //
     RedisOptions options = new RedisOptions();
     options.setEndpoint(SocketAddress.inetSocketAddress(port, host));
     Redis.createClient(vertx, options).connect(onConnect -> {

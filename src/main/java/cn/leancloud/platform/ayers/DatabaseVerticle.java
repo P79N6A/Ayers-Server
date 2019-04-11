@@ -13,6 +13,8 @@ import io.vertx.ext.sql.SQLConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+// for bigquery job.
+//
 public class DatabaseVerticle extends AbstractVerticle {
   private static final Logger logger = LoggerFactory.getLogger(DatabaseVerticle.class);
 

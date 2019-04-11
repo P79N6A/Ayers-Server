@@ -6,5 +6,4 @@ public class LeanObject {
   private String objectId;
   private Timestamp createdAt;
   private Timestamp updatedAt;
-
 }

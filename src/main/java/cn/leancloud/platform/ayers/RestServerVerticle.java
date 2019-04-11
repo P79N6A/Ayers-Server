@@ -2,11 +2,13 @@ package cn.leancloud.platform.ayers;
 
 import cn.leancloud.platform.common.CommonResult;
 import cn.leancloud.platform.cache.SimpleRedisClient;
+import cn.leancloud.platform.common.Configure;
 import cn.leancloud.platform.common.StringUtils;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 
 import io.vertx.core.eventbus.DeliveryOptions;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.json.Json;
@@ -20,13 +22,16 @@ import io.vertx.ext.web.handler.BodyHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Date;
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.stream.Collectors;
 
 /**
  * Hello world!
  */
 public class RestServerVerticle extends AbstractVerticle {
   private static final Logger logger = LoggerFactory.getLogger(RestServerVerticle.class);
+
   public static final String CONFIG_HTTP_SERVER_PORT = "http.server.port";
   public static final String CONFIG_DB_QUEUE = "db.queue";
   public static final String CONFIG_MONGO_QUEUE = "mongo.queue";
@@ -34,66 +39,71 @@ public class RestServerVerticle extends AbstractVerticle {
   public static final String CONFIG_REDIS_PORT = "redis.port";
 
   private String dbQueue = "db.queue";
+
   private String mongoQueue = "mongo.queue";
 
   private SimpleRedisClient redisClient = new SimpleRedisClient();
   private HttpServer httpServer;
 
   private void queryInstallation(RoutingContext context) {
-    String objectId = context.request().getParam("objectId");
+    String objectId = parseRequestObjectId(context);
     logger.debug("fetch installation with id: " + objectId);
-    JsonObject param = null;
-    JsonObject request = new JsonObject();
-    if (null != param) {
-      request.mergeIn(param);
-    }
-    if (!StringUtils.isEmpty(objectId)) {
-      request.put("objectId", objectId);
-    }
-    DeliveryOptions options = new DeliveryOptions().addHeader("operation", "query");
-    logger.debug("send message to " + this.mongoQueue);
-    vertx.eventBus().send(this.mongoQueue, request, options, reply -> {
-      if (reply.failed()) {
-        logger.warn("db operationn failed. cause: ", reply.cause());
-        context.fail(reply.cause());
-      } else {
-        CommonResult result = new CommonResult();
-        result.setStatus("ok");
-        result.setDetails(Json.encodePrettily(reply.result().body()));
-        context.response().putHeader("Content-Type", "application/json; charset=utf-8")
-                .end(Json.encodePrettily(result));
-      }
-    });
+    JsonObject param = parseRequestBody(context);
+    sendMongoOperation(context, Configure.INSTALLATION_CLASS, objectId, Configure.OP_OBJECT_QUERY, param);
   }
 
   private void upsertInstallation(RoutingContext context) {
-    String objectId = context.request().getParam("objectId");
+    String objectId = parseRequestObjectId(context);
     logger.debug("upsert installation with id: " + objectId);
-    JsonObject param = context.getBodyAsJson();
-    if (!StringUtils.isEmpty(objectId)) {
-      param.put("objectId", objectId);
-    }
-    DeliveryOptions options = new DeliveryOptions().addHeader("operation", "upsert");
-    vertx.eventBus().send(this.mongoQueue, param, options, reply -> {
-      logger.debug("received response from db queue.");
-      if (reply.failed()) {
-        logger.warn("mongo operationn failed. cause: ", reply.cause());
-        context.fail(reply.cause());
-      } else {
-        CommonResult result = new CommonResult();
-        result.setStatus("ok");
-        result.setDetails(reply.result().body().toString());
-        context.response().putHeader("Content-Type", "application/json; charset=utf-8")
-                .end(Json.encodePrettily(result));
-      }
-    });
+    JsonObject param = parseRequestBody(context);
+    sendMongoOperation(context, Configure.INSTALLATION_CLASS, objectId, Configure.OP_OBJECT_UPSERT, param);
   }
 
   private void deleteInstallation(RoutingContext context) {
-    String objectId = context.request().getParam("objectId");
+    String objectId = parseRequestObjectId(context);
     logger.debug("upsert installation with id: " + objectId);
-    JsonObject request = new JsonObject().put("objectId", objectId);
-    DeliveryOptions options = new DeliveryOptions().addHeader("operation", "delete");
+    sendMongoOperation(context, Configure.INSTALLATION_CLASS, objectId, Configure.OP_OBJECT_DELETE, null);
+  }
+
+  private void serverDate(RoutingContext context) {
+    CommonResult result = new CommonResult();
+    result.setStatus("ok");
+    result.setDetails(new Date().toString());
+    context.response().putHeader("Content-Type", "application/json; charset=utf-8")
+            .end(Json.encodePrettily(result));
+  }
+
+  private void curdObject(RoutingContext context) {
+    String clazz = parseRequestClassname(context);
+    String objectId = parseRequestObjectId(context);
+    JsonObject body = parseRequestBody(context);
+    HttpMethod httpMethod = context.request().method();
+    String operation = "";
+    if (HttpMethod.GET.equals(httpMethod)) {
+      operation = Configure.OP_OBJECT_QUERY;
+    } else if (HttpMethod.DELETE.equals(httpMethod)) {
+      operation = Configure.OP_OBJECT_DELETE;
+    } else if (HttpMethod.POST.equals(httpMethod) || HttpMethod.PUT.equals(httpMethod)) {
+      operation = Configure.OP_OBJECT_UPSERT;
+    }
+
+    logger.debug("curl object. clazz=" + clazz + ", objectId=" + objectId + ", method=" + httpMethod + ", param=" + body);
+
+    sendMongoOperation(context, clazz, objectId, operation, body);
+  }
+
+  private void sendMongoOperation(RoutingContext context, String clazz, String objectId, String operation, JsonObject param) {
+    JsonObject request = new JsonObject();
+    if (!StringUtils.isEmpty(clazz)) {
+      request.put(Configure.INTERNAL_MSG_ATTR_CLASS, clazz);
+    }
+    if (!StringUtils.isEmpty(objectId)) {
+      request.put(Configure.INTERNAL_MSG_ATTR_OBJECT_ID, objectId);
+    }
+    if (null != param) {
+      request.put(Configure.INTERNAL_MSG_ATTR_PARAM, param);
+    }
+    DeliveryOptions options = new DeliveryOptions().addHeader(Configure.INTERNAL_MSG_HEADER_OP, operation);
     vertx.eventBus().send(this.mongoQueue, request, options, reply -> {
       if (reply.failed()) {
         logger.warn("mongo operationn failed. cause: ", reply.cause());
@@ -108,14 +118,35 @@ public class RestServerVerticle extends AbstractVerticle {
     });
   }
 
-  private void serverDate(RoutingContext context) {
-    CommonResult result = new CommonResult();
-    result.setStatus("ok");
-    result.setDetails(new Date().toString());
-    context.response().putHeader("Content-Type", "application/json; charset=utf-8")
-            .end(Json.encodePrettily(result));
+  private String parseRequestObjectId(RoutingContext context) {
+    return context.request().getParam("objectId");
   }
 
+  private String parseRequestClassname(RoutingContext context) {
+    return context.request().getParam("clazz");
+  }
+
+  private JsonObject parseRequestBody(RoutingContext context) {
+    HttpMethod httpMethod = context.request().method();
+    JsonObject body = null;
+    if (HttpMethod.GET.equals(httpMethod)) {
+      Map<String, String> filteredEntries = context.request().params().entries()
+              .stream().parallel()
+              .filter(entry -> !"clazz".equalsIgnoreCase(entry.getKey()) && !"objectId".equalsIgnoreCase(entry.getKey()))
+              .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+      body = JsonObject.mapFrom(filteredEntries);
+    } else if (HttpMethod.PUT.equals(httpMethod) || HttpMethod.POST.equals(httpMethod)){
+      body = context.getBodyAsJson();
+    } else {
+      String bodyString = context.getBodyAsString();
+      if (StringUtils.isEmpty(bodyString)) {
+        body = new JsonObject();
+      } else {
+        body = new JsonObject(bodyString);
+      }
+    }
+    return body;
+  }
   private void healthcheck(RoutingContext context) {
     logger.debug("response for healthcheck.");
     CommonResult result = new CommonResult();
@@ -159,14 +190,19 @@ public class RestServerVerticle extends AbstractVerticle {
      * delete  /1.1/installations/:objectId
      *
      */
+    router.post("/1.1/classes/:clazz").handler(this::curdObject);
+    router.get("/1.1/classes/:clazz").handler(this::curdObject);
+    router.get("/1.1/classes/:clazz/:objectId").handler(this::curdObject);
+    router.put("/1.1/classes/:clazz/:objectId").handler(this::curdObject);
+    router.delete("/1.1/classes/:clazz/:objectId").handler(this::curdObject);
+
     router.post("/1.1/installations").handler(validationHandler).handler(this::upsertInstallation);
     router.put("/1.1/installations/:objectId").handler(validationHandler).handler(this::upsertInstallation);
     router.get("/1.1/installations").handler(validationHandler).handler(this::queryInstallation);
     router.get("/1.1/installations/:objectId").handler(validationHandler).handler(this::queryInstallation);
     router.delete("/1.1/installations/:objectId").handler(validationHandler).handler(this::deleteInstallation);
 
-    router.get("/1.1/date").handler(validationHandler).handler(this::serverDate);
-
+    router.get("/1.1/date").handler(this::serverDate);
 
     router.get("/").handler(rc -> rc.response().end("hello from LeanCloud"));
 

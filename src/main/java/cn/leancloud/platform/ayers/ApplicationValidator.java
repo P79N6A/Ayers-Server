@@ -11,7 +11,10 @@ import org.slf4j.LoggerFactory;
 public class ApplicationValidator implements CustomValidator {
   private static final Logger logger = LoggerFactory.getLogger(ApplicationValidator.class);
 
+  // validate (appid, appkey/sign) through meta service, work for bigquery.
+  // for api service, it's not useful. ignore.
   private final String metaServiceAuthKey;
+
   public ApplicationValidator(String metaServiceAuthKey) {
     this.metaServiceAuthKey = metaServiceAuthKey;
   }

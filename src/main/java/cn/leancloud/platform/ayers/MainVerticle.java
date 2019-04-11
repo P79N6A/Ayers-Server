@@ -11,15 +11,19 @@ public class MainVerticle extends CommonVerticle {
 
   @Override
   public void start(Future<Void> startFuture) throws Exception {
+    // start rest verticle.
     Future<String> httpVerticleDeployment = Future.future();
     vertx.deployVerticle(new RestServerVerticle(), httpVerticleDeployment);
+
     httpVerticleDeployment.compose(id -> {
+      // start database verticle.
       Future<String> dbVerticleDeployment = Future.future();
       vertx.deployVerticle(DatabaseVerticle.class,
               new DeploymentOptions().setInstances(1),
               dbVerticleDeployment);
       return dbVerticleDeployment;
     }).compose(id -> {
+      // start mongo verticle.
       Future<String> mongoVerticleDeployment = Future.future();
       vertx.deployVerticle(MongoDBVerticle.class,
               new DeploymentOptions().setInstances(1),
