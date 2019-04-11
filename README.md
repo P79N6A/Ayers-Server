@@ -26,3 +26,20 @@ Ayers is a structural data processing server based on Vertx.io and [Netty](https
 ### not to do
 - cql.
 - class binding.
+
+## how to run locally
+- check repository to local.
+- enter `local-env` directory, make sub directory as following:
+```$xslt
+├── data
+│   ├── mongo
+│   ├── mysql
+│   ├── redis
+│   └── redis_senti
+├── docker-compose.yml
+├── mysql.cnf
+└── sentinel.conf
+```
+- enter `local-env` directory, run `docker-compose up -d`
+- run shell: `./local-run.sh`
+- have fun.

@@ -1,0 +1,70 @@
+version: '2'
+
+volumes:
+  data: {}
+
+networks: {}
+
+services:
+  memcached:
+    container_name: ayers-memcached
+    image: memcached:1.4
+    ports:
+      - "11212:11211"
+
+  redis:
+    image: redis
+    container_name: ayers-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+
+  redis-senti:
+    image: redis
+    container_name: ayers-redis-sentinel
+    ports:
+      - "15000:15000"
+    volumes:
+      - "./data/redis_senti:/var/lib/redis"
+      - "./sentinel.conf:/usr/local/etc/redis/sentinel.conf"
+    depends_on:
+      - redis
+    links:
+      - redis
+    command: [redis-server, /usr/local/etc/redis/sentinel.conf, --sentinel]
+
+  mysql:
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: uluru
+      MYSQL_USER: test
+      MYSQL_PASSWORD: itsnothing
+    ports:
+      - "13306:3306"
+    volumes:
+      - "./mysql.cnf:/etc/mysql/conf.d/charset.cnf"
+      - ./data/mysql:/var/lib/mysql
+    container_name: ayers-mysql
+
+  mongo:
+    image: mongo:3.6
+    ports:
+      - "27027:27017"
+    volumes:
+      - ./data/mongo:/data/db
+    container_name: ayers-mongo
+
+  kestrel:
+    image: thefactory/kestrel:2.4.2
+    container_name: ayers-kestrel
+    ports:
+      - "22433:22133"
+
+  # based on alpine since 3.4.6
+  zookeeper:
+    image: jplock/zookeeper:3.4.8
+    container_name: ayers-zookeeper
+    ports:
+      - "12181:2181"
