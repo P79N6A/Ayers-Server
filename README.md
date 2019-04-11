@@ -15,18 +15,30 @@ Ayers is a structural data processing server based on Vertx.io and [Netty](https
 ## roadmap
 
 ### done
-- Installation curd
+- Installation CRUD
 
 ### in progress
-- Object curd
-- let all ayers components configurable.
+- Object CRUD
+- let all components configurable.
 
 ### todo
 - user account.
+- pointer
+- relation
+- file
+- bulk operation
+- acl
+- role
+- sms
 - managing mongodb collections.
 - support mongodb index api.
 - support other mongodb commands.
-- support plugins(elastic search, live query, spark, and so on)
+- support plugins
+  - feed and status
+  - full-text search
+  - live query
+  - data insight
+  - etc
 
 ### not to do
 - cql.
