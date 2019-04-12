@@ -4,17 +4,19 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import org.bson.types.ObjectId;
 
-import java.time.Instant;
 import java.util.AbstractMap;
-import java.util.Date;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 public class Transformer {
   private static final String TYPE_DATE = "Date";
   private static final String TYPE_POINTER = "Pointer";
+  private static final String TYPE_GEOPOINTER = "GeoPoint";
   private static final String DATE_FORMAT_REG = "\\d-\\d-\\d-\\dT\\d:\\d:\\d.\\dZ";
 
+  // "location":{"__type":"GeoPoint","latitude":45.9,"longitude":76.3}
+  //    to {"type":"Point","coordinates":[124.6682391,-17.8978304]}
   private static JsonObject encode2BsonUnit(JsonObject o) {
     if (null == o) {
       return o;
@@ -31,10 +33,16 @@ public class Transformer {
         result = new JsonObject();
         result.put("$ref", className);
         result.put("$id", new ObjectId(objectId).toString());
+      } else if (TYPE_GEOPOINTER.equalsIgnoreCase(type)) {
+        double latitude = o.getDouble("latitude");
+        double longitude = o.getDouble("longitude");
+        result = new JsonObject().put("type", "Point");
+        result.put("coordinates", new JsonArray(Arrays.asList(longitude, latitude)));
       }
     }
     return result;
   }
+
   public static JsonObject encode2BsonObject(JsonObject o) {
     if (null == o) {
       return o;
@@ -73,6 +81,17 @@ public class Transformer {
     } else if (o.containsKey("$date")) {
       newValue = new JsonObject().put("__type", "Date");
       newValue.put("iso", o.getString("$date"));
+    } else if ("Point".equalsIgnoreCase(o.getString("type")) && null != o.getJsonArray("coordinates")) {
+      JsonArray coordinates = o.getJsonArray("coordinates");
+      if (coordinates.size() == 2) {
+        double longitude = coordinates.getDouble(0);
+        double latitude = coordinates.getDouble(1);
+        newValue = new JsonObject().put("__type", TYPE_GEOPOINTER);
+        newValue.put("longitude", longitude);
+        newValue.put("latitude", latitude);
+      } else {
+        // log warning.
+      }
     }
     return newValue;
   }
