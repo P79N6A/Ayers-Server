@@ -85,6 +85,8 @@ public class MongoDBVerticle extends CommonVerticle {
         }
         param.put(Configure.CLASS_ATTR_UPDATED_TS, now);
 
+        param = Transformer.encode2BsonObject(param);
+
         client.save(clazz, param, res -> {
           client.close();
           if (res.failed()) {
@@ -170,7 +172,7 @@ public class MongoDBVerticle extends CommonVerticle {
             if (res.failed()) {
               reportOoperationError(message, res.cause());
             } else {
-              Stream<JsonObject> resultStream = res.result().stream().map(Transformer::wrapQueryResult);
+              Stream<JsonObject> resultStream = res.result().stream().map(Transformer::decodeBsonObject);
               if (StringUtils.isEmpty(objectId)) {
                 JsonArray results = resultStream.collect(toJsonArray());
                 message.reply(new JsonObject().put("results", results));
