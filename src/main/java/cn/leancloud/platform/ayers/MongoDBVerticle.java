@@ -3,10 +3,8 @@ package cn.leancloud.platform.ayers;
 import cn.leancloud.platform.common.Configure;
 import cn.leancloud.platform.common.StringUtils;
 import cn.leancloud.platform.common.Transformer;
-import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.Message;
-import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.mongo.FindOptions;
@@ -21,7 +19,7 @@ import java.util.stream.Stream;
 
 import static cn.leancloud.platform.common.JsonFactory.toJsonArray;
 
-public class MongoDBVerticle extends AbstractVerticle {
+public class MongoDBVerticle extends CommonVerticle {
   private static final Logger logger = LoggerFactory.getLogger(MongoDBVerticle.class);
   private static final int COUNT_FLAG = 1;
 
@@ -177,7 +175,7 @@ public class MongoDBVerticle extends AbstractVerticle {
                 JsonArray results = resultStream.collect(toJsonArray());
                 message.reply(new JsonObject().put("results", results));
               } else {
-                message.reply(resultStream.findFirst());
+                message.reply(resultStream.findFirst().orElseGet(dummyJsonGenerator));
               }
             }
           });

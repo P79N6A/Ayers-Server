@@ -1,6 +1,5 @@
 package cn.leancloud.platform.ayers;
 
-import cn.leancloud.platform.common.CommonVerticle;
 import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Future;
 import org.slf4j.Logger;

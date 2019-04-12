@@ -1,6 +1,5 @@
 package cn.leancloud.platform.ayers;
 
-import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.JsonArray;
@@ -15,7 +14,7 @@ import org.slf4j.LoggerFactory;
 
 // for bigquery job.
 //
-public class DatabaseVerticle extends AbstractVerticle {
+public class DatabaseVerticle extends CommonVerticle {
   private static final Logger logger = LoggerFactory.getLogger(DatabaseVerticle.class);
 
   private SQLClient mysqlClient = null;

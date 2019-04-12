@@ -4,7 +4,6 @@ import cn.leancloud.platform.common.CommonResult;
 import cn.leancloud.platform.cache.SimpleRedisClient;
 import cn.leancloud.platform.common.Configure;
 import cn.leancloud.platform.common.StringUtils;
-import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 
 import io.vertx.core.eventbus.DeliveryOptions;
@@ -31,7 +30,7 @@ import java.util.stream.Collectors;
 /**
  * Hello world!
  */
-public class RestServerVerticle extends AbstractVerticle {
+public class RestServerVerticle extends CommonVerticle {
   private static final Logger logger = LoggerFactory.getLogger(RestServerVerticle.class);
 
   public static final String CONFIG_HTTP_SERVER_PORT = "http.server.port";
@@ -47,26 +46,6 @@ public class RestServerVerticle extends AbstractVerticle {
   private SimpleRedisClient redisClient = new SimpleRedisClient();
   private HttpServer httpServer;
 
-  private void queryInstallation(RoutingContext context) {
-    String objectId = parseRequestObjectId(context);
-    logger.debug("fetch installation with id: " + objectId);
-    JsonObject param = parseRequestBody(context);
-    sendMongoOperation(context, Configure.INSTALLATION_CLASS, objectId, Configure.OP_OBJECT_QUERY, param);
-  }
-
-  private void upsertInstallation(RoutingContext context) {
-    String objectId = parseRequestObjectId(context);
-    logger.debug("upsert installation with id: " + objectId);
-    JsonObject param = parseRequestBody(context);
-    sendMongoOperation(context, Configure.INSTALLATION_CLASS, objectId, Configure.OP_OBJECT_UPSERT, param);
-  }
-
-  private void deleteInstallation(RoutingContext context) {
-    String objectId = parseRequestObjectId(context);
-    logger.debug("upsert installation with id: " + objectId);
-    sendMongoOperation(context, Configure.INSTALLATION_CLASS, objectId, Configure.OP_OBJECT_DELETE, null);
-  }
-
   private void serverDate(RoutingContext context) {
     CommonResult result = new CommonResult();
     result.setStatus("ok");
@@ -75,8 +54,16 @@ public class RestServerVerticle extends AbstractVerticle {
             .end(Json.encodePrettily(result));
   }
 
-  private void curdObject(RoutingContext context) {
+  private void crudInstallation(RoutingContext context) {
+    crudCommonData(Configure.INSTALLATION_CLASS, context);
+  }
+
+  private void crudObject(RoutingContext context) {
     String clazz = parseRequestClassname(context);
+    crudCommonData(clazz, context);
+  }
+
+  private void crudCommonData(String clazz, RoutingContext context) {
     String objectId = parseRequestObjectId(context);
     JsonObject body = parseRequestBody(context);
     HttpMethod httpMethod = context.request().method();
@@ -170,15 +157,15 @@ public class RestServerVerticle extends AbstractVerticle {
             .setTcpQuickAck(true)
             .setReusePort(true));
 
-    ApplicationValidator validator = new ApplicationValidator("testkey");
-    HTTPRequestValidationHandler validationHandler = HTTPRequestValidationHandler.create().addCustomValidatorFunction(validator);
+    ApplicationValidator appKeyValidator = new ApplicationValidator("testkey");
+    HTTPRequestValidationHandler appKeyValidationHandler = HTTPRequestValidationHandler.create().addCustomValidatorFunction(appKeyValidator);
 
     Router router = Router.router(vertx);
 
     router.get("/ping").handler(this::healthcheck);
 
     BodyHandler bodyHandler = BodyHandler.create();
-    router.route("/*").handler(bodyHandler);
+    router.route("/1.1/*").handler(bodyHandler).handler(appKeyValidationHandler);
 
     /**
      * get    /1.1/date
@@ -196,17 +183,17 @@ public class RestServerVerticle extends AbstractVerticle {
      * delete  /1.1/installations/:objectId
      *
      */
-    router.post("/1.1/classes/:clazz").handler(this::curdObject);
-    router.get("/1.1/classes/:clazz").handler(this::curdObject);
-    router.get("/1.1/classes/:clazz/:objectId").handler(this::curdObject);
-    router.put("/1.1/classes/:clazz/:objectId").handler(this::curdObject);
-    router.delete("/1.1/classes/:clazz/:objectId").handler(this::curdObject);
+    router.post("/1.1/classes/:clazz").handler(this::crudObject);
+    router.get("/1.1/classes/:clazz").handler(this::crudObject);
+    router.get("/1.1/classes/:clazz/:objectId").handler(this::crudObject);
+    router.put("/1.1/classes/:clazz/:objectId").handler(this::crudObject);
+    router.delete("/1.1/classes/:clazz/:objectId").handler(this::crudObject);
 
-    router.post("/1.1/installations").handler(validationHandler).handler(this::upsertInstallation);
-    router.put("/1.1/installations/:objectId").handler(validationHandler).handler(this::upsertInstallation);
-    router.get("/1.1/installations").handler(validationHandler).handler(this::queryInstallation);
-    router.get("/1.1/installations/:objectId").handler(validationHandler).handler(this::queryInstallation);
-    router.delete("/1.1/installations/:objectId").handler(validationHandler).handler(this::deleteInstallation);
+    router.post("/1.1/installations").handler(this::crudInstallation);
+    router.put("/1.1/installations/:objectId").handler(this::crudInstallation);
+    router.get("/1.1/installations").handler(this::crudInstallation);
+    router.get("/1.1/installations/:objectId").handler(this::crudInstallation);
+    router.delete("/1.1/installations/:objectId").handler(this::crudInstallation);
 
     router.get("/1.1/date").handler(this::serverDate);
 
@@ -220,6 +207,11 @@ public class RestServerVerticle extends AbstractVerticle {
       } else {
         // Unknown 400 failure happened
         routingContext.response().setStatusCode(400).end();
+      }
+    });
+    router.errorHandler(HttpStatus.SC_INTERNAL_SERVER_ERROR, routingContext -> {
+      if (routingContext.failed()) {
+        logger.warn("internal error. cause: " + routingContext.failure().getMessage());
       }
     });
 

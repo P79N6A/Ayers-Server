@@ -3,6 +3,7 @@ package cn.leancloud.platform.common;
 import io.vertx.core.json.JsonObject;
 
 public class Transformer {
+
   public static JsonObject wrapQueryResult(JsonObject o) {
     if (null == o) {
       return o;
