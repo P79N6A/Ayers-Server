@@ -11,6 +11,7 @@ import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
+import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.Json;
 
 import io.vertx.core.json.JsonObject;
@@ -19,6 +20,7 @@ import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.api.validation.HTTPRequestValidationHandler;
 import io.vertx.ext.web.api.validation.ValidationException;
 import io.vertx.ext.web.handler.BodyHandler;
+import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -109,11 +111,15 @@ public class RestServerVerticle extends AbstractVerticle {
         logger.warn("mongo operationn failed. cause: ", reply.cause());
         context.fail(reply.cause());
       } else {
-        CommonResult result = new CommonResult();
-        result.setStatus("ok");
-        result.setDetails(reply.result().toString());
-        context.response().putHeader("Content-Type", "application/json; charset=utf-8")
-                .end(Json.encodePrettily(result));
+        JsonObject result = (JsonObject) reply.result().body();
+        HttpServerResponse response = context.response().putHeader("Content-Type", "application/json; charset=utf-8");
+        if (Configure.OP_OBJECT_UPSERT.equalsIgnoreCase(operation) && StringUtils.isEmpty(objectId)) {
+          //Status: 201 Created
+          //Location: https://heqfq0sw.api.lncld.net/1.1/classes/Post/<objectId>
+          response.putHeader("Location", context.request().absoluteURI() + result.getString("objectId"));
+          response.setStatusCode(HttpStatus.SC_CREATED);
+        }
+        response.end(Json.encodePrettily(result));
       }
     });
   }

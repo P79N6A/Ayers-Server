@@ -2,9 +2,12 @@ package cn.leancloud.platform.ayers;
 
 import cn.leancloud.platform.common.Configure;
 import cn.leancloud.platform.common.StringUtils;
+import cn.leancloud.platform.common.Transformer;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.Message;
+import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.mongo.FindOptions;
 import io.vertx.ext.mongo.MongoClient;
@@ -12,15 +15,20 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import static cn.leancloud.platform.common.JsonFactory.toJsonArray;
 
 public class MongoDBVerticle extends AbstractVerticle {
   private static final Logger logger = LoggerFactory.getLogger(MongoDBVerticle.class);
-  private static final String COUNT_FLAG = "1";
+  private static final int COUNT_FLAG = 1;
 
   private String mongoQueue;
   private JsonObject mongoConfig;
   private static final String MONGO_POOL_NAME = "MongoDBPool";
+  private static final String[] ALWAYS_PROJECT_KEYS = {"_id", "createdAt", "updatedAt", "ACL"};
 
   private void prepareDatabase() {
     mongoConfig = new JsonObject()
@@ -79,13 +87,20 @@ public class MongoDBVerticle extends AbstractVerticle {
         }
         param.put(Configure.CLASS_ATTR_UPDATED_TS, now);
 
-        client.insert(clazz, body, res -> {
+        client.save(clazz, param, res -> {
           client.close();
           if (res.failed()) {
             reportOoperationError(message, res.cause());
           } else {
-            logger.debug("insert doc result:" + res.result());
-            message.reply(res.result());
+            String docId = StringUtils.isEmpty(objectId) ? res.result() : objectId;
+            logger.debug("insert doc result:" + docId);
+            JsonObject result = new JsonObject().put("objectId", docId);
+            if (!StringUtils.isEmpty(objectId)) {
+              result.put("updatedAt", now.toString());
+            } else {
+              result.put("createdAt", now.toString());
+            }
+            message.reply(result);
           }
         });
         break;
@@ -105,41 +120,65 @@ public class MongoDBVerticle extends AbstractVerticle {
       case Configure.OP_OBJECT_QUERY:
         String where = param.getString(Configure.QUERY_KEY_WHERE, "{}");
         String order = param.getString(Configure.QUERY_KEY_ORDER);
-        String limit = param.getString(Configure.QUERY_KEY_LIMIT, "100");
-        String skip = param.getString(Configure.QUERY_KEY_SKIP, "0");
-        String count = param.getString(Configure.QUERY_KEY_COUNT);
+        int limit = Integer.valueOf(param.getString(Configure.QUERY_KEY_LIMIT, "100"));
+        int skip = Integer.valueOf(param.getString(Configure.QUERY_KEY_SKIP, "0"));
+        int count = Integer.valueOf(param.getString(Configure.QUERY_KEY_COUNT, "0"));
         String include = param.getString(Configure.QUERY_KEY_INCLUDE);
         String keys = param.getString(Configure.QUERY_KEY_KEYS);
+
         JsonObject condition = new JsonObject(where);
         if (!StringUtils.isEmpty(objectId)) {
           condition.put(Configure.CLASS_ATTR_MONGO_ID, objectId);
         }
         FindOptions options = new FindOptions();
-        options.setLimit(Integer.valueOf(limit));
-        options.setSkip(Integer.valueOf(skip));
+        options.setLimit(limit);
+        options.setSkip(skip);
+        if (!StringUtils.isEmpty(order)) {
+          JsonObject sortJson = new JsonObject();
+          Arrays.stream(order.split(",")).filter(StringUtils::notEmpty).forEach( a -> {
+            if (a.startsWith("+")) {
+              sortJson.put(a.substring(1), 1);
+            } else if (a.startsWith("-")) {
+              sortJson.put(a.substring(1), -1);
+            } else {
+              sortJson.put(a, 1);
+            }
+          });
+          options.setSort(sortJson);
+        }
+        if (!StringUtils.isEmpty(keys)) {
+          JsonObject fieldJson = new JsonObject();
+          Stream.concat(Arrays.stream(keys.split(",")), Arrays.stream(ALWAYS_PROJECT_KEYS))
+                  .filter(StringUtils::notEmpty)
+                  .collect(Collectors.toSet())
+                  .forEach(k -> fieldJson.put(k, 1));
+          options.setFields(fieldJson);
+        }
 
-        if (COUNT_FLAG.equalsIgnoreCase(count)) {
+        if (COUNT_FLAG == count) {
+          logger.debug("count clazz=" + clazz + ", condition=" + condition.toString());
           client.count(clazz, condition, res -> {
             client.close();
             if (res.failed()) {
               reportOoperationError(message, res.cause());
             } else {
-              message.reply(res.result());
+              message.reply(new JsonObject().put("count", res.result()));
             }
           });
         } else {
+          logger.debug("find clazz=" + clazz + ", condition=" + condition.toString() + ", options=" + options.toJson());
           client.findWithOptions(clazz, condition, options, res->{
             client.close();
             if (res.failed()) {
               reportOoperationError(message, res.cause());
             } else {
-              message.reply(res.result().stream().parallel().map(o -> {
-                // replace _id with objectId.
-                if (o.containsKey(Configure.CLASS_ATTR_MONGO_ID)) {
-                  o.put(Configure.CLASS_ATTR_OBJECT_ID, o.getString(Configure.CLASS_ATTR_MONGO_ID)).remove(Configure.CLASS_ATTR_MONGO_ID);
-                }
-                return o;
-              }).collect(toJsonArray()));
+              Stream<JsonObject> resultStream = res.result().stream().map(Transformer::wrapQueryResult);
+              if (StringUtils.isEmpty(objectId)) {
+                JsonArray results = resultStream.collect(toJsonArray());
+                message.reply(new JsonObject().put("results", results));
+              } else {
+                message.reply(resultStream.findFirst());
+              }
             }
           });
         }

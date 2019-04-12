@@ -19,6 +19,10 @@ public class StringUtils {
     return (null == data || data.trim().length() == 0);
   }
 
+  public static boolean notEmpty(String data) {
+    return !isEmpty(data);
+  }
+
   public static String computeSHA1(String input, String key) {
     try {
       Mac sha1Instance = Mac.getInstance(SHA1_ALGORITHM);
