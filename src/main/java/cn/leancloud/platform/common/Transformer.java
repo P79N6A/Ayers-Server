@@ -24,7 +24,7 @@ public class Transformer {
       String type = o.getString("__type");
       if (TYPE_DATE.equalsIgnoreCase(type)) {
         String isoString = o.getString("iso");
-        Instant dateValue = Instant.parse(isoString);
+        result = new JsonObject().put("$date", isoString);
       } else if (TYPE_POINTER.equalsIgnoreCase(type)) {
         String className = o.getString("className");
         String objectId = o.getString("objectId");
@@ -70,6 +70,9 @@ public class Transformer {
       newValue = new JsonObject().put("__type", "Pointer");
       newValue.put("objectId", objectId);
       newValue.put("className", className);
+    } else if (o.containsKey("$date")) {
+      newValue = new JsonObject().put("__type", "Date");
+      newValue.put("iso", o.getString("$date"));
     }
     return newValue;
   }
@@ -89,9 +92,11 @@ public class Transformer {
       Map.Entry<String, Object> result = entry;
       if (Configure.CLASS_ATTR_MONGO_ID.equalsIgnoreCase(key)) {
         // replace _id with objectId.
-        result = new AbstractMap.SimpleEntry<String, Object>(Configure.CLASS_ATTR_OBJECT_ID, value);
-      } else if (value instanceof Date) {
-        ;
+        if (value instanceof JsonObject && ((JsonObject) value).containsKey("$oid")) {
+          result = new AbstractMap.SimpleEntry<String, Object>(Configure.CLASS_ATTR_OBJECT_ID, ((JsonObject) value).getString("$oid"));
+        } else {
+          result = new AbstractMap.SimpleEntry<String, Object>(Configure.CLASS_ATTR_OBJECT_ID, value);
+        }
       } else if (value instanceof JsonObject) {
         JsonObject newValue = decodeBsonUnit((JsonObject) value);
         if (null != newValue) {

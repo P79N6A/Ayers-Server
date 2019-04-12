@@ -28,14 +28,14 @@ public class TransformerTest extends TestCase {
   }
 
   public void testConvert2Rest() throws Exception {
-    String param = "{\"birthday\":\"2019-04-12T07:04:35.016Z\",\"name\":\"Automatic Tester\",\"ACL\":{\"*\":{\"read\":true,\"write\":true}},\"favorite\":{\"$ref\":\"Course\",\"$id\":\"5cb03965c3a4593f60745a1a\"},\"age\":19}";
+    String param = "{\"birthday\":{\"$date\" : \"2019-04-12T10:34:52.274Z\"},\"name\":\"Automatic Tester\",\"ACL\":{\"*\":{\"read\":true,\"write\":true}},\"favorite\":{\"$ref\":\"Course\",\"$id\":\"5cb03965c3a4593f60745a1a\"},\"age\":19}";
     JsonObject paramObj = new JsonObject(param);
     JsonObject newObj = Transformer.decodeBsonObject(paramObj);
     System.out.println(newObj.toString());
   }
 
   public void testConvertRefArray2Rest() throws Exception {
-    String param = "{\"birthday\":{\"iso\":\"2019-04-12T07:04:35.016Z\",\"__type\":\"Date\"},\"name\":\"Automatic Tester\",\"ACL\":{\"*\":{\"read\":true,\"write\":true}},\"favorite\":[{\"$ref\":\"Course\",\"$id\":\"5cb03965c3a4593f60745a1a\"},{\"$ref\":\"Course\",\"$id\":\"5cb03965c3a4593f60745a1a\"},{\"$ref\":\"Course\",\"$id\":\"5cb03965c3a4593f60745a1a\"}],\"age\":19}";
+    String param = "{\"birthday\":{\"$date\" : \"2019-04-12T10:34:52.274Z\"},\"name\":\"Automatic Tester\",\"ACL\":{\"*\":{\"read\":true,\"write\":true}},\"favorite\":[{\"$ref\":\"Course\",\"$id\":\"5cb03965c3a4593f60745a1a\"},{\"$ref\":\"Course\",\"$id\":\"5cb03965c3a4593f60745a1a\"},{\"$ref\":\"Course\",\"$id\":\"5cb03965c3a4593f60745a1a\"}],\"age\":19}";
     JsonObject paramObj = new JsonObject(param);
     JsonObject newObj = Transformer.decodeBsonObject(paramObj);
     System.out.println(newObj.toString());
