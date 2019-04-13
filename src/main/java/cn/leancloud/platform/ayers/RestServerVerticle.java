@@ -1,7 +1,9 @@
 package cn.leancloud.platform.ayers;
 
-import cn.leancloud.platform.common.CommonResult;
+import cn.leancloud.platform.ayers.handler.UserHandler;
 import cn.leancloud.platform.cache.SimpleRedisClient;
+import cn.leancloud.platform.codec.Base64;
+import cn.leancloud.platform.codec.MessageDigest;
 import cn.leancloud.platform.common.Configure;
 import cn.leancloud.platform.common.StringUtils;
 import io.vertx.core.Future;
@@ -10,8 +12,6 @@ import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
-import io.vertx.core.http.HttpServerResponse;
-import io.vertx.core.json.Json;
 
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
@@ -59,6 +59,38 @@ public class RestServerVerticle extends CommonVerticle {
   private void crudObject(RoutingContext context) {
     String clazz = parseRequestClassname(context);
     crudCommonData(clazz, context);
+  }
+
+  private void crudUser(RoutingContext context) {
+    ;
+  }
+
+  private void userSignup(RoutingContext context) {
+    JsonObject body = parseRequestBody(context);
+    String username = body.getString("username");
+    String password = body.getString("password");
+    if (StringUtils.isEmpty(username) || StringUtils.isEmpty(password)) {
+      badRequest(context, new JsonObject().put("code", 403).put("message", "username or password is empty."));
+    } else {
+      String salt = StringUtils.getRandomString(16);
+      String hashPassword = UserHandler.hashPassword(password, salt);
+      body.put("ACL", getUserDefaultACL());
+      body.put("password", hashPassword);
+      body.put("salt", salt);
+      body.put("sessionToken", StringUtils.getRandomString(16));
+      sendMongoOperation(context, Configure.USER_CLASS, null, Configure.OP_OBJECT_UPSERT, body);
+    }
+  }
+
+  private void userSignin(RoutingContext context) {
+    JsonObject body = parseRequestBody(context);
+    String username = body.getString("username");
+    String password = body.getString("password");
+    if (StringUtils.isEmpty(username) || StringUtils.isEmpty(password)) {
+      badRequest(context, new JsonObject().put("code", 403).put("message", "username or password is empty."));
+    } else {
+      sendMongoOperation(context, Configure.USER_CLASS, null, Configure.OP_USER_SIGNIN, body);
+    }
   }
 
   private void crudCommonData(String clazz, RoutingContext context) {
@@ -152,8 +184,9 @@ public class RestServerVerticle extends CommonVerticle {
             .setTcpQuickAck(true)
             .setReusePort(true));
 
-    ApplicationValidator appKeyValidator = new ApplicationValidator("testkey");
+    ApplicationAuthenticator appKeyValidator = new ApplicationAuthenticator("testkey");
     HTTPRequestValidationHandler appKeyValidationHandler = HTTPRequestValidationHandler.create().addCustomValidatorFunction(appKeyValidator);
+    HTTPRequestValidationHandler sessionValidationHandler = HTTPRequestValidationHandler.create().addCustomValidatorFunction(new SessionValidator());
 
     Router router = Router.router(vertx);
 
@@ -191,6 +224,22 @@ public class RestServerVerticle extends CommonVerticle {
     router.delete("/1.1/installations/:objectId").handler(this::crudInstallation);
 
     router.get("/1.1/date").handler(this::serverDate);
+
+    router.post("/1.1/users")
+//            .handler(HTTPRequestValidationHandler.create().addJsonBodySchema(""))
+            .handler(this::userSignup);
+    router.post("/1.1/login").handler(this::userSignin);
+
+    router.get("/1.1/users/:userId").handler(this::crudUser);
+    router.get("/1.1/users").handler(this::crudUser);
+    router.delete("/1.1/users/:userId").handler(this::crudUser);
+    router.put("/1.1/users/:userId").handler(this::crudUser);
+
+    router.get("/1.1/users/me").handler(sessionValidationHandler).handler(this::crudUser);
+    router.put("/1.1/users/:userId/refreshSessionToken").handler(this::crudUser);
+    router.put("/1.1/users/:userId/updatePassword").handler(this::crudUser);
+    router.post("/1.1/requestEmailVerify").handler(this::crudUser);
+    router.post("/1.1/requestPasswordReset").handler(this::crudUser);
 
     router.get("/").handler(rc -> rc.response().end("hello from LeanCloud"));
 

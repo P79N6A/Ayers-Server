@@ -1,5 +1,6 @@
 package cn.leancloud.platform.ayers;
 
+import cn.leancloud.platform.ayers.handler.UserHandler;
 import cn.leancloud.platform.common.Configure;
 import cn.leancloud.platform.common.StringUtils;
 import cn.leancloud.platform.common.Transformer;
@@ -55,6 +56,10 @@ public class MongoDBVerticle extends CommonVerticle {
     message.fail(DatabaseVerticle.ErrorCodes.DB_ERROR.ordinal(), cause.getMessage());
   }
 
+  private void reportUserError(Message<JsonObject> msg, int code, String message) {
+    msg.fail(code, message);
+  }
+
   public void onMessage(Message<JsonObject> message) {
     if (!message.headers().contains(Configure.INTERNAL_MSG_HEADER_OP)) {
       message.fail(DatabaseVerticle.ErrorCodes.NO_OPERATION_SPECIFIED.ordinal(), "no operation specified.");
@@ -77,6 +82,29 @@ public class MongoDBVerticle extends CommonVerticle {
     }
 
     switch (operation) {
+      case Configure.OP_USER_SIGNIN:
+        String password = param.getString("password");
+        param.remove("password");
+        client.findOne(clazz, param, null, user -> {
+          if (user.failed()) {
+            reportOoperationError(message, user.cause());
+          } else if (null == user.result()) {
+            reportUserError(message, DatabaseVerticle.ErrorCodes.NOT_FOUND_USER.ordinal(), "username is not existed.");
+          } else {
+            JsonObject mongoUser = user.result();
+            String salt = mongoUser.getString("salt");
+            String mongoPassword = mongoUser.getString("password");
+            String hashPassword = UserHandler.hashPassword(password, salt);
+            mongoUser.remove("salt");
+            mongoUser.remove("password");
+            if (hashPassword.equals(mongoPassword)) {
+              message.reply(mongoUser);
+            } else {
+              reportUserError(message, DatabaseVerticle.ErrorCodes.PASSWORD_ERROR.ordinal(), "password is wrong.");
+            }
+          }
+        });
+        break;
       case Configure.OP_OBJECT_UPSERT:
         if (!StringUtils.isEmpty(objectId)) {
           param.put(Configure.CLASS_ATTR_MONGO_ID, objectId);

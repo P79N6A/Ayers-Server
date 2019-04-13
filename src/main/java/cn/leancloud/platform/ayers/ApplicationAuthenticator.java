@@ -8,14 +8,14 @@ import io.vertx.ext.web.api.validation.ValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ApplicationValidator implements CustomValidator {
-  private static final Logger logger = LoggerFactory.getLogger(ApplicationValidator.class);
+public class ApplicationAuthenticator implements CustomValidator {
+  private static final Logger logger = LoggerFactory.getLogger(ApplicationAuthenticator.class);
 
   // validate (appid, appkey/sign) through meta service, work for bigquery.
   // for api service, it's not useful. ignore.
   private final String metaServiceAuthKey;
 
-  public ApplicationValidator(String metaServiceAuthKey) {
+  public ApplicationAuthenticator(String metaServiceAuthKey) {
     this.metaServiceAuthKey = metaServiceAuthKey;
   }
 

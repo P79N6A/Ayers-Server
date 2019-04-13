@@ -4,8 +4,12 @@ public class Configure {
   public static final String OP_OBJECT_UPSERT = "upsert";
   public static final String OP_OBJECT_DELETE = "delete";
   public static final String OP_OBJECT_QUERY = "query";
+  public static final String OP_USER_SIGNIN = "login";
 
   public static final String INSTALLATION_CLASS = "_Installation";
+  public static final String USER_CLASS = "_User";
+  public static final String FILE_CLASS = "_File";
+  public static final String FOLLOWSHIP_CLASS = "_Follow";
 
   public static final String QUERY_KEY_COUNT = "count";
   public static final String QUERY_KEY_WHERE = "where";

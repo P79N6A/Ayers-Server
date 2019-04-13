@@ -74,7 +74,9 @@ public class DatabaseVerticle extends CommonVerticle {
   public enum ErrorCodes {
     NO_OPERATION_SPECIFIED,
     BAD_OPERATION,
-    DB_ERROR
+    DB_ERROR,
+    NOT_FOUND_USER,
+    PASSWORD_ERROR
   }
 
   private void reportQueryError(Message<JsonObject> message, Throwable cause) {
