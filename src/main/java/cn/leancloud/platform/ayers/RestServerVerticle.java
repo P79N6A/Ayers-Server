@@ -23,6 +23,7 @@ import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.*;
 import java.util.Map.Entry;
 import java.util.stream.Collectors;
@@ -47,11 +48,8 @@ public class RestServerVerticle extends CommonVerticle {
   private HttpServer httpServer;
 
   private void serverDate(RoutingContext context) {
-    CommonResult result = new CommonResult();
-    result.setStatus("ok");
-    result.setDetails(new Date().toString());
-    context.response().putHeader("Content-Type", "application/json; charset=utf-8")
-            .end(Json.encodePrettily(result));
+    JsonObject result = new JsonObject().put("__type", "Date").put("iso", Instant.now());
+    ok(context, result);
   }
 
   private void crudInstallation(RoutingContext context) {
@@ -99,14 +97,14 @@ public class RestServerVerticle extends CommonVerticle {
         context.fail(reply.cause());
       } else {
         JsonObject result = (JsonObject) reply.result().body();
-        HttpServerResponse response = context.response().putHeader("Content-Type", "application/json; charset=utf-8");
         if (Configure.OP_OBJECT_UPSERT.equalsIgnoreCase(operation) && StringUtils.isEmpty(objectId)) {
           //Status: 201 Created
           //Location: https://heqfq0sw.api.lncld.net/1.1/classes/Post/<objectId>
-          response.putHeader("Location", context.request().absoluteURI() + result.getString("objectId"));
-          response.setStatusCode(HttpStatus.SC_CREATED);
+          JsonObject location = new JsonObject().put("Location", context.request().absoluteURI() + result.getString("objectId"));
+          created(context, location, result);
+        } else {
+          ok(context, result);
         }
-        response.end(Json.encodePrettily(result));
       }
     });
   }
@@ -142,11 +140,8 @@ public class RestServerVerticle extends CommonVerticle {
   }
   private void healthcheck(RoutingContext context) {
     logger.debug("response for healthcheck.");
-    CommonResult result = new CommonResult();
-    result.setStatus("ok");
-    result.setDetails("healthcheck");
-    context.response().putHeader("Content-Type", "application/json; charset=utf-8")
-            .end(Json.encodePrettily(result));
+    JsonObject result = new JsonObject().put("status", "green");
+    ok(context, result);
   }
 
   private Future<Void> startHttpServer() {
