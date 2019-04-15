@@ -26,6 +26,11 @@ public class Configure {
 
   public static final String CLASS_ATTR_OBJECT_ID = "objectId";
   public static final String CLASS_ATTR_CREATED_TS = "createdAt";
-  public static final String CLASS_ATTR_UPDATED_TS = "createdAt";
+  public static final String CLASS_ATTR_UPDATED_TS = "updatedAt";
   public static final String CLASS_ATTR_MONGO_ID = "_id";
+
+  public static final String QINIU_ACCESS_KEY = System.getProperty("qiniu.accessKey", "access");
+  public static final String QINIU_SECRET_KEY = System.getProperty("qiniu.secretKey", "secret");;
+  public static final String FILE_DEFAULT_BUCKET = System.getProperty("file.bucket", "lc-unified");
+  public static final String FILE_PROVIDER = System.getProperty("file.provider", "qiniu");
 }

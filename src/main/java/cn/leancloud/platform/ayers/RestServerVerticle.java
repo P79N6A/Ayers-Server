@@ -2,12 +2,13 @@ package cn.leancloud.platform.ayers;
 
 import cn.leancloud.platform.ayers.handler.UserHandler;
 import cn.leancloud.platform.cache.SimpleRedisClient;
-import cn.leancloud.platform.codec.Base64;
-import cn.leancloud.platform.codec.MessageDigest;
 import cn.leancloud.platform.common.Configure;
+import cn.leancloud.platform.common.MimeUtils;
 import cn.leancloud.platform.common.StringUtils;
+import com.qiniu.util.Auth;
 import io.vertx.core.Future;
 
+import io.vertx.core.Handler;
 import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
@@ -65,6 +66,73 @@ public class RestServerVerticle extends CommonVerticle {
     ;
   }
 
+  private void createFileToken(RoutingContext context) {
+    //{"name":"test.jpeg",
+    // "metaData":{"_name":"test.jpeg","size":33808,"_checksum":"d4070f2b218d54c60c55ee39bf4179e1"},
+    // "key":"dPe0f4WpX5Hp9kS6ydiwtgOPFbMB1qJUmfNH8lq3.jpeg",
+    // "__type":"File"}
+    JsonObject body = parseRequestBody(context);
+    String bucketName = Configure.FILE_DEFAULT_BUCKET;
+    String fileKey = body.getString("key");
+    String name = body.getString("name");
+    if (StringUtils.isEmpty(fileKey) || StringUtils.isEmpty(name)) {
+      badRequest(context, new JsonObject().put("message", "filename and key is necessary"));
+      return;
+    }
+
+    String mimeType = "application/octet-stream";
+    String[] nameParts = name.split("\\.");
+    if (nameParts.length > 1) {
+      mimeType = MimeUtils.guessMimeTypeFromExtension(nameParts[nameParts.length - 1]);
+    }
+
+    Auth auth = Auth.create(Configure.QINIU_ACCESS_KEY, Configure.QINIU_SECRET_KEY);
+    final String token = auth.uploadToken(bucketName, fileKey);
+    body.remove("__type");
+    body.put("url", "http://lc-ohqhxu3m.cn-n1.lcfile.com/" + fileKey)
+            .put("mime_type", mimeType)
+            .put("provider", Configure.FILE_PROVIDER)
+            .put("bucket", bucketName);
+
+    HttpMethod httpMethod = context.request().method();
+    String operation = "";
+    if (HttpMethod.GET.equals(httpMethod)) {
+      operation = Configure.OP_OBJECT_QUERY;
+    } else if (HttpMethod.DELETE.equals(httpMethod)) {
+      operation = Configure.OP_OBJECT_DELETE;
+    } else if (HttpMethod.POST.equals(httpMethod) || HttpMethod.PUT.equals(httpMethod)) {
+      operation = Configure.OP_OBJECT_UPSERT;
+    }
+
+    logger.debug("curl file object. method=" + httpMethod + ", param=" + body);
+
+    sendMongoOperationEx(context, Configure.FILE_CLASS, null, operation, body, file -> {
+      //{"objectId":"5cb3e20430863b007223e5b6",
+      // "createdAt":"2019-04-15T01:44:36.769Z",
+      // "token":"w6ZYeC-arS2makzcotrVJGjQvpsCQeHcPseFRDzJ:EmCPsWPGp1xLOI1Ulp_xoOb_T0s=:eyJpbnNlcnRPbmx5IjoxLCJzY29wZSI6Im9ocWh4dTNtIiwiZGVhZGxpbmUiOjE1NTUyOTYyNzZ9",
+      // "url":"http:\/\/lc-ohqhxu3m.cn-n1.lcfile.com\/dPe0f4WpX5Hp9kS6ydiwtgOPFbMB1qJUmfNH8lq3.jpeg",
+      // "mime_type":"image\/jpeg",
+      // "provider":"qiniu",
+      // "upload_url":"https:\/\/upload.qiniup.com",
+      // "bucket":"ohqhxu3m",
+      // "key":"dPe0f4WpX5Hp9kS6ydiwtgOPFbMB1qJUmfNH8lq3.jpeg"}
+      file.mergeIn(body);
+      file.put("token", token);
+      file.put("upload_url", "https://upload.qiniup.com");
+    });
+  }
+
+  private void fileUploadCallback(RoutingContext context) {
+    //{"result":true,
+    // "token":"w6ZYeC-arS2makzcotrVJGjQvpsCQeHcPseFRDzJ:EmCPsWPGp1xLOI1Ulp_xoOb_T0s=:eyJpbnNlcnRPbmx5IjoxLCJzY29wZSI6Im9ocWh4dTNtIiwiZGVhZGxpbmUiOjE1NTUyOTYyNzZ9"}'
+    JsonObject body = parseRequestBody(context);
+    ok(context, new JsonObject());
+  }
+
+  private void crudSingleFile(RoutingContext context) {
+    crudCommonData(Configure.FILE_CLASS, context);
+  }
+
   private void userSignup(RoutingContext context) {
     JsonObject body = parseRequestBody(context);
     String username = body.getString("username");
@@ -93,7 +161,7 @@ public class RestServerVerticle extends CommonVerticle {
     }
   }
 
-  private void crudCommonData(String clazz, RoutingContext context) {
+  private void crudCommonDataEx(String clazz, RoutingContext context, Handler<JsonObject> handler) {
     String objectId = parseRequestObjectId(context);
     JsonObject body = parseRequestBody(context);
     HttpMethod httpMethod = context.request().method();
@@ -108,10 +176,15 @@ public class RestServerVerticle extends CommonVerticle {
 
     logger.debug("curl object. clazz=" + clazz + ", objectId=" + objectId + ", method=" + httpMethod + ", param=" + body);
 
-    sendMongoOperation(context, clazz, objectId, operation, body);
+    sendMongoOperationEx(context, clazz, objectId, operation, body, handler);
   }
 
-  private void sendMongoOperation(RoutingContext context, String clazz, String objectId, String operation, JsonObject param) {
+  private void crudCommonData(String clazz, RoutingContext context) {
+    crudCommonDataEx(clazz, context, null);
+  }
+
+  private void sendMongoOperationEx(RoutingContext context, String clazz, String objectId, String operation,
+                                    JsonObject param, final Handler<JsonObject> handler) {
     JsonObject request = new JsonObject();
     if (!StringUtils.isEmpty(clazz)) {
       request.put(Configure.INTERNAL_MSG_ATTR_CLASS, clazz);
@@ -129,6 +202,9 @@ public class RestServerVerticle extends CommonVerticle {
         context.fail(reply.cause());
       } else {
         JsonObject result = (JsonObject) reply.result().body();
+        if (null != handler) {
+          handler.handle(result);
+        }
         if (Configure.OP_OBJECT_UPSERT.equalsIgnoreCase(operation) && StringUtils.isEmpty(objectId)) {
           //Status: 201 Created
           //Location: https://heqfq0sw.api.lncld.net/1.1/classes/Post/<objectId>
@@ -139,6 +215,9 @@ public class RestServerVerticle extends CommonVerticle {
         }
       }
     });
+  }
+  private void sendMongoOperation(RoutingContext context, String clazz, String objectId, String operation, JsonObject param) {
+    sendMongoOperationEx(context, clazz, objectId, operation, param, null);
   }
 
   private String parseRequestObjectId(RoutingContext context) {
@@ -172,7 +251,11 @@ public class RestServerVerticle extends CommonVerticle {
   }
   private void healthcheck(RoutingContext context) {
     logger.debug("response for healthcheck.");
-    JsonObject result = new JsonObject().put("status", "green");
+    JsonObject result = new JsonObject().put("status", "green")
+            .put("availableProcessors", Runtime.getRuntime().availableProcessors())
+            .put("freeMemory", Runtime.getRuntime().freeMemory())
+            .put("totalMemory", Runtime.getRuntime().totalMemory())
+            .put("maxMemory", Runtime.getRuntime().maxMemory()).put("activeThreads", Thread.activeCount());
     ok(context, result);
   }
 
@@ -190,27 +273,21 @@ public class RestServerVerticle extends CommonVerticle {
 
     Router router = Router.router(vertx);
 
+    router.get("/").handler(rc -> ok(rc,
+            new JsonObject()
+                    .put("Description", "Ayers server supported by LeanCloud(https://leancloud.cn).")
+                    .put("License", "Apache License Version 2.0")
+                    .put("Contacts", "support@leancloud.rocks")));
     router.get("/ping").handler(this::healthcheck);
 
     BodyHandler bodyHandler = BodyHandler.create();
     router.route("/1.1/*").handler(bodyHandler).handler(appKeyValidationHandler);
 
     /**
-     * get    /1.1/date
-     *
-     * post   /1.1/classes/:clazz
-     * get    /1.1/classes/:clazz
-     * get    /1.1/classes/:clazz/:objectId
-     * put    /1.1/classes/:clazz/:objectId
-     * delete    /1.1/classes/:clazz/:objectId
-     *
-     * post /1.1/installations
-     * get  /1.1/installations
-     * get  /1.1/installations/:objectId
-     * put  /1.1/installations/:objectId
-     * delete  /1.1/installations/:objectId
-     *
+     * Storage Service endpoints.
      */
+    router.get("/1.1/date").handler(this::serverDate);
+
     router.post("/1.1/classes/:clazz").handler(this::crudObject);
     router.get("/1.1/classes/:clazz").handler(this::crudObject);
     router.get("/1.1/classes/:clazz/:objectId").handler(this::crudObject);
@@ -223,11 +300,7 @@ public class RestServerVerticle extends CommonVerticle {
     router.get("/1.1/installations/:objectId").handler(this::crudInstallation);
     router.delete("/1.1/installations/:objectId").handler(this::crudInstallation);
 
-    router.get("/1.1/date").handler(this::serverDate);
-
-    router.post("/1.1/users")
-//            .handler(HTTPRequestValidationHandler.create().addJsonBodySchema(""))
-            .handler(this::userSignup);
+    router.post("/1.1/users").handler(this::userSignup);
     router.post("/1.1/login").handler(this::userSignin);
 
     router.get("/1.1/users/:userId").handler(this::crudUser);
@@ -241,7 +314,11 @@ public class RestServerVerticle extends CommonVerticle {
     router.post("/1.1/requestEmailVerify").handler(this::crudUser);
     router.post("/1.1/requestPasswordReset").handler(this::crudUser);
 
-    router.get("/").handler(rc -> rc.response().end("hello from LeanCloud"));
+    router.post("/1.1/fileTokens").handler(this::createFileToken);
+    router.post("/1.1/fileCallback").handler(this::fileUploadCallback);
+    router.get("/1.1/files/:objectId").handler(this::crudSingleFile);
+    router.delete("/1.1/files/:objectId").handler(this::crudSingleFile);
+    router.post("/1.1/files").handler(this::crudSingleFile);
 
     router.errorHandler(400, routingContext -> {
       if (routingContext.failure() instanceof ValidationException) {
