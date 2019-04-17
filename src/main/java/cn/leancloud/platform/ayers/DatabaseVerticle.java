@@ -146,7 +146,7 @@ public class DatabaseVerticle extends CommonVerticle {
       if (ar.failed()) {
         startFuture.fail(ar.cause());
       } else {
-        String dbQueue = config().getString(RestServerVerticle.CONFIG_DB_QUEUE, "db.queue");
+        String dbQueue = config().getString(RestServerVerticle.CONFIG_DB_QUEUE, "mysql.queue");
         vertx.eventBus().consumer(dbQueue, this::onMessage);
         startFuture.complete();;
       }

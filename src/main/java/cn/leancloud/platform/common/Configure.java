@@ -9,6 +9,7 @@ public class Configure {
   public static final String INSTALLATION_CLASS = "_Installation";
   public static final String USER_CLASS = "_User";
   public static final String FILE_CLASS = "_File";
+  public static final String ROLE_CLASS = "_Role";
   public static final String FOLLOWSHIP_CLASS = "_Follow";
 
   public static final String QUERY_KEY_COUNT = "count";
@@ -33,4 +34,5 @@ public class Configure {
   public static final String QINIU_SECRET_KEY = System.getProperty("qiniu.secretKey", "secret");;
   public static final String FILE_DEFAULT_BUCKET = System.getProperty("file.bucket", "lc-unified");
   public static final String FILE_PROVIDER = System.getProperty("file.provider", "qiniu");
+  public static final String FILE_DEFAULT_HOST = System.getProperty("file.host", "");
 }

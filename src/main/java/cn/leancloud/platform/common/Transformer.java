@@ -4,16 +4,48 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import org.bson.types.ObjectId;
 
+import static com.mongodb.client.model.Updates.pushEach;
+
 import java.util.AbstractMap;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class Transformer {
   private static final String TYPE_DATE = "Date";
   private static final String TYPE_POINTER = "Pointer";
   private static final String TYPE_GEOPOINTER = "GeoPoint";
   private static final String DATE_FORMAT_REG = "\\d-\\d-\\d-\\dT\\d:\\d:\\d.\\dZ";
+  private static final String[] ALWAYS_PROJECT_KEYS = {"_id", "createdAt", "updatedAt", "ACL"};
+
+  private static final String REST_OP_REMOVE_RELATION = "removerelation";
+  private static final String REST_OP_ADD_RELATION = "addrelation";
+  private static final String REST_OP_INCREMENT = "increment";
+  private static final String REST_OP_DECREMENT = "decrement";
+  private static final String REST_OP_BITAND = "bitand";
+  private static final String REST_OP_BITOR = "bitor";
+  private static final String REST_OP_BITXOR = "bitxor";
+  private static final String REST_OP_ADD = "add";
+  private static final String REST_OP_DELETE = "delete";
+  private static final String REST_OP_ADD_UNIQUE = "addunique";
+  private static final String REST_OP_REMOVE = "remove";
+  private static final String REST_OP_SETONINSERT = "setoninsert";
+
+  private static final Map<String, String> bsonModifierMap = new HashMap<>();
+  static {
+    bsonModifierMap.put(REST_OP_BITAND, "and");
+    bsonModifierMap.put(REST_OP_BITOR, "or");
+    bsonModifierMap.put(REST_OP_BITXOR, "xor");
+    bsonModifierMap.put(REST_OP_ADD_RELATION, "$each");
+    bsonModifierMap.put(REST_OP_ADD, "$each");
+    bsonModifierMap.put(REST_OP_ADD_UNIQUE, "$each");
+  }
+
+  public enum REQUEST_OP {
+    CREATE, UPDATE, QUERY
+  }
 
   // "location":{"__type":"GeoPoint","latitude":45.9,"longitude":76.3}
   //    to {"type":"Point","coordinates":[124.6682391,-17.8978304]}
@@ -43,7 +75,7 @@ public class Transformer {
     return result;
   }
 
-  public static JsonObject encode2BsonObject(JsonObject o) {
+  private static JsonObject encode2BsonObject(JsonObject o, final boolean isCreateOp) throws ClassCastException {
     if (null == o) {
       return o;
     }
@@ -51,24 +83,144 @@ public class Transformer {
     if (null != tmp) {
       return tmp;
     }
-    Map<String, Object> all = o.stream().map(entry -> {
-      Map.Entry<String, Object> result = entry;
-      String key = entry.getKey();
-      Object value = entry.getValue();
-      if (value instanceof JsonObject) {
-        JsonObject newValue = encode2BsonUnit((JsonObject) value);
-        if (null != newValue) {
-          result = new AbstractMap.SimpleEntry<>(key, newValue);;
-        }
-      } else if (value instanceof JsonArray) {
-        JsonArray newValue = ((JsonArray)value).stream().map(v -> encode2BsonObject((JsonObject)v)).collect(JsonFactory.toJsonArray());
-        result = new AbstractMap.SimpleEntry<>(key, newValue);
-      }
-      return result;
-    }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    Map<String, Object> all = o.stream()
+            .map(entry -> {
+              Map.Entry<String, Object> result = entry;
+              String key = entry.getKey();
+              Object value = entry.getValue();
+              if (value instanceof JsonObject) {
+                JsonObject newValue = encode2BsonObject((JsonObject) value, isCreateOp);
+                if (null != newValue) {
+                  result = new AbstractMap.SimpleEntry<>(key, newValue);
+                }
+              } else if (value instanceof JsonArray) {
+                JsonArray newValue = ((JsonArray) value).stream()
+                        .map(v ->{
+                          if (v instanceof JsonObject)
+                            return encode2BsonObject((JsonObject) v, isCreateOp);
+                          else
+                            return v;
+                        }).collect(JsonFactory.toJsonArray());
+                result = new AbstractMap.SimpleEntry<>(key, newValue);
+              }
+              return result;
+            })
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     return new JsonObject(all);
   }
 
+  private static JsonObject addOperatorEntry(JsonObject result, String operator, String key, Object value, boolean isCreateOp) {
+    if (null == value) {
+      return result;
+    }
+    if (isCreateOp) {
+      result.put(key, value);
+    } else {
+      if (result.containsKey(operator)) {
+        result.getJsonObject(operator).put(key, value);
+      } else {
+        result.put(operator, new JsonObject().put(key, value));
+      }
+    }
+    return result;
+  }
+
+  private static String getBsonModifierFromOperation(String op) {
+    return bsonModifierMap.get(op);
+  }
+
+  public static JsonObject mergeComplexOps(JsonObject o, boolean isCreateOp) {
+    if (null == o) {
+      return o;
+    }
+    System.out.println("input=" + o.toString());
+    JsonObject complexOps = new JsonObject();
+    JsonObject directSetEntries = new JsonObject();
+    o.stream().forEach(entry -> {
+      String key = entry.getKey();
+      Object value = entry.getValue();
+      if (!(value instanceof JsonObject)) {
+        addOperatorEntry(directSetEntries, "$set", key, value, isCreateOp);
+      } else {
+        JsonObject newValue = (JsonObject)value;
+        if (newValue.containsKey("__op") && (newValue.getValue("__op") instanceof String)) {
+          String op = newValue.getString("__op").toLowerCase();
+          switch (op) {
+            case REST_OP_BITAND:
+            case REST_OP_BITOR:
+            case REST_OP_BITXOR:
+              int intValue = newValue.getInteger("value");
+              if (isCreateOp) {
+                addOperatorEntry(directSetEntries, "$set", key, intValue, isCreateOp);
+              } else {
+                addOperatorEntry(complexOps, "$bit", key,
+                        new JsonObject().put(getBsonModifierFromOperation(op), intValue), isCreateOp);
+              }
+              break;
+
+            case REST_OP_INCREMENT:
+            case REST_OP_DECREMENT:
+              int interval = newValue.getInteger("amount");
+              if (REST_OP_DECREMENT.equals(op)) {
+                interval = 0 - interval;
+              }
+              if (isCreateOp) {
+                addOperatorEntry(directSetEntries, "$set", key, interval, isCreateOp);
+              } else {
+                addOperatorEntry(complexOps, "$inc", key, interval, isCreateOp);
+              }
+              break;
+            case REST_OP_ADD_RELATION:
+            case REST_OP_REMOVE_RELATION:
+            case REST_OP_ADD:
+            case REST_OP_ADD_UNIQUE:
+            case REST_OP_REMOVE:
+              JsonArray objects = newValue.getJsonArray("objects");
+              if (isCreateOp) {
+                if (op.equals(REST_OP_REMOVE) || op.equals(REST_OP_REMOVE_RELATION)) {
+                  // ignore
+                } else {
+                  addOperatorEntry(directSetEntries, "$set", key, objects, isCreateOp);
+                }
+              } else {
+                if (op.equals(REST_OP_REMOVE) || op.equals(REST_OP_REMOVE_RELATION)) {
+                  addOperatorEntry(complexOps, "$pullAll", key, objects, isCreateOp);
+                } else {
+                  addOperatorEntry(complexOps, "$push", key,
+                          new JsonObject().put(getBsonModifierFromOperation(op), objects), isCreateOp);
+                }
+              }
+              break;
+            case REST_OP_SETONINSERT:
+              addOperatorEntry(directSetEntries, "$setoninsert", key, newValue.remove("__op"), isCreateOp);
+              break;
+            case REST_OP_DELETE:
+              if (isCreateOp) {
+                // ignore
+              } else {
+                addOperatorEntry(directSetEntries, "$unset", key, "", isCreateOp);
+              }
+            default:
+              break;
+          }
+        } else {
+          addOperatorEntry(directSetEntries, "$set", key, value, isCreateOp);
+        }
+      }
+    }); // end forEach
+    JsonObject result = directSetEntries.mergeIn(complexOps);
+    System.out.println("output=" + result.toString());
+    return result;
+  }
+
+  public static JsonObject encode2BsonRequest(JsonObject o, REQUEST_OP op) throws ClassCastException {
+    JsonObject result = encode2BsonObject(o, op == REQUEST_OP.CREATE);
+    if (op == REQUEST_OP.QUERY) {
+      return result;
+    } else {
+      return mergeComplexOps(result, op == REQUEST_OP.CREATE);
+    }
+  }
 
   private static JsonObject decodeBsonUnit(JsonObject o) {
     JsonObject newValue = null;
@@ -122,12 +274,46 @@ public class Transformer {
           result = new AbstractMap.SimpleEntry<>(key, newValue);
         }
       } else if (value instanceof JsonArray) {
-        JsonArray newValue = ((JsonArray)value).stream().map(v -> decodeBsonObject((JsonObject) v)).collect(JsonFactory.toJsonArray());
+        JsonArray newValue = ((JsonArray)value).stream().map(v -> {
+          if (v instanceof JsonObject)
+            return decodeBsonObject((JsonObject) v);
+          else
+            return v;
+        }).collect(JsonFactory.toJsonArray());
         result = new AbstractMap.SimpleEntry<>(key, newValue);
       }
       return result;
     }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
     return new JsonObject(all);
+  }
+
+  public static JsonObject parseSortParam(String order) {
+    if (StringUtils.isEmpty(order)) {
+      return null;
+    }
+    JsonObject sortJson = new JsonObject();
+    Arrays.stream(order.split(",")).filter(StringUtils::notEmpty).forEach( a -> {
+      if (a.startsWith("+")) {
+        sortJson.put(a.substring(1), 1);
+      } else if (a.startsWith("-")) {
+        sortJson.put(a.substring(1), -1);
+      } else {
+        sortJson.put(a, 1);
+      }
+    });
+    return sortJson;
+  }
+
+  public static JsonObject parseProjectParam(String keys) {
+    if (StringUtils.isEmpty(keys)) {
+      return null;
+    }
+    JsonObject fieldJson = new JsonObject();
+    Stream.concat(Arrays.stream(keys.split(",")), Arrays.stream(ALWAYS_PROJECT_KEYS))
+            .filter(StringUtils::notEmpty)
+            .collect(Collectors.toSet())
+            .forEach(k -> fieldJson.put(k, 1));
+    return fieldJson;
   }
 }

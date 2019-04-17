@@ -4,6 +4,7 @@ import cn.leancloud.platform.ayers.handler.UserHandler;
 import cn.leancloud.platform.cache.SimpleRedisClient;
 import cn.leancloud.platform.common.Configure;
 import cn.leancloud.platform.common.MimeUtils;
+import cn.leancloud.platform.common.ObjectSpecifics;
 import cn.leancloud.platform.common.StringUtils;
 import com.qiniu.util.Auth;
 import io.vertx.core.Future;
@@ -20,6 +21,10 @@ import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.api.validation.HTTPRequestValidationHandler;
 import io.vertx.ext.web.api.validation.ValidationException;
 import io.vertx.ext.web.handler.BodyHandler;
+import io.vertx.ext.web.handler.CookieHandler;
+import io.vertx.ext.web.handler.SessionHandler;
+import io.vertx.ext.web.sstore.LocalSessionStore;
+import io.vertx.ext.web.sstore.SessionStore;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,12 +41,12 @@ public class RestServerVerticle extends CommonVerticle {
   private static final Logger logger = LoggerFactory.getLogger(RestServerVerticle.class);
 
   public static final String CONFIG_HTTP_SERVER_PORT = "http.server.port";
-  public static final String CONFIG_DB_QUEUE = "db.queue";
+  public static final String CONFIG_DB_QUEUE = "mysql.queue";
   public static final String CONFIG_MONGO_QUEUE = "mongo.queue";
   public static final String CONFIG_REDIS_HOST = "redis.host";
   public static final String CONFIG_REDIS_PORT = "redis.port";
 
-  private String dbQueue = "db.queue";
+  private String mysqlQueue = "db.queue";
 
   private String mongoQueue = "mongo.queue";
 
@@ -76,7 +81,7 @@ public class RestServerVerticle extends CommonVerticle {
     String fileKey = body.getString("key");
     String name = body.getString("name");
     if (StringUtils.isEmpty(fileKey) || StringUtils.isEmpty(name)) {
-      badRequest(context, new JsonObject().put("message", "filename and key is necessary"));
+      badRequest(context, new JsonObject().put("message", "filename and key are required."));
       return;
     }
 
@@ -89,7 +94,7 @@ public class RestServerVerticle extends CommonVerticle {
     Auth auth = Auth.create(Configure.QINIU_ACCESS_KEY, Configure.QINIU_SECRET_KEY);
     final String token = auth.uploadToken(bucketName, fileKey);
     body.remove("__type");
-    body.put("url", "http://lc-ohqhxu3m.cn-n1.lcfile.com/" + fileKey)
+    body.put("url", Configure.FILE_DEFAULT_HOST + fileKey)
             .put("mime_type", mimeType)
             .put("provider", Configure.FILE_PROVIDER)
             .put("bucket", bucketName);
@@ -119,6 +124,7 @@ public class RestServerVerticle extends CommonVerticle {
       file.mergeIn(body);
       file.put("token", token);
       file.put("upload_url", "https://upload.qiniup.com");
+      // TODO: add appId/objectId/token to cache.
     });
   }
 
@@ -126,11 +132,36 @@ public class RestServerVerticle extends CommonVerticle {
     //{"result":true,
     // "token":"w6ZYeC-arS2makzcotrVJGjQvpsCQeHcPseFRDzJ:EmCPsWPGp1xLOI1Ulp_xoOb_T0s=:eyJpbnNlcnRPbmx5IjoxLCJzY29wZSI6Im9ocWh4dTNtIiwiZGVhZGxpbmUiOjE1NTUyOTYyNzZ9"}'
     JsonObject body = parseRequestBody(context);
-    ok(context, new JsonObject());
+    boolean result = body.getBoolean("result");
+    if (result) {
+      // TODO: remove appId/objectId/token from cache.
+      ok(context, new JsonObject());
+    } else {
+      // TODO: remove appId/objectId/token from cache, delete File document.
+      ok(context, new JsonObject());
+    }
   }
 
   private void crudSingleFile(RoutingContext context) {
     crudCommonData(Configure.FILE_CLASS, context);
+  }
+
+  private void crudRole(RoutingContext context) {
+    JsonObject body = parseRequestBody(context);
+    HttpMethod httpMethod = context.request().method();
+    if (HttpMethod.POST.equals(httpMethod)) {
+      String roleName = body.getString("name");
+      JsonObject acl = body.getJsonObject("ACL");
+      if (!ObjectSpecifics.validRoleName(roleName)) {
+        badRequest(context, new JsonObject().put("message", "Role name is required."));
+        return;
+      }
+      if (null == acl) {
+        badRequest(context, new JsonObject().put("message", "Role ACL is required."));
+        return;
+      }
+    }
+    crudCommonData(Configure.ROLE_CLASS, context);
   }
 
   private void userSignup(RoutingContext context) {
@@ -151,6 +182,11 @@ public class RestServerVerticle extends CommonVerticle {
   }
 
   private void userSignin(RoutingContext context) {
+    //signin by username and password
+    //signin by session_token
+    //signin by mobilePhoneNumber and password
+    //signin by mobilePhoneNumber and smsCode
+    //signin by email and password
     JsonObject body = parseRequestBody(context);
     String username = body.getString("username");
     String password = body.getString("password");
@@ -198,7 +234,7 @@ public class RestServerVerticle extends CommonVerticle {
     DeliveryOptions options = new DeliveryOptions().addHeader(Configure.INTERNAL_MSG_HEADER_OP, operation);
     vertx.eventBus().send(this.mongoQueue, request, options, reply -> {
       if (reply.failed()) {
-        logger.warn("mongo operationn failed. cause: ", reply.cause());
+        logger.warn("operation failed. cause: ", reply.cause());
         context.fail(reply.cause());
       } else {
         JsonObject result = (JsonObject) reply.result().body();
@@ -220,35 +256,7 @@ public class RestServerVerticle extends CommonVerticle {
     sendMongoOperationEx(context, clazz, objectId, operation, param, null);
   }
 
-  private String parseRequestObjectId(RoutingContext context) {
-    return context.request().getParam("objectId");
-  }
 
-  private String parseRequestClassname(RoutingContext context) {
-    return context.request().getParam("clazz");
-  }
-
-  private JsonObject parseRequestBody(RoutingContext context) {
-    HttpMethod httpMethod = context.request().method();
-    JsonObject body = null;
-    if (HttpMethod.GET.equals(httpMethod)) {
-      Map<String, String> filteredEntries = context.request().params().entries()
-              .stream().parallel()
-              .filter(entry -> !"clazz".equalsIgnoreCase(entry.getKey()) && !"objectId".equalsIgnoreCase(entry.getKey()))
-              .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
-      body = JsonObject.mapFrom(filteredEntries);
-    } else if (HttpMethod.PUT.equals(httpMethod) || HttpMethod.POST.equals(httpMethod)){
-      body = context.getBodyAsJson();
-    } else {
-      String bodyString = context.getBodyAsString();
-      if (StringUtils.isEmpty(bodyString)) {
-        body = new JsonObject();
-      } else {
-        body = new JsonObject(bodyString);
-      }
-    }
-    return body;
-  }
   private void healthcheck(RoutingContext context) {
     logger.debug("response for healthcheck.");
     JsonObject result = new JsonObject().put("status", "green")
@@ -280,8 +288,11 @@ public class RestServerVerticle extends CommonVerticle {
                     .put("Contacts", "support@leancloud.rocks")));
     router.get("/ping").handler(this::healthcheck);
 
-    BodyHandler bodyHandler = BodyHandler.create();
-    router.route("/1.1/*").handler(bodyHandler).handler(appKeyValidationHandler);
+    SessionStore sessionStore = LocalSessionStore.create(vertx, "ayers.sessionmap");
+    router.route("/1.1/*").handler(BodyHandler.create())
+            .handler(CookieHandler.create())
+            .handler(SessionHandler.create(sessionStore))
+            .handler(appKeyValidationHandler);
 
     /**
      * Storage Service endpoints.
@@ -320,6 +331,12 @@ public class RestServerVerticle extends CommonVerticle {
     router.delete("/1.1/files/:objectId").handler(this::crudSingleFile);
     router.post("/1.1/files").handler(this::crudSingleFile);
 
+    router.post("/1.1/roles").handler(this::crudRole);
+    router.get("/1.1/roles").handler(this::crudRole);
+    router.get("/1.1/roles/:objectId").handler(this::crudRole);
+    router.put("/1.1/roles/:objectId").handler(this::crudRole);
+    router.delete("/1.1/roles/:objectId").handler(this::crudRole);
+
     router.errorHandler(400, routingContext -> {
       if (routingContext.failure() instanceof ValidationException) {
         // Something went wrong during validation!
@@ -351,7 +368,7 @@ public class RestServerVerticle extends CommonVerticle {
 
   @Override
   public void start(Future<Void> startFuture) throws Exception {
-    this.dbQueue = config().getString(CONFIG_DB_QUEUE, "db.queue");
+    this.mysqlQueue = config().getString(CONFIG_DB_QUEUE, "db.queue");
     this.mongoQueue = config().getString(CONFIG_MONGO_QUEUE, "mongo.queue");
     String redisHost = config().getString(CONFIG_REDIS_HOST, "localhost");
     int redisPort = config().getInteger(CONFIG_REDIS_PORT, 6379);

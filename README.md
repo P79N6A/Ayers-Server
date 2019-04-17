@@ -19,16 +19,19 @@ Ayers is a structural data processing server based on Vertx.io and [Netty](https
 - Object CRUD
 - Pointer
 - GeoPoint
+- file
+- user signup
+- user signin
+- role
+- relation
 
 ### in progress
-- ACL
-- role
-- file
+- user login with mobilephone.
 - let all components configurable.
+- ACL
 
 ### todo
 - user account.
-- relation
 - bulk operation
 - sms
 - managing mongodb collections.
