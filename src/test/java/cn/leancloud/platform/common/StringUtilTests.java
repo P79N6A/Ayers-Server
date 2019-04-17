@@ -24,6 +24,16 @@ public class StringUtilTests extends TestCase {
     assertTrue(jobId.length() > 0);
   }
 
+  public void testPathValidator() {
+    String[] paths = new String[]{"/1.1/classes/Post", "/1.1/classeses/Post", "/api/1.1/classes/Post", "/1.1/classes/", "/1.1/classes", "/1.1/classes/Post/fhei"};
+    boolean[] expected = new boolean[]{true, false, false, false, false, true};
+
+    for (int i = 0; i < paths.length; i++) {
+      boolean ret = ObjectSpecifics.validRequestPath(paths[i]);
+      assertTrue(ret == expected[i]);
+    }
+  }
+
   public void testMongoPoint() {
 
     JsonArray jsonArray = new JsonArray(Arrays.asList(124.6682391, -17.8978304));

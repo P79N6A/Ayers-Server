@@ -4,6 +4,7 @@ import cn.leancloud.platform.ayers.handler.UserHandler;
 import cn.leancloud.platform.cache.SimpleRedisClient;
 import cn.leancloud.platform.common.*;
 import com.qiniu.util.Auth;
+import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 
 import io.vertx.core.Handler;
@@ -12,6 +13,7 @@ import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
@@ -199,6 +201,104 @@ public class RestServerVerticle extends CommonVerticle {
     sendMongoOperationEx(context, clazz, objectId, operation, body, handler);
   }
 
+  private static BatchRequest parseBatchRequest(Object req) {
+    if (null == req || !(req instanceof JsonObject)) {
+      return null;
+    }
+    JsonObject reqJson = (JsonObject)req;
+    String method = reqJson.getString("method");
+    String path = reqJson.getString("path");
+    JsonObject param = reqJson.getJsonObject("body");
+    if (StringUtils.isEmpty(method) || StringUtils.isEmpty(path) || !ObjectSpecifics.validRequestPath(path)) {
+      return null;
+    }
+    String[] pathParts = path.split("/");
+    String clazz = (pathParts.length >= 4)? pathParts[3] : "";
+    String objectId = (pathParts.length >= 5)? pathParts[4] : "";
+    if (null == param && !method.equalsIgnoreCase("delete")) {
+      return null;
+    }
+    if ((method.equalsIgnoreCase("put") || method.equalsIgnoreCase("delete")) && StringUtils.isEmpty(objectId)) {
+      return null;
+    }
+    return new BatchRequest(method, path, clazz, objectId, param);
+  }
+
+  private void batchWrite(RoutingContext context) {
+    //{
+    //        "requests": [
+    //          {
+    //            "method": "PUT",
+    //            "path": "/1.1/classes/Post/55a39634e4b0ed48f0c1845b",
+    //            "body": {
+    //              "upvotes": 2
+    //            }
+    //          },
+    //          {
+    //            "method": "DELETE",
+    //            "path": "/1.1/classes/Post/55a39634e4b0ed48f0c1845c"
+    //          }
+    //        ]
+    //      }
+    JsonObject body = parseRequestBody(context);
+    JsonArray requests = body.getJsonArray("requests");
+    if (null == requests || requests.size() < 1) {
+      logger.debug("invalid requests. requests is empty");
+      badRequest(context, new JsonObject().put("error", "requests is required."));
+      return;
+    }
+
+    List<Future> results = requests.stream().map( req -> {
+      final Future<JsonObject> tmp = Future.future();
+      BatchRequest batchRequest = parseBatchRequest(req);
+      if (null == batchRequest) {
+        logger.debug("invalid request. input=" + req);
+        tmp.complete(new JsonObject().put("error", new JsonObject().put("code", 2).put("error", "request format is wrong.")));
+      } else {
+        String method = batchRequest.getMethod();
+        JsonObject request = new JsonObject();
+        if (!StringUtils.isEmpty(batchRequest.getClazz())) {
+          request.put(Configure.INTERNAL_MSG_ATTR_CLASS, batchRequest.getClazz());
+        }
+        if (!StringUtils.isEmpty(batchRequest.getObjectId())) {
+          request.put(Configure.INTERNAL_MSG_ATTR_OBJECT_ID, batchRequest.getObjectId());
+        }
+        if (null != batchRequest.getBody()) {
+          request.put(Configure.INTERNAL_MSG_ATTR_PARAM, batchRequest.getBody());
+        }
+        String operation = Configure.OP_OBJECT_QUERY;
+        if ("delete".equalsIgnoreCase(method)) {
+          operation = Configure.OP_OBJECT_DELETE;
+        } else if ("post".equalsIgnoreCase(method) || "put".equalsIgnoreCase(method)) {
+          operation = Configure.OP_OBJECT_UPSERT;
+        }
+        logger.debug("batchWrite. operation=" + operation + ", clazz=" + batchRequest.getClazz()
+                + ", objectId=" + batchRequest.getObjectId() + ", param=" + batchRequest.getBody());
+        DeliveryOptions options = new DeliveryOptions().addHeader(Configure.INTERNAL_MSG_HEADER_OP, operation);
+        vertx.eventBus().send(this.mongoQueue, request, options, res -> {
+          if (res.failed()) {
+            logger.debug("batchWrite === result for elem. error=" + res.cause().getMessage());
+            tmp.complete(new JsonObject().put("error", new JsonObject().put("code", 1).put("error", res.cause().getMessage())));
+          } else {
+            logger.debug("batchWrite === result for elem. result=" + res.result().body());
+            tmp.complete((JsonObject) res.result().body());
+          }
+        });
+      }
+      return tmp;
+    }).collect(Collectors.toList());
+
+    CompositeFuture.all(results).setHandler( res -> {
+      logger.debug("batchWrite === all requests finished.");
+      int futuresCount = res.result().size();
+      JsonArray resultObjects = new JsonArray();
+      for (int i = 0; i < futuresCount; i++) {
+        resultObjects.add((JsonObject) res.result().resultAt(i));
+      }
+      ok(context, new JsonObject().put("results", resultObjects));
+    });
+  }
+
   private void crudCommonData(String clazz, RoutingContext context) {
     crudCommonDataEx(clazz, context, null);
   }
@@ -320,6 +420,8 @@ public class RestServerVerticle extends CommonVerticle {
     router.get("/1.1/roles/:objectId").handler(this::crudRole);
     router.put("/1.1/roles/:objectId").handler(this::crudRole);
     router.delete("/1.1/roles/:objectId").handler(this::crudRole);
+
+    router.post("/1.1/batch").handler(this::batchWrite);
 
     router.errorHandler(400, routingContext -> {
       if (routingContext.failure() instanceof ValidationException) {
