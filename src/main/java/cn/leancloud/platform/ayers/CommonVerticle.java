@@ -60,10 +60,6 @@ public class CommonVerticle extends AbstractVerticle {
     return body;
   }
 
-  protected JsonObject getUserDefaultACL() {
-    return ACL.publicRWInstance().toJson();
-  }
-
   protected void response(RoutingContext context, int status, JsonObject header, JsonObject result) {
     HttpServerResponse response = context.response();
     response.setStatusCode(status).putHeader(HEADER_CONTENT_TYPE, CONTENT_TYPE_JSON);

@@ -89,6 +89,7 @@ public class MongoDBVerticle extends CommonVerticle {
       case Configure.OP_USER_SIGNIN:
         String password = param.getString("password");
         param.remove("password");
+        logger.debug("query= " + param.toString());
         client.findOne(clazz, param, null, user -> {
           if (user.failed()) {
             reportOperationError(message, user.cause());
@@ -98,13 +99,17 @@ public class MongoDBVerticle extends CommonVerticle {
             JsonObject mongoUser = user.result();
             String salt = mongoUser.getString("salt");
             String mongoPassword = mongoUser.getString("password");
-            String hashPassword = UserHandler.hashPassword(password, salt);
             mongoUser.remove("salt");
             mongoUser.remove("password");
-            if (hashPassword.equals(mongoPassword)) {
+            if (StringUtils.isEmpty(password)) {
               message.reply(mongoUser);
             } else {
-              reportUserError(message, DatabaseVerticle.ErrorCodes.PASSWORD_ERROR.ordinal(), "password is wrong.");
+              String hashPassword = UserHandler.hashPassword(password, salt);
+              if (hashPassword.equals(mongoPassword)) {
+                message.reply(mongoUser);
+              } else {
+                reportUserError(message, DatabaseVerticle.ErrorCodes.PASSWORD_ERROR.ordinal(), "password is wrong.");
+              }
             }
           }
         });

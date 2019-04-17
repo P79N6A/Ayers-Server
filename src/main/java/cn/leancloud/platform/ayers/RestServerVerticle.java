@@ -2,10 +2,7 @@ package cn.leancloud.platform.ayers;
 
 import cn.leancloud.platform.ayers.handler.UserHandler;
 import cn.leancloud.platform.cache.SimpleRedisClient;
-import cn.leancloud.platform.common.Configure;
-import cn.leancloud.platform.common.MimeUtils;
-import cn.leancloud.platform.common.ObjectSpecifics;
-import cn.leancloud.platform.common.StringUtils;
+import cn.leancloud.platform.common.*;
 import com.qiniu.util.Auth;
 import io.vertx.core.Future;
 
@@ -165,34 +162,21 @@ public class RestServerVerticle extends CommonVerticle {
   }
 
   private void userSignup(RoutingContext context) {
-    JsonObject body = parseRequestBody(context);
-    String username = body.getString("username");
-    String password = body.getString("password");
-    if (StringUtils.isEmpty(username) || StringUtils.isEmpty(password)) {
-      badRequest(context, new JsonObject().put("code", 403).put("message", "username or password is empty."));
+    CommonResult commonResult = UserHandler.fillSignupParam(parseRequestBody(context));
+    if (commonResult.isFailed()) {
+      badRequest(context, new JsonObject().put("message", commonResult.getMessage()));
     } else {
-      String salt = StringUtils.getRandomString(16);
-      String hashPassword = UserHandler.hashPassword(password, salt);
-      body.put("ACL", getUserDefaultACL());
-      body.put("password", hashPassword);
-      body.put("salt", salt);
-      body.put("sessionToken", StringUtils.getRandomString(16));
+      JsonObject body = commonResult.getObject();
       sendMongoOperation(context, Configure.USER_CLASS, null, Configure.OP_OBJECT_UPSERT, body);
     }
   }
 
   private void userSignin(RoutingContext context) {
-    //signin by username and password
-    //signin by session_token
-    //signin by mobilePhoneNumber and password
-    //signin by mobilePhoneNumber and smsCode
-    //signin by email and password
-    JsonObject body = parseRequestBody(context);
-    String username = body.getString("username");
-    String password = body.getString("password");
-    if (StringUtils.isEmpty(username) || StringUtils.isEmpty(password)) {
-      badRequest(context, new JsonObject().put("code", 403).put("message", "username or password is empty."));
+    CommonResult commonResult = UserHandler.fillSigninParam(parseRequestBody(context));
+    if (commonResult.isFailed()) {
+      badRequest(context, new JsonObject().put("message", commonResult.getMessage()));
     } else {
+      JsonObject body = commonResult.getObject();
       sendMongoOperation(context, Configure.USER_CLASS, null, Configure.OP_USER_SIGNIN, body);
     }
   }
