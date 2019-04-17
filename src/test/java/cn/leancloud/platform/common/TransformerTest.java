@@ -134,6 +134,16 @@ public class TransformerTest extends TestCase {
             "            }\n" +
             "          ]\n" +
             "        },\n" +
+            "  \"parents\": {\n" +
+            "          \"__op\": \"AddUnique\",\n" +
+            "          \"objects\": [\n" +
+            "            {\n" +
+            "              \"__type\": \"Pointer\",\n" +
+            "              \"className\": \"_User\",\n" +
+            "              \"objectId\": \"55a47496e4b05001a7732c5f\"\n" +
+            "            }\n" +
+            "          ]\n" +
+            "        },\n" +
             "  \"tags\":{\"__op\":\"AddUnique\",\"objects\":[\"Frontend\",\"JavaScript\"]},\n" +
             "  \"upvotes\":{\"__op\":\"Increment\",\"amount\":1},\n" +
             "  \"flags\":{\"__op\":\"BitOr\",\"value\": 4},\n" +
@@ -157,9 +167,47 @@ public class TransformerTest extends TestCase {
     assertTrue(updateObj.getJsonObject("$inc").getInteger("balance") == -30);
     assertTrue(updateObj.getJsonObject("$inc").getInteger("upvotes") == 1);
     assertTrue(updateObj.getJsonObject("$pullAll").size() == 2);
-    assertTrue(updateObj.getJsonObject("$push").size() == 2);
+    assertTrue(updateObj.getJsonObject("$push").size() == 1);
+    assertTrue(updateObj.getJsonObject("$addToSet").size() == 2);
     assertTrue(updateObj.getJsonObject("$set").size() == 1);
     assertTrue(updateObj.getJsonObject("$set").getString("familyName").equals("Stark"));
     assertTrue(updateObj.getJsonObject("$bit").getJsonObject("flags").getInteger("or") == 4);
+  }
+
+  public void testConvertRestParamWithDuplicatedEle2BsonUpdate() throws Exception {
+    String param = "{\"parents\": {\n" +
+            "          \"__op\": \"AddUnique\",\n" +
+            "          \"objects\": [\n" +
+            "            {\n" +
+            "              \"__type\": \"Pointer\",\n" +
+            "              \"className\": \"_User\",\n" +
+            "              \"objectId\": \"55a47496e4b05001a7732c5f\"\n" +
+            "            },\n" +
+            "            {\n" +
+            "              \"__type\": \"Pointer\",\n" +
+            "              \"className\": \"_User\",\n" +
+            "              \"objectId\": \"55a47496e4b05001a7732c5f\"\n" +
+            "            },\n" +
+            "            {\n" +
+            "              \"__type\": \"Pointer\",\n" +
+            "              \"className\": \"_User\",\n" +
+            "              \"objectId\": \"55a47496e4b05001a9932c5f\"\n" +
+            "            }\n" +
+            "          ]\n" +
+            "        },\n" +
+            "  \"tags\":{\"__op\":\"AddUnique\",\"objects\":[\"Frontend\",\"Frontend\",\"Frontend\",\"JavaScript\"]}\n" +
+            "}";
+    JsonObject paramObj = new JsonObject(param);
+    JsonObject newObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.CREATE);
+    System.out.println(newObj.toString());
+    assertTrue(newObj.getJsonArray("tags").size() == 2);
+    assertTrue(newObj.getJsonArray("parents").size() == 2);
+
+    System.out.println("try to convert for Update...");
+    JsonObject updateObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.UPDATE);
+    System.out.println(updateObj.toString());
+    assertTrue(updateObj.getJsonObject("$addToSet").size() == 2);
+    assertTrue(updateObj.getJsonObject("$addToSet").getJsonObject("parents").getJsonArray("$each").size() == 2);
+    assertTrue(updateObj.getJsonObject("$addToSet").getJsonObject("tags").getJsonArray("$each").size() == 2);
   }
 }

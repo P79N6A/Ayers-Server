@@ -173,7 +173,6 @@ public class Transformer {
             case REST_OP_ADD_RELATION:
             case REST_OP_REMOVE_RELATION:
             case REST_OP_ADD:
-            case REST_OP_ADD_UNIQUE:
             case REST_OP_REMOVE:
               JsonArray objects = newValue.getJsonArray("objects");
               if (isCreateOp) {
@@ -189,6 +188,15 @@ public class Transformer {
                   addOperatorEntry(complexOps, "$push", key,
                           new JsonObject().put(getBsonModifierFromOperation(op), objects), isCreateOp);
                 }
+              }
+              break;
+            case REST_OP_ADD_UNIQUE:
+              JsonArray uniqueObjects = newValue.getJsonArray("objects").stream().distinct().collect(JsonFactory.toJsonArray());
+              if (isCreateOp) {
+                addOperatorEntry(directSetEntries, "$set", key, uniqueObjects, isCreateOp);
+              } else {
+                addOperatorEntry(complexOps, "$addToSet", key,
+                        new JsonObject().put(getBsonModifierFromOperation(op), uniqueObjects), isCreateOp);
               }
               break;
             case REST_OP_SETONINSERT:
