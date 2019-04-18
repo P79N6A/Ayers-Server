@@ -23,7 +23,6 @@ public class MongoDBVerticle extends CommonVerticle {
   private static final String MONGO_POOL_NAME = "MongoDBPool";
 
   private JsonObject mongoConfig;
-  private MongoClient mongoClient;
 
   private void prepareDatabase() {
     Configure configure = Configure.getInstance();
@@ -46,7 +45,7 @@ public class MongoDBVerticle extends CommonVerticle {
             .put("serverSelectionTimeoutMS", configure.mongoServerSelectionTimeoutMS())
             .put("keepAlive", true);
     logger.info("initialize mongo with config: " + mongoConfig);
-    mongoClient = MongoClient.createShared(vertx, this.mongoConfig, MONGO_POOL_NAME);
+    MongoClient mongoClient = getSharedClient();
     mongoClient.getCollections(re -> {
       if (re.failed()) {
         logger.error("failed to initialize mongo. cause: ", re.cause());
@@ -57,7 +56,7 @@ public class MongoDBVerticle extends CommonVerticle {
   }
 
   private MongoClient getSharedClient() {
-    return mongoClient;
+    return MongoClient.createShared(vertx, this.mongoConfig, MONGO_POOL_NAME);
   }
 
   private void reportDatabaseError(Message<JsonObject> message, Throwable cause) {
@@ -271,7 +270,6 @@ public class MongoDBVerticle extends CommonVerticle {
 
   @Override
   public void stop(Future<Void> stopFuture) throws Exception {
-    //getSharedClient().close();
     logger.info("stop MongoDBVerticle...");
     stopFuture.complete();
   }

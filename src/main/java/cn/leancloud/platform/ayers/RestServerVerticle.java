@@ -284,7 +284,6 @@ public class RestServerVerticle extends CommonVerticle {
     DeliveryOptions options = new DeliveryOptions().addHeader(Constraints.INTERNAL_MSG_HEADER_OP, operation);
     vertx.eventBus().send(Configure.MAILADDRESS_MONGO_QUEUE, request, options, reply -> {
       if (reply.failed()) {
-        logger.warn("operation failed. cause: ", reply.cause());
         if (reply.cause() instanceof ReplyException) {
           int failureCode = ((ReplyException) reply.cause()).failureCode();
           JsonObject responseJson = new JsonObject().put("code", failureCode).put("error", reply.cause().getMessage());
@@ -449,9 +448,9 @@ public class RestServerVerticle extends CommonVerticle {
 
   @Override
   public void stop(Future<Void> stopFuture) throws Exception {
-//    httpServer.close();
-//    redisClient.close();
+    httpServer.close();
+    redisClient.close();
     logger.info("stop RestServerVerticle...");
-//    stopFuture.complete();
+    stopFuture.complete();
   }
 }

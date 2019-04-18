@@ -36,7 +36,7 @@ public class MainVerticle extends CommonVerticle {
       logger.info("try to deploy "+ configure.mysqlVerticleCount() + " mongodb verticles.");
       Future<String> mongoVerticleDeployment = Future.future();
       vertx.deployVerticle(MongoDBVerticle.class,
-              new DeploymentOptions().setInstances(configure.mongoVerticleCount()),
+              new DeploymentOptions().setInstances(configure.mongodbVerticleCount()),
               mongoVerticleDeployment);
       return mongoVerticleDeployment;
     }).setHandler(arr -> {
@@ -53,10 +53,9 @@ public class MainVerticle extends CommonVerticle {
 
   @Override
   public void stop(Future<Void> stopFuture) throws Exception {
-//    vertx.close(res -> {
-//      logger.info("main verticle stop!");
-//      stopFuture.complete();
-//    });
-//    stopFuture.complete();
+    vertx.close(res -> {
+      logger.info("main verticle stop!");
+      stopFuture.complete();
+    });
   }
 }
