@@ -170,7 +170,6 @@ public class Configure {
         logger.warn("failed to load configure. cause: ", ar.cause());
       } else {
         this.settings = ar.result();
-        logger.debug("application configure: " + this.settings.toString());
       }
       handler.handle(ar);
     });

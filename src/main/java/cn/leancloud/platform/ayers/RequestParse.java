@@ -25,6 +25,8 @@ public class RequestParse {
   public static final String HEADER_REQUEST_SIGN = "x-avoscloud-request-sign";
   public static final String HEADER_REQUEST_SIGN_SHORTER = "x-lc-sign";
 
+  public static final String HEADER_SESSION_TOKEN = "X-LC-Session";
+
   public static final String COOKIE_USER_NAME = "uluru_user";
 
   private static String getHeader(RoutingContext context, String first, String second) {
@@ -49,6 +51,10 @@ public class RequestParse {
 
   public static String getAppSign(RoutingContext context) {
     return getHeader(context, HEADER_REQUEST_SIGN, HEADER_REQUEST_SIGN_SHORTER);
+  }
+
+  public static String getSessionToken(RoutingContext context) {
+    return getHeader(context, HEADER_SESSION_TOKEN, null);
   }
 
   public static String getCookie(RoutingContext context) {

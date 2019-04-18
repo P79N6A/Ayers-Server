@@ -4,11 +4,13 @@ import cn.leancloud.platform.ayers.handler.UserHandler;
 import cn.leancloud.platform.cache.SimpleRedisClient;
 import cn.leancloud.platform.common.*;
 import com.qiniu.util.Auth;
+import io.vertx.core.AsyncResult;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 
 import io.vertx.core.Handler;
 import io.vertx.core.eventbus.DeliveryOptions;
+import io.vertx.core.eventbus.Message;
 import io.vertx.core.eventbus.ReplyException;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
@@ -62,6 +64,65 @@ public class RestServerVerticle extends CommonVerticle {
   }
 
   private void crudUser(RoutingContext context) {
+    crudCommonData(Constraints.USER_CLASS, context);
+  }
+
+  private void recoverUser(RoutingContext context) {
+    CommonResult commonResult = UserHandler.fillSigninParam(parseRequestBody(context));
+    if (commonResult.isFailed()) {
+      badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PASSWORD.getCode()).put("error", "session_token is required."));
+    } else {
+      JsonObject body = commonResult.getObject();
+      sendMongoOperationEx(context, Constraints.USER_CLASS, null, Constraints.OP_OBJECT_UPSERT, body,
+              jsonObject -> jsonObject.put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, body.getString(Constraints.BUILTIN_ATTR_SESSION_TOKEN)));
+    }
+  }
+
+  private void refreshUserToken(RoutingContext context) {
+    String sessionToken = RequestParse.getSessionToken(context);
+    String objectId = parseRequestObjectId(context);
+    if (StringUtils.isEmpty(sessionToken)) {
+      badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PASSWORD.getCode()).put("error", "session_token is required."));
+    } else {
+      JsonObject findCondition = new JsonObject().put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, sessionToken);
+      sendMongoOperationWithHandler(context, Constraints.USER_CLASS, objectId, Constraints.OP_OBJECT_QUERY,
+              new JsonObject().put(Constraints.QUERY_KEY_WHERE, findCondition.toString()),
+              res -> {
+        if (res.failed()) {
+          internalServerError(context, ErrorCodes.DATABASE_ERROR.toJson());
+        } else if (null == res.result().body()) {
+          notFound(context, ErrorCodes.USER_NOT_FOUND.toJson());
+        } else {
+          JsonObject resultJson = (JsonObject) res.result().body();
+          String userId = resultJson.getString(Constraints.CLASS_ATTR_OBJECT_ID);
+          String newSessionToken = StringUtils.getRandomString(Constraints.SESSION_TOKEN_LENGTH);
+          if (!objectId.equals(userId)) {
+            notFound(context, ErrorCodes.USER_NOT_FOUND.toJson());
+          } else {
+            JsonObject newUser = new JsonObject().put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, newSessionToken);
+            sendMongoOperationEx(context, Constraints.USER_CLASS, objectId, Constraints.OP_OBJECT_UPSERT, newUser,
+                    response -> {
+              if (null != response) {
+                response.put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, newSessionToken);
+              }
+            });
+          }
+        }
+      });
+    }
+  }
+
+  private void updateUserPassword(RoutingContext context) {
+    // TODO: fix me.
+    badRequest(context, ErrorCodes.OPERATION_NOT_SUPPORT.toJson());
+  }
+
+  private void requestEmailVerify(RoutingContext context) {
+    // TODO: fix me.
+    badRequest(context, ErrorCodes.OPERATION_NOT_SUPPORT.toJson());
+  }
+
+  private void requestPasswordReset(RoutingContext context) {
     // TODO: fix me.
     badRequest(context, ErrorCodes.OPERATION_NOT_SUPPORT.toJson());
   }
@@ -311,6 +372,22 @@ public class RestServerVerticle extends CommonVerticle {
       }
     });
   }
+  private <T> void sendMongoOperationWithHandler(RoutingContext context, String clazz, String objectId, String operation,
+                                                   JsonObject param, Handler<AsyncResult<Message<T>>> replyHandler) {
+    JsonObject request = new JsonObject();
+    if (!StringUtils.isEmpty(clazz)) {
+      request.put(Constraints.INTERNAL_MSG_ATTR_CLASS, clazz);
+    }
+    if (!StringUtils.isEmpty(objectId)) {
+      request.put(Constraints.INTERNAL_MSG_ATTR_OBJECT_ID, objectId);
+    }
+    if (null != param) {
+      request.put(Constraints.INTERNAL_MSG_ATTR_PARAM, param);
+    }
+    DeliveryOptions options = new DeliveryOptions().addHeader(Constraints.INTERNAL_MSG_HEADER_OP, operation);
+    vertx.eventBus().send(Configure.MAILADDRESS_MONGO_QUEUE, request, options, replyHandler);
+  }
+
   private void sendMongoOperation(RoutingContext context, String clazz, String objectId, String operation, JsonObject param) {
     sendMongoOperationEx(context, clazz, objectId, operation, param, null);
   }
@@ -373,16 +450,16 @@ public class RestServerVerticle extends CommonVerticle {
     router.post("/1.1/users").handler(this::userSignup);
     router.post("/1.1/login").handler(this::userSignin);
 
-    router.get("/1.1/users/:objectId").handler(this::crudUser);
+    router.getWithRegex("\\/1\\.1\\/users\\/(?<objectId>[^\\/]{16,})").handler(this::crudUser);
     router.get("/1.1/users").handler(this::crudUser);
     router.delete("/1.1/users/:objectId").handler(this::crudUser);
     router.put("/1.1/users/:objectId").handler(this::crudUser);
 
-    router.get("/1.1/users/me").handler(sessionValidationHandler).handler(this::crudUser);
-    router.put("/1.1/users/:objectId/refreshSessionToken").handler(sessionValidationHandler).handler(this::crudUser);
-    router.put("/1.1/users/:objectId/updatePassword").handler(sessionValidationHandler).handler(this::crudUser);
-    router.post("/1.1/requestEmailVerify").handler(this::crudUser);
-    router.post("/1.1/requestPasswordReset").handler(this::crudUser);
+    router.get("/1.1/users/me").handler(sessionValidationHandler).handler(this::recoverUser);
+    router.put("/1.1/users/:objectId/refreshSessionToken").handler(sessionValidationHandler).handler(this::refreshUserToken);
+    router.put("/1.1/users/:objectId/updatePassword").handler(sessionValidationHandler).handler(this::updateUserPassword);
+    router.post("/1.1/requestEmailVerify").handler(this::requestEmailVerify);
+    router.post("/1.1/requestPasswordReset").handler(this::requestPasswordReset);
 
     router.post("/1.1/fileTokens").handler(this::createFileToken);
     router.post("/1.1/fileCallback").handler(this::fileUploadCallback);
