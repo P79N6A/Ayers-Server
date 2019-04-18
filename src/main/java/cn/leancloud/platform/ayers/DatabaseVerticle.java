@@ -1,5 +1,6 @@
 package cn.leancloud.platform.ayers;
 
+import cn.leancloud.platform.common.Configure;
 import cn.leancloud.platform.common.Constraints;
 import cn.leancloud.platform.common.ErrorCodes;
 import io.vertx.core.Future;
@@ -40,19 +41,26 @@ public class DatabaseVerticle extends CommonVerticle {
   private static final String SQL_UPDATE_JOB = "update sparkjobs set start_time= ?, status = ? where id = ?";
 
   private Future<Void> prepareDatabase() {
+    Configure configure = Configure.getInstance();
+    String hosts = configure.mysqlHosts();
+    String[] hostParts = hosts.split(":");
+    int port = 3306;
+    if (hostParts.length > 1) {
+      port = Integer.valueOf(hostParts[1]);
+    }
     Future<Void> future = Future.future();
     JsonObject mySQLClientConfig = new JsonObject()
-            .put("host", "127.0.0.1")
-            .put("port", 13306)
-            .put("username", "test")
-            .put("password", "itsnothing")
-            .put("database", "uluru")
+            .put("host", hostParts[0])
+            .put("port", port)
+            .put("username", configure.mysqlUsername())
+            .put("password", configure.mysqlPassword())
+            .put("database", configure.mysqlDatabase())
             .put("charset", "utf-8")
-            .put("connectTimeout", 10000)
-            .put("testTimeout", 5000)
-            .put("queryTimeout", 3000)
-            .put("connectionRetryDelay", 5000)
-            .put("maxPoolSize", 10);
+            .put("connectTimeout", configure.mysqlConnectTimeout())
+            .put("queryTimeout", configure.mysqlQueryTimeoutMS())
+            .put("connectionRetryDelay", configure.mysqlConnRetryDelay())
+            .put("maxPoolSize", configure.mysqlMaxPoolSize());
+    logger.info("initialize mysql with config: " + mySQLClientConfig);
     mysqlClient = MySQLClient.createShared(vertx, mySQLClientConfig, "MySQLPool");
     mysqlClient.getConnection(ar -> {
       if (ar.failed()) {
@@ -140,8 +148,8 @@ public class DatabaseVerticle extends CommonVerticle {
       if (ar.failed()) {
         startFuture.fail(ar.cause());
       } else {
-        String dbQueue = config().getString(RestServerVerticle.CONFIG_DB_QUEUE, "mysql.queue");
-        vertx.eventBus().consumer(dbQueue, this::onMessage);
+        vertx.eventBus().consumer(Configure.MAILADDRESS_DB_QUEUE, this::onMessage);
+        logger.info("begin to consume address: " + Configure.MAILADDRESS_DB_QUEUE);
         startFuture.complete();;
       }
     });

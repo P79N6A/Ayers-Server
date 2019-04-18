@@ -20,22 +20,34 @@ import static cn.leancloud.platform.common.JsonFactory.toJsonArray;
 public class MongoDBVerticle extends CommonVerticle {
   private static final Logger logger = LoggerFactory.getLogger(MongoDBVerticle.class);
   private static final int COUNT_FLAG = 1;
-
-  private String mongoQueue;
-  private JsonObject mongoConfig;
   private static final String MONGO_POOL_NAME = "MongoDBPool";
 
+  private JsonObject mongoConfig;
+  private MongoClient mongoClient;
 
   private void prepareDatabase() {
+    Configure configure = Configure.getInstance();
+    String hosts = configure.mongoHosts();
+    String[] hostParts = hosts.split(":");
+    int port = 27017;
+    if (hostParts.length > 1) {
+      port = Integer.valueOf(hostParts[1]);
+    }
     mongoConfig = new JsonObject()
-            .put("host", "127.0.0.1")
-            .put("port", 27027)
-            .put("db_name", "uluru-test")
-            .put("maxPoolSize", 50)
-            .put("minPoolSize", 3)
+            .put("host", hostParts[0])
+            .put("port", port)
+            .put("db_name", configure.mongoDatabase())
+            .put("maxPoolSize", configure.mongoMaxPoolSize())
+            .put("minPoolSize", configure.mongoMinPoolSize())
+            .put("maxIdleTimeMS", configure.mongoMaxIdleTimeMS())
+            .put("maxLifeTimeMS", configure.mongoMaxLifeTimeMS())
+            .put("waitQueueMultiple", configure.mongoWaitQueueMultiple())
+            .put("waitQueueTimeoutMS", configure.mongoWaitQueueTimeoutMS())
+            .put("serverSelectionTimeoutMS", configure.mongoServerSelectionTimeoutMS())
             .put("keepAlive", true);
-    MongoClient testClient = getSharedClient();
-    testClient.getCollections(re -> {
+    logger.info("initialize mongo with config: " + mongoConfig);
+    mongoClient = MongoClient.createShared(vertx, this.mongoConfig, MONGO_POOL_NAME);
+    mongoClient.getCollections(re -> {
       if (re.failed()) {
         logger.error("failed to initialize mongo. cause: ", re.cause());
       } else {
@@ -45,7 +57,7 @@ public class MongoDBVerticle extends CommonVerticle {
   }
 
   private MongoClient getSharedClient() {
-    return MongoClient.createShared(vertx, this.mongoConfig, MONGO_POOL_NAME);
+    return mongoClient;
   }
 
   private void reportDatabaseError(Message<JsonObject> message, Throwable cause) {
@@ -239,6 +251,7 @@ public class MongoDBVerticle extends CommonVerticle {
 
   @Override
   public void start(Future<Void> startFuture) throws Exception {
+    logger.info("start MongoDBVerticle...");
     prepareDatabase();
 
 //    Field field = CollectibleDocumentFieldNameValidator.class.getDeclaredField("EXCEPTIONS");
@@ -251,13 +264,15 @@ public class MongoDBVerticle extends CommonVerticle {
 //    List<String> newValue = Arrays.asList("$db","$ref","$id","$gte","_id", "$push","$pushAll", "$pull", "$each", "$set");
 //    field.set(null, newValue);
 
-    mongoQueue = config().getString(RestServerVerticle.CONFIG_MONGO_QUEUE, "mongo.queue");
-    vertx.eventBus().consumer(mongoQueue, this::onMessage);
+    vertx.eventBus().consumer(Configure.MAILADDRESS_MONGO_QUEUE, this::onMessage);
+    logger.info("begin to consume address: " + Configure.MAILADDRESS_MONGO_QUEUE);
     startFuture.complete();
   }
 
   @Override
   public void stop(Future<Void> stopFuture) throws Exception {
+    //getSharedClient().close();
+    logger.info("stop MongoDBVerticle...");
     stopFuture.complete();
   }
 }

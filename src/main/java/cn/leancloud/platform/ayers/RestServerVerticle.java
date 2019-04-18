@@ -40,16 +40,6 @@ import java.util.stream.Collectors;
 public class RestServerVerticle extends CommonVerticle {
   private static final Logger logger = LoggerFactory.getLogger(RestServerVerticle.class);
 
-  public static final String CONFIG_HTTP_SERVER_PORT = "http.server.port";
-  public static final String CONFIG_DB_QUEUE = "mysql.queue";
-  public static final String CONFIG_MONGO_QUEUE = "mongo.queue";
-  public static final String CONFIG_REDIS_HOST = "redis.host";
-  public static final String CONFIG_REDIS_PORT = "redis.port";
-
-  private String mysqlQueue = "db.queue";
-
-  private String mongoQueue = "mongo.queue";
-
   private SimpleRedisClient redisClient = new SimpleRedisClient();
   private HttpServer httpServer;
 
@@ -77,8 +67,9 @@ public class RestServerVerticle extends CommonVerticle {
   }
 
   private void createFileToken(RoutingContext context) {
+    Configure configure = Configure.getInstance();
     JsonObject body = parseRequestBody(context);
-    String bucketName = Configure.FILE_DEFAULT_BUCKET;
+    String bucketName = configure.fileBucket();
     String fileKey = body.getString("key");
     String name = body.getString("name");
     if (StringUtils.isEmpty(fileKey) || StringUtils.isEmpty(name)) {
@@ -92,12 +83,12 @@ public class RestServerVerticle extends CommonVerticle {
       mimeType = MimeUtils.guessMimeTypeFromExtension(nameParts[nameParts.length - 1]);
     }
 
-    Auth auth = Auth.create(Configure.QINIU_ACCESS_KEY, Configure.QINIU_SECRET_KEY);
+    Auth auth = Auth.create(configure.fileProviderAccessKey(), configure.fileProviderSecretKey());
     final String token = auth.uploadToken(bucketName, fileKey);
     body.remove("__type");
-    body.put(Constraints.BUILTIN_ATTR_FILE_URL, Configure.FILE_DEFAULT_HOST + fileKey)
+    body.put(Constraints.BUILTIN_ATTR_FILE_URL, configure.fileDefaultHost() + fileKey)
             .put(Constraints.BUILTIN_ATTR_FILE_MIMETYPE, mimeType)
-            .put(Constraints.BUILTIN_ATTR_FILE_PROVIDER, Configure.FILE_PROVIDER)
+            .put(Constraints.BUILTIN_ATTR_FILE_PROVIDER,configure.fileProvideName())
             .put(Constraints.BUILTIN_ATTR_FILE_BUCKET, bucketName);
 
     HttpMethod httpMethod = context.request().method();
@@ -113,7 +104,7 @@ public class RestServerVerticle extends CommonVerticle {
     sendMongoOperationEx(context, Constraints.FILE_CLASS, null, operation, body, file -> {
       file.mergeIn(body);
       file.put(Constraints.PARAM_FILE_TOKEN, token);
-      file.put(Constraints.PARAM_FILE_UPLOAD_URL, Configure.FILE_UPLOAD_URL);
+      file.put(Constraints.PARAM_FILE_UPLOAD_URL, configure.fileUploadHost());
       // TODO: add appId/objectId/token to cache.
     });
   }
@@ -252,7 +243,7 @@ public class RestServerVerticle extends CommonVerticle {
           operation = Constraints.OP_OBJECT_UPSERT;
         }
         DeliveryOptions options = new DeliveryOptions().addHeader(Constraints.INTERNAL_MSG_HEADER_OP, operation);
-        vertx.eventBus().send(this.mongoQueue, request, options, res -> {
+        vertx.eventBus().send(Configure.MAILADDRESS_MONGO_QUEUE, request, options, res -> {
           if (res.failed()) {
             tmp.complete(new JsonObject().put("error", new JsonObject().put("code", ErrorCodes.DATABASE_ERROR.getCode()).put("error", res.cause().getMessage())));
           } else {
@@ -291,7 +282,7 @@ public class RestServerVerticle extends CommonVerticle {
       request.put(Constraints.INTERNAL_MSG_ATTR_PARAM, param);
     }
     DeliveryOptions options = new DeliveryOptions().addHeader(Constraints.INTERNAL_MSG_HEADER_OP, operation);
-    vertx.eventBus().send(this.mongoQueue, request, options, reply -> {
+    vertx.eventBus().send(Configure.MAILADDRESS_MONGO_QUEUE, request, options, reply -> {
       if (reply.failed()) {
         logger.warn("operation failed. cause: ", reply.cause());
         if (reply.cause() instanceof ReplyException) {
@@ -325,14 +316,14 @@ public class RestServerVerticle extends CommonVerticle {
     sendMongoOperationEx(context, clazz, objectId, operation, param, null);
   }
 
-
   private void healthcheck(RoutingContext context) {
     logger.debug("response for healthcheck.");
     JsonObject result = new JsonObject().put("status", "green")
             .put("availableProcessors", Runtime.getRuntime().availableProcessors())
             .put("freeMemory", Runtime.getRuntime().freeMemory())
             .put("totalMemory", Runtime.getRuntime().totalMemory())
-            .put("maxMemory", Runtime.getRuntime().maxMemory()).put("activeThreads", Thread.activeCount());
+            .put("maxMemory", Runtime.getRuntime().maxMemory()).put("activeThreads", Thread.activeCount())
+            .put("config", Configure.getInstance().getSettings());
     ok(context, result);
   }
 
@@ -424,7 +415,7 @@ public class RestServerVerticle extends CommonVerticle {
       }
     });
 
-    int portNumber = config().getInteger(CONFIG_HTTP_SERVER_PORT, 8080);
+    int portNumber = Configure.getInstance().listenPort();
     httpServer.requestHandler(router).listen(portNumber, ar -> {
       if (ar.failed()) {
         logger.error("could not start a http server, cause: ", ar.cause());
@@ -439,10 +430,13 @@ public class RestServerVerticle extends CommonVerticle {
 
   @Override
   public void start(Future<Void> startFuture) throws Exception {
-    this.mysqlQueue = config().getString(CONFIG_DB_QUEUE, "db.queue");
-    this.mongoQueue = config().getString(CONFIG_MONGO_QUEUE, "mongo.queue");
-    String redisHost = config().getString(CONFIG_REDIS_HOST, "localhost");
-    int redisPort = config().getInteger(CONFIG_REDIS_PORT, 6379);
+    Configure configure = Configure.getInstance();
+    String hosts = configure.redisHosts();
+    String type = configure.redisHAType(); // ignore
+    String[] hostParts = hosts.split(":");
+    final int redisPort = (hostParts.length > 1)? Integer.valueOf(hostParts[1]) : 6379;
+    String redisHost = hostParts[0];
+
     startHttpServer().compose(ar -> {
       Future<Void> future = Future.future();
       redisClient.connect(vertx, redisHost, redisPort, future);
@@ -455,8 +449,9 @@ public class RestServerVerticle extends CommonVerticle {
 
   @Override
   public void stop(Future<Void> stopFuture) throws Exception {
-    httpServer.close();
+//    httpServer.close();
+//    redisClient.close();
     logger.info("stop RestServerVerticle...");
-    stopFuture.complete();
+//    stopFuture.complete();
   }
 }
