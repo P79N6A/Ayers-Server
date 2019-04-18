@@ -22,6 +22,8 @@ public class CommonVerticle extends AbstractVerticle {
   private static final Logger logger = LoggerFactory.getLogger(CommonVerticle.class);
   protected static final String HEADER_CONTENT_TYPE = "Content-Type";
   protected static final String CONTENT_TYPE_JSON = "application/json; charset=utf-8";
+  protected static final String REQUEST_PARAM_OBJECTID = "objectId";
+  protected static final String REQUEST_PARAM_CLAZZ = "clazz";
 
   protected Supplier<JsonObject> dummyJsonGenerator = new Supplier<JsonObject>() {
     @Override
@@ -31,11 +33,11 @@ public class CommonVerticle extends AbstractVerticle {
   };
 
   protected String parseRequestObjectId(RoutingContext context) {
-    return context.request().getParam("objectId");
+    return context.request().getParam(REQUEST_PARAM_OBJECTID);
   }
 
   protected String parseRequestClassname(RoutingContext context) {
-    return context.request().getParam("clazz");
+    return context.request().getParam(REQUEST_PARAM_CLAZZ);
   }
 
   protected JsonObject parseRequestBody(RoutingContext context) {
@@ -44,7 +46,8 @@ public class CommonVerticle extends AbstractVerticle {
     if (HttpMethod.GET.equals(httpMethod)) {
       Map<String, String> filteredEntries = context.request().params().entries()
               .stream().parallel()
-              .filter(entry -> !"clazz".equalsIgnoreCase(entry.getKey()) && !"objectId".equalsIgnoreCase(entry.getKey()))
+              .filter(entry ->
+                      !REQUEST_PARAM_CLAZZ.equalsIgnoreCase(entry.getKey()) && !REQUEST_PARAM_OBJECTID.equalsIgnoreCase(entry.getKey()))
               .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
       body = JsonObject.mapFrom(filteredEntries);
     } else if (HttpMethod.PUT.equals(httpMethod) || HttpMethod.POST.equals(httpMethod)){
@@ -69,7 +72,20 @@ public class CommonVerticle extends AbstractVerticle {
     response.end(Json.encodePrettily(result));
   }
 
+  protected void response(RoutingContext context, int status, JsonObject header, String result) {
+    HttpServerResponse response = context.response();
+    response.setStatusCode(status).putHeader(HEADER_CONTENT_TYPE, CONTENT_TYPE_JSON);
+    if (null != header) {
+      header.stream().forEach(entry -> response.putHeader(entry.getKey(), (String) entry.getValue()));
+    }
+    response.end(result);
+  }
+
   protected void ok(RoutingContext context, JsonObject result) {
+    response(context, HttpStatus.SC_OK, null, result);
+  }
+
+  protected void ok(RoutingContext context, String result) {
     response(context, HttpStatus.SC_OK, null, result);
   }
 

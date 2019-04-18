@@ -1,5 +1,7 @@
 package cn.leancloud.platform.ayers;
 
+import cn.leancloud.platform.common.Constraints;
+import cn.leancloud.platform.common.ErrorCodes;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.JsonArray;
@@ -71,22 +73,14 @@ public class DatabaseVerticle extends CommonVerticle {
     return future;
   }
 
-  public enum ErrorCodes {
-    NO_OPERATION_SPECIFIED,
-    BAD_OPERATION,
-    DB_ERROR,
-    NOT_FOUND_USER,
-    PASSWORD_ERROR
-  }
-
-  private void reportQueryError(Message<JsonObject> message, Throwable cause) {
+  private void reportDatabaseError(Message<JsonObject> message, Throwable cause) {
     logger.error("Database query error", cause);
-    message.fail(ErrorCodes.DB_ERROR.ordinal(), cause.getMessage());
+    message.fail(ErrorCodes.INTERNAL_ERROR.ordinal(), cause.getMessage());
   }
 
   public void onMessage(Message<JsonObject> message) {
     if (!message.headers().contains("operation")) {
-      message.fail(ErrorCodes.NO_OPERATION_SPECIFIED.ordinal(), "no operation specified.");
+      message.fail(ErrorCodes.INVALID_PARAMETER.ordinal(), "no operation specified.");
       return;
     }
     String operation = message.headers().get("operation");
@@ -100,7 +94,7 @@ public class DatabaseVerticle extends CommonVerticle {
         mysqlClient.queryWithParams(SQL_GET_JOB, params, fetch -> {
           logger.debug("mysql client returned with result: " + fetch.succeeded());
           if (fetch.failed()) {
-            reportQueryError(message, fetch.cause());
+            reportDatabaseError(message, fetch.cause());
           } else {
             logger.debug("db result: " + fetch.result().toJson());
             message.reply(fetch.result().toJson());
@@ -117,7 +111,7 @@ public class DatabaseVerticle extends CommonVerticle {
         mysqlClient.updateWithParams(SQL_CREATE_JOB, params, updated -> {
           logger.debug("mysql client returned with result: " + updated.succeeded());
           if (updated.failed()) {
-            reportQueryError(message, updated.cause());
+            reportDatabaseError(message, updated.cause());
           } else {
             message.reply(updated.result().toJson());
           }
@@ -128,14 +122,14 @@ public class DatabaseVerticle extends CommonVerticle {
         params.add(obj);
         mysqlClient.updateWithParams(SQL_UPDATE_JOB, params, updated -> {
           if (updated.failed()) {
-            reportQueryError(message, updated.cause());
+            reportDatabaseError(message, updated.cause());
           } else {
             message.reply(updated.result());
           }
         });
         break;
       default:
-        message.fail(ErrorCodes.BAD_OPERATION.ordinal(), "unknown operation.");
+        message.fail(ErrorCodes.INVALID_PARAMETER.ordinal(), "unknown operation.");
     }
   }
 

@@ -4,8 +4,6 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import org.bson.types.ObjectId;
 
-import static com.mongodb.client.model.Updates.pushEach;
-
 import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -269,12 +267,12 @@ public class Transformer {
       String key = entry.getKey();
       Object value = entry.getValue();
       Map.Entry<String, Object> result = entry;
-      if (Configure.CLASS_ATTR_MONGO_ID.equalsIgnoreCase(key)) {
+      if (Constraints.CLASS_ATTR_MONGO_ID.equalsIgnoreCase(key)) {
         // replace _id with objectId.
         if (value instanceof JsonObject && ((JsonObject) value).containsKey("$oid")) {
-          result = new AbstractMap.SimpleEntry<String, Object>(Configure.CLASS_ATTR_OBJECT_ID, ((JsonObject) value).getString("$oid"));
+          result = new AbstractMap.SimpleEntry<String, Object>(Constraints.CLASS_ATTR_OBJECT_ID, ((JsonObject) value).getString("$oid"));
         } else {
-          result = new AbstractMap.SimpleEntry<String, Object>(Configure.CLASS_ATTR_OBJECT_ID, value);
+          result = new AbstractMap.SimpleEntry<String, Object>(Constraints.CLASS_ATTR_OBJECT_ID, value);
         }
       } else if (value instanceof JsonObject) {
         JsonObject newValue = decodeBsonUnit((JsonObject) value);

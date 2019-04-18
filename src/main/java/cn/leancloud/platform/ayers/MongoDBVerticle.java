@@ -1,10 +1,7 @@
 package cn.leancloud.platform.ayers;
 
 import cn.leancloud.platform.ayers.handler.UserHandler;
-import cn.leancloud.platform.common.Configure;
-import cn.leancloud.platform.common.StringUtils;
-import cn.leancloud.platform.common.Transformer;
-import com.mongodb.internal.validator.CollectibleDocumentFieldNameValidator;
+import cn.leancloud.platform.common.*;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.JsonArray;
@@ -15,11 +12,7 @@ import io.vertx.ext.mongo.UpdateOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.time.Instant;
-import java.util.Arrays;
-import java.util.List;
 import java.util.stream.Stream;
 
 import static cn.leancloud.platform.common.JsonFactory.toJsonArray;
@@ -55,9 +48,9 @@ public class MongoDBVerticle extends CommonVerticle {
     return MongoClient.createShared(vertx, this.mongoConfig, MONGO_POOL_NAME);
   }
 
-  private void reportOperationError(Message<JsonObject> message, Throwable cause) {
+  private void reportDatabaseError(Message<JsonObject> message, Throwable cause) {
     logger.error("mongodb operation error", cause);
-    message.fail(DatabaseVerticle.ErrorCodes.DB_ERROR.ordinal(), cause.getMessage());
+    message.fail(ErrorCodes.DATABASE_ERROR.getCode(), cause.getMessage());
   }
 
   private void reportUserError(Message<JsonObject> msg, int code, String message) {
@@ -65,42 +58,42 @@ public class MongoDBVerticle extends CommonVerticle {
   }
 
   public void onMessage(Message<JsonObject> message) {
-    if (!message.headers().contains(Configure.INTERNAL_MSG_HEADER_OP)) {
-      message.fail(DatabaseVerticle.ErrorCodes.NO_OPERATION_SPECIFIED.ordinal(), "no operation specified.");
+    if (!message.headers().contains(Constraints.INTERNAL_MSG_HEADER_OP)) {
+      message.fail(ErrorCodes.INTERNAL_ERROR.ordinal(), "no operation specified.");
       return;
     }
     logger.debug("received message: " + message.body().toString());
 
     JsonObject body = message.body();
-    String clazz = body.getString(Configure.INTERNAL_MSG_ATTR_CLASS, "");
-    String objectId = body.getString(Configure.INTERNAL_MSG_ATTR_OBJECT_ID);
-    JsonObject param = body.getJsonObject(Configure.INTERNAL_MSG_ATTR_PARAM, new JsonObject());
+    String clazz = body.getString(Constraints.INTERNAL_MSG_ATTR_CLASS, "");
+    String objectId = body.getString(Constraints.INTERNAL_MSG_ATTR_OBJECT_ID);
+    JsonObject param = body.getJsonObject(Constraints.INTERNAL_MSG_ATTR_PARAM, new JsonObject());
 
-    String operation = message.headers().get(Configure.INTERNAL_MSG_HEADER_OP);
+    String operation = message.headers().get(Constraints.INTERNAL_MSG_HEADER_OP);
 
     final MongoClient client = getSharedClient();
     Instant now = Instant.now();
     // replace
-    if (null != param && param.containsKey(Configure.CLASS_ATTR_OBJECT_ID)) {
-      param.put(Configure.CLASS_ATTR_MONGO_ID, param.getString(Configure.CLASS_ATTR_OBJECT_ID)).remove(Configure.CLASS_ATTR_OBJECT_ID);
+    if (null != param && param.containsKey(Constraints.CLASS_ATTR_OBJECT_ID)) {
+      param.put(Constraints.CLASS_ATTR_MONGO_ID, param.getString(Constraints.CLASS_ATTR_OBJECT_ID)).remove(Constraints.CLASS_ATTR_OBJECT_ID);
     }
 
     switch (operation) {
-      case Configure.OP_USER_SIGNIN:
-        String password = param.getString("password");
-        param.remove("password");
+      case Constraints.OP_USER_SIGNIN:
+        String password = param.getString(UserHandler.PARAM_PASSWORD);
+        param.remove(UserHandler.PARAM_PASSWORD);
         logger.debug("query= " + param.toString());
         client.findOne(clazz, param, null, user -> {
           if (user.failed()) {
-            reportOperationError(message, user.cause());
+            reportDatabaseError(message, user.cause());
           } else if (null == user.result()) {
-            reportUserError(message, DatabaseVerticle.ErrorCodes.NOT_FOUND_USER.ordinal(), "username is not existed.");
+            reportUserError(message, ErrorCodes.OBJECT_NOT_FOUND.ordinal(), "username is not existed.");
           } else {
             JsonObject mongoUser = user.result();
-            String salt = mongoUser.getString("salt");
-            String mongoPassword = mongoUser.getString("password");
-            mongoUser.remove("salt");
-            mongoUser.remove("password");
+            String salt = mongoUser.getString(Constraints.BUILTIN_ATTR_SALT);
+            String mongoPassword = mongoUser.getString(Constraints.BUILTIN_ATTR_PASSWORD);
+            mongoUser.remove(Constraints.BUILTIN_ATTR_SALT);
+            mongoUser.remove(Constraints.BUILTIN_ATTR_PASSWORD);
             if (StringUtils.isEmpty(password)) {
               message.reply(mongoUser);
             } else {
@@ -108,19 +101,19 @@ public class MongoDBVerticle extends CommonVerticle {
               if (hashPassword.equals(mongoPassword)) {
                 message.reply(mongoUser);
               } else {
-                reportUserError(message, DatabaseVerticle.ErrorCodes.PASSWORD_ERROR.ordinal(), "password is wrong.");
+                reportUserError(message, ErrorCodes.PASSWORD_WRONG.getCode(), "password is wrong.");
               }
             }
           }
         });
         break;
-      case Configure.OP_OBJECT_UPSERT:
+      case Constraints.OP_OBJECT_UPSERT:
         boolean isCreateOp = false;
         if (StringUtils.isEmpty(objectId)) {
           isCreateOp = true;
-          param.put(Configure.CLASS_ATTR_CREATED_TS, now);
+          param.put(Constraints.CLASS_ATTR_CREATED_TS, now);
         }
-        param.put(Configure.CLASS_ATTR_UPDATED_TS, now);
+        param.put(Constraints.CLASS_ATTR_UPDATED_TS, now);
 
         try {
           param = Transformer.encode2BsonRequest(param, isCreateOp? Transformer.REQUEST_OP.CREATE :Transformer.REQUEST_OP.UPDATE);
@@ -134,7 +127,7 @@ public class MongoDBVerticle extends CommonVerticle {
           client.insert(clazz, param, res -> {
             client.close();
             if (res.failed()) {
-              reportOperationError(message, res.cause());
+              reportDatabaseError(message, res.cause());
             } else {
               String docId = StringUtils.isEmpty(objectId) ? res.result() : objectId;
               logger.debug("insert doc result:" + docId);
@@ -145,13 +138,13 @@ public class MongoDBVerticle extends CommonVerticle {
           });
         } else {
           logger.debug("doc=== " + param.toString());
-          JsonObject query = new JsonObject().put(Configure.CLASS_ATTR_MONGO_ID, objectId);
+          JsonObject query = new JsonObject().put(Constraints.CLASS_ATTR_MONGO_ID, objectId);
           logger.debug("query= " + query.toString());
           UpdateOptions option = new UpdateOptions().setUpsert(false);
           client.updateCollectionWithOptions(clazz, query, param, option, res -> {
             client.close();
             if (res.failed()) {
-              reportOperationError(message, res.cause());
+              reportDatabaseError(message, res.cause());
             } else {
               if (res.result().getDocModified() > 0) {
                 JsonObject result = new JsonObject().put("objectId", objectId);
@@ -165,36 +158,36 @@ public class MongoDBVerticle extends CommonVerticle {
           });
         }
         break;
-      case Configure.OP_OBJECT_DELETE:
+      case Constraints.OP_OBJECT_DELETE:
         if (!StringUtils.isEmpty(objectId)) {
-          param.put(Configure.CLASS_ATTR_MONGO_ID, objectId);
+          param.put(Constraints.CLASS_ATTR_MONGO_ID, objectId);
         }
         client.removeDocument(clazz, param, res -> {
           client.close();
           if (res.failed()) {
-            reportOperationError(message, res.cause());
+            reportDatabaseError(message, res.cause());
           } else {
             message.reply(res.result().toJson());
           }
         });
         break;
-      case Configure.OP_OBJECT_QUERY:
-        String where = param.getString(Configure.QUERY_KEY_WHERE, "{}");
-        String order = param.getString(Configure.QUERY_KEY_ORDER);
-        int limit = Integer.valueOf(param.getString(Configure.QUERY_KEY_LIMIT, "100"));
-        int skip = Integer.valueOf(param.getString(Configure.QUERY_KEY_SKIP, "0"));
-        int count = Integer.valueOf(param.getString(Configure.QUERY_KEY_COUNT, "0"));
-        String include = param.getString(Configure.QUERY_KEY_INCLUDE);
-        String keys = param.getString(Configure.QUERY_KEY_KEYS);
+      case Constraints.OP_OBJECT_QUERY:
+        String where = param.getString(Constraints.QUERY_KEY_WHERE, "{}");
+        String order = param.getString(Constraints.QUERY_KEY_ORDER);
+        int limit = Integer.valueOf(param.getString(Constraints.QUERY_KEY_LIMIT, "100"));
+        int skip = Integer.valueOf(param.getString(Constraints.QUERY_KEY_SKIP, "0"));
+        int count = Integer.valueOf(param.getString(Constraints.QUERY_KEY_COUNT, "0"));
+        String include = param.getString(Constraints.QUERY_KEY_INCLUDE);
+        String keys = param.getString(Constraints.QUERY_KEY_KEYS);
 
         JsonObject condition = new JsonObject(where);
         if (!StringUtils.isEmpty(objectId)) {
-          condition.put(Configure.CLASS_ATTR_MONGO_ID, objectId);
+          condition.put(Constraints.CLASS_ATTR_MONGO_ID, objectId);
         }
         try {
           condition = Transformer.encode2BsonRequest(condition, Transformer.REQUEST_OP.QUERY);
         } catch (ClassCastException ex) {
-          reportUserError(message, 400, ex.getMessage());
+          reportUserError(message, ErrorCodes.INVALID_PARAMETER.getCode(), ex.getMessage());
           return;
         }
 
@@ -215,7 +208,7 @@ public class MongoDBVerticle extends CommonVerticle {
           client.count(clazz, condition, res -> {
             client.close();
             if (res.failed()) {
-              reportOperationError(message, res.cause());
+              reportDatabaseError(message, res.cause());
             } else {
               message.reply(new JsonObject().put("count", res.result()));
             }
@@ -225,7 +218,7 @@ public class MongoDBVerticle extends CommonVerticle {
           client.findWithOptions(clazz, condition, options, res->{
             client.close();
             if (res.failed()) {
-              reportOperationError(message, res.cause());
+              reportDatabaseError(message, res.cause());
             } else {
               Stream<JsonObject> resultStream = res.result().stream().map(Transformer::decodeBsonObject);
               if (StringUtils.isEmpty(objectId)) {
@@ -239,7 +232,7 @@ public class MongoDBVerticle extends CommonVerticle {
         }
         break;
       default:
-        message.fail(DatabaseVerticle.ErrorCodes.BAD_OPERATION.ordinal(), "unknown operation.");
+        message.fail(ErrorCodes.INTERNAL_ERROR.getCode(), "unknown operation.");
         break;
     }
   }
@@ -248,15 +241,15 @@ public class MongoDBVerticle extends CommonVerticle {
   public void start(Future<Void> startFuture) throws Exception {
     prepareDatabase();
 
-    Field field = CollectibleDocumentFieldNameValidator.class.getDeclaredField("EXCEPTIONS");
-    field.setAccessible(true);
-
-    Field modifiers = Field.class.getDeclaredField("modifiers");
-    modifiers.setAccessible(true);
-    modifiers.setInt(field, field.getModifiers() & ~Modifier.FINAL);
-
-    List<String> newValue = Arrays.asList("$db","$ref","$id","$gte","_id", "$push","$pushAll", "$pull", "$each", "$set");
-    field.set(null, newValue);
+//    Field field = CollectibleDocumentFieldNameValidator.class.getDeclaredField("EXCEPTIONS");
+//    field.setAccessible(true);
+//
+//    Field modifiers = Field.class.getDeclaredField("modifiers");
+//    modifiers.setAccessible(true);
+//    modifiers.setInt(field, field.getModifiers() & ~Modifier.FINAL);
+//
+//    List<String> newValue = Arrays.asList("$db","$ref","$id","$gte","_id", "$push","$pushAll", "$pull", "$each", "$set");
+//    field.set(null, newValue);
 
     mongoQueue = config().getString(RestServerVerticle.CONFIG_MONGO_QUEUE, "mongo.queue");
     vertx.eventBus().consumer(mongoQueue, this::onMessage);

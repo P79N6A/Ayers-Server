@@ -2,12 +2,9 @@ package cn.leancloud.platform.ayers.handler;
 
 import cn.leancloud.platform.codec.Base64;
 import cn.leancloud.platform.codec.MessageDigest;
-import cn.leancloud.platform.common.CommonResult;
-import cn.leancloud.platform.common.ObjectSpecifics;
-import cn.leancloud.platform.common.StringUtils;
+import cn.leancloud.platform.common.*;
 import cn.leancloud.platform.modules.ACL;
 import io.vertx.core.json.JsonObject;
-import io.vertx.ext.web.RoutingContext;
 
 public class UserHandler {
   public static final String PARAM_USERNAME = "username";
@@ -56,7 +53,7 @@ public class UserHandler {
       boolean sessionTokenSelected = !StringUtils.isEmpty(sessionToken);
       if (!emailPassSelected && !mobilePassSelected && !usernamePassSelected && !mobileSmscodeSelected && !sessionTokenSelected) {
         result.setSuccess(false);
-        result.setMessage("parameter is invalid.");
+        result.setMessage(ErrorCodes.INVALID_PARAMETER.getMessage());
       } else if (usernamePassSelected) {
         data.put(PARAM_USERNAME, username);
         data.put(PARAM_PASSWORD, password);
@@ -67,7 +64,7 @@ public class UserHandler {
         // TODO： check smsCode is valid.
         data.put(PARAM_MOBILEPHONE, mobile);
       } else if (sessionTokenSelected) {
-        data.put("sessionToken", sessionToken);
+        data.put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, sessionToken);
       } else {
         data.put(PARAM_EMAIL, email);
         data.put(PARAM_PASSWORD, password);
@@ -85,7 +82,7 @@ public class UserHandler {
     CommonResult result = new CommonResult();
     if (null == param) {
       result.setSuccess(false);
-      result.setMessage("parameter is empty.");
+      result.setMessage(ErrorCodes.INVALID_PARAMETER.getMessage());
     } else {
       JsonObject data = new JsonObject(param.getMap());
       result.setObject(data);
@@ -100,24 +97,24 @@ public class UserHandler {
       boolean mobilePassSelected = !StringUtils.isEmpty(mobile) && !StringUtils.isEmpty(password);
       if (!usernamePassSelected && !mobileSmscodeSelected && !mobilePassSelected) {
         result.setSuccess(false);
-        result.setMessage( "only support by signup with username + password, or mobilePhoneNumber + password, or mobilePhoneNumber + smsCode.");
+        result.setMessage(ErrorCodes.INVALID_PARAMETER.getMessage());
       } else if (!StringUtils.isEmpty(email) && !ObjectSpecifics.validEmail(email)) {
         result.setSuccess(false);
-        result.setMessage( "email is invalid.");
+        result.setMessage(ErrorCodes.INVALID_EMAIL.getMessage());
       } else {
         if (usernamePassSelected || mobilePassSelected) {
-          String salt = StringUtils.getRandomString(16);
+          String salt = StringUtils.getRandomString(Constraints.SALT_LENGTH);
           String hashPassword = hashPassword(password, salt);
           data.put(PARAM_PASSWORD, hashPassword);
-          data.put("salt", salt);
+          data.put(Constraints.BUILTIN_ATTR_SALT, salt);
         } else {
           // TODO： check smsCode is valid.
           data.remove(PARAM_SMSCODE);
         }
-        data.put("ACL", getUserDefaultACL());
-        data.put("sessionToken", StringUtils.getRandomString(16));
-        data.put("emailVerified", false);
-        data.put("mobilePhoneVerified", false);
+        data.put(Constraints.BUILTIN_ATTR_ACL, getUserDefaultACL());
+        data.put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, StringUtils.getRandomString(Constraints.SESSION_TOKEN_LENGTH));
+        data.put(Constraints.BUILTIN_ATTR_EMAIL_VERIFIED, false);
+        data.put(Constraints.BUILTIN_ATTR_PHONENUM_VERIFIED, false);
       }
     }
     return result;

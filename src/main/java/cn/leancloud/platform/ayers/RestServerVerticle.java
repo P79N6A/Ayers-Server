@@ -9,6 +9,7 @@ import io.vertx.core.Future;
 
 import io.vertx.core.Handler;
 import io.vertx.core.eventbus.DeliveryOptions;
+import io.vertx.core.eventbus.ReplyException;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
@@ -27,10 +28,10 @@ import io.vertx.ext.web.sstore.SessionStore;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scala.collection.immutable.Stream;
 
 import java.time.Instant;
 import java.util.*;
-import java.util.Map.Entry;
 import java.util.stream.Collectors;
 
 /**
@@ -58,33 +59,34 @@ public class RestServerVerticle extends CommonVerticle {
   }
 
   private void crudInstallation(RoutingContext context) {
-    crudCommonData(Configure.INSTALLATION_CLASS, context);
+    crudCommonData(Constraints.INSTALLATION_CLASS, context);
   }
 
   private void crudObject(RoutingContext context) {
     String clazz = parseRequestClassname(context);
+    if (!ObjectSpecifics.validClassName(clazz)) {
+      badRequest(context, ErrorCodes.INVALID_CLASSNAME.toJson());
+      return;
+    }
     crudCommonData(clazz, context);
   }
 
   private void crudUser(RoutingContext context) {
-    ;
+    // TODO: fix me.
+    badRequest(context, ErrorCodes.OPERATION_NOT_SUPPORT.toJson());
   }
 
   private void createFileToken(RoutingContext context) {
-    //{"name":"test.jpeg",
-    // "metaData":{"_name":"test.jpeg","size":33808,"_checksum":"d4070f2b218d54c60c55ee39bf4179e1"},
-    // "key":"dPe0f4WpX5Hp9kS6ydiwtgOPFbMB1qJUmfNH8lq3.jpeg",
-    // "__type":"File"}
     JsonObject body = parseRequestBody(context);
     String bucketName = Configure.FILE_DEFAULT_BUCKET;
     String fileKey = body.getString("key");
     String name = body.getString("name");
     if (StringUtils.isEmpty(fileKey) || StringUtils.isEmpty(name)) {
-      badRequest(context, new JsonObject().put("message", "filename and key are required."));
+      badRequest(context, ErrorCodes.INVALID_PARAMETER.toJson());
       return;
     }
 
-    String mimeType = "application/octet-stream";
+    String mimeType = Constraints.DEFAULT_MIME_TYPE;
     String[] nameParts = name.split("\\.");
     if (nameParts.length > 1) {
       mimeType = MimeUtils.guessMimeTypeFromExtension(nameParts[nameParts.length - 1]);
@@ -93,43 +95,32 @@ public class RestServerVerticle extends CommonVerticle {
     Auth auth = Auth.create(Configure.QINIU_ACCESS_KEY, Configure.QINIU_SECRET_KEY);
     final String token = auth.uploadToken(bucketName, fileKey);
     body.remove("__type");
-    body.put("url", Configure.FILE_DEFAULT_HOST + fileKey)
-            .put("mime_type", mimeType)
-            .put("provider", Configure.FILE_PROVIDER)
-            .put("bucket", bucketName);
+    body.put(Constraints.BUILTIN_ATTR_FILE_URL, Configure.FILE_DEFAULT_HOST + fileKey)
+            .put(Constraints.BUILTIN_ATTR_FILE_MIMETYPE, mimeType)
+            .put(Constraints.BUILTIN_ATTR_FILE_PROVIDER, Configure.FILE_PROVIDER)
+            .put(Constraints.BUILTIN_ATTR_FILE_BUCKET, bucketName);
 
     HttpMethod httpMethod = context.request().method();
     String operation = "";
     if (HttpMethod.GET.equals(httpMethod)) {
-      operation = Configure.OP_OBJECT_QUERY;
+      operation = Constraints.OP_OBJECT_QUERY;
     } else if (HttpMethod.DELETE.equals(httpMethod)) {
-      operation = Configure.OP_OBJECT_DELETE;
+      operation = Constraints.OP_OBJECT_DELETE;
     } else if (HttpMethod.POST.equals(httpMethod) || HttpMethod.PUT.equals(httpMethod)) {
-      operation = Configure.OP_OBJECT_UPSERT;
+      operation = Constraints.OP_OBJECT_UPSERT;
     }
 
-    logger.debug("curl file object. method=" + httpMethod + ", param=" + body);
-
-    sendMongoOperationEx(context, Configure.FILE_CLASS, null, operation, body, file -> {
-      //{"objectId":"5cb3e20430863b007223e5b6",
-      // "createdAt":"2019-04-15T01:44:36.769Z",
-      // "token":"w6ZYeC-arS2makzcotrVJGjQvpsCQeHcPseFRDzJ:EmCPsWPGp1xLOI1Ulp_xoOb_T0s=:eyJpbnNlcnRPbmx5IjoxLCJzY29wZSI6Im9ocWh4dTNtIiwiZGVhZGxpbmUiOjE1NTUyOTYyNzZ9",
-      // "url":"http:\/\/lc-ohqhxu3m.cn-n1.lcfile.com\/dPe0f4WpX5Hp9kS6ydiwtgOPFbMB1qJUmfNH8lq3.jpeg",
-      // "mime_type":"image\/jpeg",
-      // "provider":"qiniu",
-      // "upload_url":"https:\/\/upload.qiniup.com",
-      // "bucket":"ohqhxu3m",
-      // "key":"dPe0f4WpX5Hp9kS6ydiwtgOPFbMB1qJUmfNH8lq3.jpeg"}
+    sendMongoOperationEx(context, Constraints.FILE_CLASS, null, operation, body, file -> {
       file.mergeIn(body);
-      file.put("token", token);
-      file.put("upload_url", "https://upload.qiniup.com");
+      file.put(Constraints.PARAM_FILE_TOKEN, token);
+      file.put(Constraints.PARAM_FILE_UPLOAD_URL, Configure.FILE_UPLOAD_URL);
       // TODO: add appId/objectId/token to cache.
     });
   }
 
+  //{"result":true,
+  // "token":"w6ZYeC-arS2yNzZ9"}'
   private void fileUploadCallback(RoutingContext context) {
-    //{"result":true,
-    // "token":"w6ZYeC-arS2makzcotrVJGjQvpsCQeHcPseFRDzJ:EmCPsWPGp1xLOI1Ulp_xoOb_T0s=:eyJpbnNlcnRPbmx5IjoxLCJzY29wZSI6Im9ocWh4dTNtIiwiZGVhZGxpbmUiOjE1NTUyOTYyNzZ9"}'
     JsonObject body = parseRequestBody(context);
     boolean result = body.getBoolean("result");
     if (result) {
@@ -142,7 +133,7 @@ public class RestServerVerticle extends CommonVerticle {
   }
 
   private void crudSingleFile(RoutingContext context) {
-    crudCommonData(Configure.FILE_CLASS, context);
+    crudCommonData(Constraints.FILE_CLASS, context);
   }
 
   private void crudRole(RoutingContext context) {
@@ -152,7 +143,7 @@ public class RestServerVerticle extends CommonVerticle {
       String roleName = body.getString("name");
       JsonObject acl = body.getJsonObject("ACL");
       if (!ObjectSpecifics.validRoleName(roleName)) {
-        badRequest(context, new JsonObject().put("message", "Role name is required."));
+        badRequest(context, ErrorCodes.INVALID_ROLENAME.toJson());
         return;
       }
       if (null == acl) {
@@ -160,26 +151,27 @@ public class RestServerVerticle extends CommonVerticle {
         return;
       }
     }
-    crudCommonData(Configure.ROLE_CLASS, context);
+    crudCommonData(Constraints.ROLE_CLASS, context);
   }
 
   private void userSignup(RoutingContext context) {
     CommonResult commonResult = UserHandler.fillSignupParam(parseRequestBody(context));
     if (commonResult.isFailed()) {
-      badRequest(context, new JsonObject().put("message", commonResult.getMessage()));
+      badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("message", commonResult.getMessage()));
     } else {
       JsonObject body = commonResult.getObject();
-      sendMongoOperation(context, Configure.USER_CLASS, null, Configure.OP_OBJECT_UPSERT, body);
+      sendMongoOperationEx(context, Constraints.USER_CLASS, null, Constraints.OP_OBJECT_UPSERT, body,
+              jsonObject -> jsonObject.put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, body.getString(Constraints.BUILTIN_ATTR_SESSION_TOKEN)));
     }
   }
 
   private void userSignin(RoutingContext context) {
     CommonResult commonResult = UserHandler.fillSigninParam(parseRequestBody(context));
     if (commonResult.isFailed()) {
-      badRequest(context, new JsonObject().put("message", commonResult.getMessage()));
+      badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("message", commonResult.getMessage()));
     } else {
       JsonObject body = commonResult.getObject();
-      sendMongoOperation(context, Configure.USER_CLASS, null, Configure.OP_USER_SIGNIN, body);
+      sendMongoOperation(context, Constraints.USER_CLASS, null, Constraints.OP_USER_SIGNIN, body);
     }
   }
 
@@ -189,11 +181,11 @@ public class RestServerVerticle extends CommonVerticle {
     HttpMethod httpMethod = context.request().method();
     String operation = "";
     if (HttpMethod.GET.equals(httpMethod)) {
-      operation = Configure.OP_OBJECT_QUERY;
+      operation = Constraints.OP_OBJECT_QUERY;
     } else if (HttpMethod.DELETE.equals(httpMethod)) {
-      operation = Configure.OP_OBJECT_DELETE;
+      operation = Constraints.OP_OBJECT_DELETE;
     } else if (HttpMethod.POST.equals(httpMethod) || HttpMethod.PUT.equals(httpMethod)) {
-      operation = Configure.OP_OBJECT_UPSERT;
+      operation = Constraints.OP_OBJECT_UPSERT;
     }
 
     logger.debug("curl object. clazz=" + clazz + ", objectId=" + objectId + ", method=" + httpMethod + ", param=" + body);
@@ -215,6 +207,9 @@ public class RestServerVerticle extends CommonVerticle {
     String[] pathParts = path.split("/");
     String clazz = (pathParts.length >= 4)? pathParts[3] : "";
     String objectId = (pathParts.length >= 5)? pathParts[4] : "";
+    if (!StringUtils.isEmpty(clazz) && !ObjectSpecifics.validClassName(clazz)) {
+      return null;
+    }
     if (null == param && !method.equalsIgnoreCase("delete")) {
       return null;
     }
@@ -225,26 +220,11 @@ public class RestServerVerticle extends CommonVerticle {
   }
 
   private void batchWrite(RoutingContext context) {
-    //{
-    //        "requests": [
-    //          {
-    //            "method": "PUT",
-    //            "path": "/1.1/classes/Post/55a39634e4b0ed48f0c1845b",
-    //            "body": {
-    //              "upvotes": 2
-    //            }
-    //          },
-    //          {
-    //            "method": "DELETE",
-    //            "path": "/1.1/classes/Post/55a39634e4b0ed48f0c1845c"
-    //          }
-    //        ]
-    //      }
     JsonObject body = parseRequestBody(context);
     JsonArray requests = body.getJsonArray("requests");
     if (null == requests || requests.size() < 1) {
       logger.debug("invalid requests. requests is empty");
-      badRequest(context, new JsonObject().put("error", "requests is required."));
+      badRequest(context, ErrorCodes.INVALID_PARAMETER.toJson());
       return;
     }
 
@@ -252,36 +232,31 @@ public class RestServerVerticle extends CommonVerticle {
       final Future<JsonObject> tmp = Future.future();
       BatchRequest batchRequest = parseBatchRequest(req);
       if (null == batchRequest) {
-        logger.debug("invalid request. input=" + req);
-        tmp.complete(new JsonObject().put("error", new JsonObject().put("code", 2).put("error", "request format is wrong.")));
+        tmp.complete(new JsonObject().put("error", ErrorCodes.INVALID_PARAMETER.toJson()));
       } else {
         String method = batchRequest.getMethod();
         JsonObject request = new JsonObject();
         if (!StringUtils.isEmpty(batchRequest.getClazz())) {
-          request.put(Configure.INTERNAL_MSG_ATTR_CLASS, batchRequest.getClazz());
+          request.put(Constraints.INTERNAL_MSG_ATTR_CLASS, batchRequest.getClazz());
         }
         if (!StringUtils.isEmpty(batchRequest.getObjectId())) {
-          request.put(Configure.INTERNAL_MSG_ATTR_OBJECT_ID, batchRequest.getObjectId());
+          request.put(Constraints.INTERNAL_MSG_ATTR_OBJECT_ID, batchRequest.getObjectId());
         }
         if (null != batchRequest.getBody()) {
-          request.put(Configure.INTERNAL_MSG_ATTR_PARAM, batchRequest.getBody());
+          request.put(Constraints.INTERNAL_MSG_ATTR_PARAM, batchRequest.getBody());
         }
-        String operation = Configure.OP_OBJECT_QUERY;
+        String operation = Constraints.OP_OBJECT_QUERY;
         if ("delete".equalsIgnoreCase(method)) {
-          operation = Configure.OP_OBJECT_DELETE;
+          operation = Constraints.OP_OBJECT_DELETE;
         } else if ("post".equalsIgnoreCase(method) || "put".equalsIgnoreCase(method)) {
-          operation = Configure.OP_OBJECT_UPSERT;
+          operation = Constraints.OP_OBJECT_UPSERT;
         }
-        logger.debug("batchWrite. operation=" + operation + ", clazz=" + batchRequest.getClazz()
-                + ", objectId=" + batchRequest.getObjectId() + ", param=" + batchRequest.getBody());
-        DeliveryOptions options = new DeliveryOptions().addHeader(Configure.INTERNAL_MSG_HEADER_OP, operation);
+        DeliveryOptions options = new DeliveryOptions().addHeader(Constraints.INTERNAL_MSG_HEADER_OP, operation);
         vertx.eventBus().send(this.mongoQueue, request, options, res -> {
           if (res.failed()) {
-            logger.debug("batchWrite === result for elem. error=" + res.cause().getMessage());
-            tmp.complete(new JsonObject().put("error", new JsonObject().put("code", 1).put("error", res.cause().getMessage())));
+            tmp.complete(new JsonObject().put("error", new JsonObject().put("code", ErrorCodes.DATABASE_ERROR.getCode()).put("error", res.cause().getMessage())));
           } else {
-            logger.debug("batchWrite === result for elem. result=" + res.result().body());
-            tmp.complete((JsonObject) res.result().body());
+            tmp.complete(new JsonObject().put("success", (JsonObject) res.result().body()));
           }
         });
       }
@@ -289,13 +264,13 @@ public class RestServerVerticle extends CommonVerticle {
     }).collect(Collectors.toList());
 
     CompositeFuture.all(results).setHandler( res -> {
-      logger.debug("batchWrite === all requests finished.");
+      logger.debug("batchWrite all requests finished.");
       int futuresCount = res.result().size();
       JsonArray resultObjects = new JsonArray();
       for (int i = 0; i < futuresCount; i++) {
         resultObjects.add((JsonObject) res.result().resultAt(i));
       }
-      ok(context, new JsonObject().put("results", resultObjects));
+      ok(context, resultObjects.encode());
     });
   }
 
@@ -307,28 +282,38 @@ public class RestServerVerticle extends CommonVerticle {
                                     JsonObject param, final Handler<JsonObject> handler) {
     JsonObject request = new JsonObject();
     if (!StringUtils.isEmpty(clazz)) {
-      request.put(Configure.INTERNAL_MSG_ATTR_CLASS, clazz);
+      request.put(Constraints.INTERNAL_MSG_ATTR_CLASS, clazz);
     }
     if (!StringUtils.isEmpty(objectId)) {
-      request.put(Configure.INTERNAL_MSG_ATTR_OBJECT_ID, objectId);
+      request.put(Constraints.INTERNAL_MSG_ATTR_OBJECT_ID, objectId);
     }
     if (null != param) {
-      request.put(Configure.INTERNAL_MSG_ATTR_PARAM, param);
+      request.put(Constraints.INTERNAL_MSG_ATTR_PARAM, param);
     }
-    DeliveryOptions options = new DeliveryOptions().addHeader(Configure.INTERNAL_MSG_HEADER_OP, operation);
+    DeliveryOptions options = new DeliveryOptions().addHeader(Constraints.INTERNAL_MSG_HEADER_OP, operation);
     vertx.eventBus().send(this.mongoQueue, request, options, reply -> {
       if (reply.failed()) {
         logger.warn("operation failed. cause: ", reply.cause());
-        context.fail(reply.cause());
+        if (reply.cause() instanceof ReplyException) {
+          int failureCode = ((ReplyException) reply.cause()).failureCode();
+          JsonObject responseJson = new JsonObject().put("code", failureCode).put("error", reply.cause().getMessage());
+          if (failureCode == ErrorCodes.DATABASE_ERROR.getCode() || failureCode == ErrorCodes.INTERNAL_ERROR.getCode()) {
+            internalServerError(context, responseJson);
+          } else {
+            badRequest(context, responseJson);
+          }
+        } else {
+          context.fail(reply.cause());
+        }
       } else {
         JsonObject result = (JsonObject) reply.result().body();
         if (null != handler) {
           handler.handle(result);
         }
-        if (Configure.OP_OBJECT_UPSERT.equalsIgnoreCase(operation) && StringUtils.isEmpty(objectId)) {
+        if (Constraints.OP_OBJECT_UPSERT.equalsIgnoreCase(operation) && StringUtils.isEmpty(objectId)) {
           //Status: 201 Created
           //Location: https://heqfq0sw.api.lncld.net/1.1/classes/Post/<objectId>
-          JsonObject location = new JsonObject().put("Location", context.request().absoluteURI() + result.getString("objectId"));
+          JsonObject location = new JsonObject().put("Location", context.request().absoluteURI() + result.getString(Constraints.CLASS_ATTR_OBJECT_ID));
           created(context, location, result);
         } else {
           ok(context, result);
@@ -398,14 +383,14 @@ public class RestServerVerticle extends CommonVerticle {
     router.post("/1.1/users").handler(this::userSignup);
     router.post("/1.1/login").handler(this::userSignin);
 
-    router.get("/1.1/users/:userId").handler(this::crudUser);
+    router.get("/1.1/users/:objectId").handler(this::crudUser);
     router.get("/1.1/users").handler(this::crudUser);
-    router.delete("/1.1/users/:userId").handler(this::crudUser);
-    router.put("/1.1/users/:userId").handler(this::crudUser);
+    router.delete("/1.1/users/:objectId").handler(this::crudUser);
+    router.put("/1.1/users/:objectId").handler(this::crudUser);
 
     router.get("/1.1/users/me").handler(sessionValidationHandler).handler(this::crudUser);
-    router.put("/1.1/users/:userId/refreshSessionToken").handler(this::crudUser);
-    router.put("/1.1/users/:userId/updatePassword").handler(this::crudUser);
+    router.put("/1.1/users/:objectId/refreshSessionToken").handler(sessionValidationHandler).handler(this::crudUser);
+    router.put("/1.1/users/:objectId/updatePassword").handler(sessionValidationHandler).handler(this::crudUser);
     router.post("/1.1/requestEmailVerify").handler(this::crudUser);
     router.post("/1.1/requestPasswordReset").handler(this::crudUser);
 
