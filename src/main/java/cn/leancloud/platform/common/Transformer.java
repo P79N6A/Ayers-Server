@@ -131,7 +131,6 @@ public class Transformer {
     if (null == o) {
       return o;
     }
-    System.out.println("input=" + o.toString());
     JsonObject complexOps = new JsonObject();
     JsonObject directSetEntries = new JsonObject();
     o.stream().forEach(entry -> {
@@ -214,9 +213,7 @@ public class Transformer {
         }
       }
     }); // end forEach
-    JsonObject result = directSetEntries.mergeIn(complexOps);
-    System.out.println("output=" + result.toString());
-    return result;
+    return directSetEntries.mergeIn(complexOps);
   }
 
   public static JsonObject encode2BsonRequest(JsonObject o, REQUEST_OP op) throws ClassCastException {
