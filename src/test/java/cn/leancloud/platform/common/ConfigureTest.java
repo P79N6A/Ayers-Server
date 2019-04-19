@@ -14,7 +14,8 @@ public class ConfigureTest extends TestCase {
 
   public void testConfigureInit() {
     Vertx vertx = Vertx.vertx();
-    Configure configure = Configure.getInstance(vertx);
+    Configure configure = Configure.getInstance();
+    configure.initialize(vertx, res -> {System.out.println(res);});
     assertTrue(null != configure);
     assertTrue(configure.listenPort() == 8080);
   }
