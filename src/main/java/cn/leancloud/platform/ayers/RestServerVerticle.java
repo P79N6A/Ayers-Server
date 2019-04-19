@@ -364,7 +364,8 @@ public class RestServerVerticle extends CommonVerticle {
         if (Constraints.OP_OBJECT_UPSERT.equalsIgnoreCase(operation) && StringUtils.isEmpty(objectId)) {
           //Status: 201 Created
           //Location: https://heqfq0sw.api.lncld.net/1.1/classes/Post/<objectId>
-          JsonObject location = new JsonObject().put("Location", context.request().absoluteURI() + result.getString(Constraints.CLASS_ATTR_OBJECT_ID));
+          JsonObject location = new JsonObject().put("Location", Configure.getInstance().getBaseHost() + "/"
+                  + context.request().path() + result.getString(Constraints.CLASS_ATTR_OBJECT_ID));
           created(context, location, result);
         } else {
           ok(context, result);

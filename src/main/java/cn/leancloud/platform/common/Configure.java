@@ -29,6 +29,10 @@ public class Configure {
     return settings.getInteger("server.listenPort");
   }
 
+  public String getBaseHost() {
+    return settings.getString("server.baseHost", "http://127.0.0.1");
+  }
+
   public int mysqlVerticleCount() {
     return settings.getInteger("server.mysqlVerticles", 1);
   }
@@ -150,7 +154,7 @@ public class Configure {
     return settings.getString("file.provider.secretKey");
   }
 
-  public JsonObject getSettings() {
+  private JsonObject getSettings() {
     return settings;
   }
 

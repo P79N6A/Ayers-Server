@@ -63,11 +63,11 @@ public class UserHandler {
       } else if (mobileSmscodeSelected) {
         // TODO： check smsCode is valid.
         data.put(PARAM_MOBILEPHONE, mobile);
-      } else if (sessionTokenSelected) {
-        data.put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, sessionToken);
-      } else {
+      } else if (emailPassSelected) {
         data.put(PARAM_EMAIL, email);
         data.put(PARAM_PASSWORD, password);
+      } else {
+        data.put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, sessionToken);
       }
     }
     return result;
