@@ -398,8 +398,7 @@ public class RestServerVerticle extends CommonVerticle {
             .put("availableProcessors", Runtime.getRuntime().availableProcessors())
             .put("freeMemory", Runtime.getRuntime().freeMemory())
             .put("totalMemory", Runtime.getRuntime().totalMemory())
-            .put("maxMemory", Runtime.getRuntime().maxMemory()).put("activeThreads", Thread.activeCount())
-            .put("config", Configure.getInstance().getSettings());
+            .put("maxMemory", Runtime.getRuntime().maxMemory()).put("activeThreads", Thread.activeCount());
     ok(context, result);
   }
 
@@ -482,7 +481,6 @@ public class RestServerVerticle extends CommonVerticle {
         logger.warn("invalid request. cause: " + validationErrorMessage);
       } else {
         // Unknown 400 failure happened
-        routingContext.response().setStatusCode(400).end();
       }
     });
     router.errorHandler(HttpStatus.SC_INTERNAL_SERVER_ERROR, routingContext -> {

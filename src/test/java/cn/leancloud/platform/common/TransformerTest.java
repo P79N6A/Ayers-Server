@@ -3,6 +3,9 @@ package cn.leancloud.platform.common;
 import io.vertx.core.json.JsonObject;
 import junit.framework.TestCase;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 public class TransformerTest extends TestCase {
 
   @Override
@@ -209,5 +212,25 @@ public class TransformerTest extends TestCase {
     assertTrue(updateObj.getJsonObject("$addToSet").size() == 2);
     assertTrue(updateObj.getJsonObject("$addToSet").getJsonObject("parents").getJsonArray("$each").size() == 2);
     assertTrue(updateObj.getJsonObject("$addToSet").getJsonObject("tags").getJsonArray("$each").size() == 2);
+  }
+
+  public void testEncodeNullValue() throws Exception {
+    String param = "{\"class\":\"_File\",\"param\":{\"key\":\"b2d5cb4e988cd6f19198.js\",\"name\":\"stream-test.js\",\"metaData\":{\"owner\":\"unknown\"},\"url\":\"http://lc-ohqhxu3m.cn-n1.lcfile.com/b2d5cb4e988cd6f19198.js\",\"mime_type\":null,\"provider\":\"qiniu\",\"bucket\":\"ohqhxu3m\"}}";
+    JsonObject paramObj = new JsonObject(param);
+    JsonObject newObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.UPDATE);
+    System.out.println(newObj.toString());
+    assertTrue(newObj.getJsonObject("$set").getJsonObject("param").getValue("mime_type") == null);
+    assertTrue(newObj.getJsonObject("$set").getJsonObject("param").getString("provider").equals("qiniu"));
+  }
+
+  public void testJsonMerge() throws Exception {
+    String input = "{\"name\":\"hallo\", \"first\": null}";
+    JsonObject paramObj = new JsonObject(input);
+    JsonObject createObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.CREATE);
+    System.out.println(createObj.toString());
+    assertTrue(createObj.getValue("first") == null);
+    JsonObject newObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.UPDATE);
+    System.out.println(newObj.toString());
+    assertTrue(null == newObj.getJsonObject("$set").getValue("first"));
   }
 }

@@ -81,36 +81,30 @@ public class Transformer {
     if (null != tmp) {
       return tmp;
     }
-    Map<String, Object> all = o.stream()
-            .map(entry -> {
+    JsonObject resultObject = new JsonObject();
+    o.stream().forEach(entry -> {
               Map.Entry<String, Object> result = entry;
               String key = entry.getKey();
               Object value = entry.getValue();
-              if (value instanceof JsonObject) {
-                JsonObject newValue = encode2BsonObject((JsonObject) value, isCreateOp);
-                if (null != newValue) {
-                  result = new AbstractMap.SimpleEntry<>(key, newValue);
-                }
+              Object newValue = value;
+              if (null == value) {
+              } else if (value instanceof JsonObject) {
+                newValue = encode2BsonObject((JsonObject) value, isCreateOp);
               } else if (value instanceof JsonArray) {
-                JsonArray newValue = ((JsonArray) value).stream()
+                newValue = ((JsonArray) value).stream()
                         .map(v ->{
                           if (v instanceof JsonObject)
                             return encode2BsonObject((JsonObject) v, isCreateOp);
                           else
                             return v;
                         }).collect(JsonFactory.toJsonArray());
-                result = new AbstractMap.SimpleEntry<>(key, newValue);
               }
-              return result;
-            })
-            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-    return new JsonObject(all);
+              resultObject.put(key, newValue);
+            });
+    return resultObject;
   }
 
   private static JsonObject addOperatorEntry(JsonObject result, String operator, String key, Object value, boolean isCreateOp) {
-    if (null == value) {
-      return result;
-    }
     if (isCreateOp) {
       result.put(key, value);
     } else {
@@ -136,7 +130,7 @@ public class Transformer {
     o.stream().forEach(entry -> {
       String key = entry.getKey();
       Object value = entry.getValue();
-      if (!(value instanceof JsonObject)) {
+      if (null == value || !(value instanceof JsonObject)) {
         addOperatorEntry(directSetEntries, "$set", key, value, isCreateOp);
       } else {
         JsonObject newValue = (JsonObject)value;
