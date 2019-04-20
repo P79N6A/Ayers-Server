@@ -1,5 +1,6 @@
 package cn.leancloud.platform.common;
 
+import cn.leancloud.platform.persistence.DataStoreFactory;
 import io.vertx.config.ConfigRetriever;
 import io.vertx.config.ConfigRetrieverOptions;
 import io.vertx.config.ConfigStoreOptions;
@@ -12,17 +13,25 @@ import org.slf4j.LoggerFactory;
 
 public class Configure {
   private static final Logger logger = LoggerFactory.getLogger(Configure.class);
-  public static final String MAILADDRESS_DB_QUEUE = "mysql.queue";
-  public static final String MAILADDRESS_MONGO_QUEUE = "mongo.queue";
+  public static final String MAILADDRESS_DATASTORE_QUEUE = "datastore.queue";
 
   private static Configure instance = null;
   private JsonObject settings = new JsonObject();
+  private DataStoreFactory dataStoreFactory = null;
 
   public static Configure getInstance() {
     if (null == instance) {
       instance = new Configure();
     }
     return instance;
+  }
+
+  public DataStoreFactory getDataStoreFactory() {
+    return dataStoreFactory;
+  }
+
+  public void setDataStoreFactory(DataStoreFactory dataStoreFactory) {
+    this.dataStoreFactory = dataStoreFactory;
   }
 
   public int listenPort() {
@@ -33,12 +42,12 @@ public class Configure {
     return settings.getString("server.baseHost", "http://127.0.0.1");
   }
 
-  public int mysqlVerticleCount() {
-    return settings.getInteger("server.mysqlVerticles", 1);
+  public String dataStoreType() {
+    return settings.getString("server.datastoreType", "mongo");
   }
 
-  public int mongodbVerticleCount() {
-    return settings.getInteger("server.mongodbVerticles", 1);
+  public int datastoreVerticleCount() {
+    return settings.getInteger("server.datastoreVerticles", 1);
   }
 
   public String mysqlHosts() {

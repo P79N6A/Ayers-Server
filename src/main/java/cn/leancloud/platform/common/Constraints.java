@@ -55,13 +55,4 @@ public class Constraints {
   public static final int SALT_LENGTH = 24;
 
   public static final String DEFAULT_MIME_TYPE = "application/octet-stream";
-  public static final String[] builtinClazz = new String[]{"_User","_Installation","_Conversation","_File","_Follower","_Followee","_Role"};
-  public static final Set<String> builtinClazzSet = new ConcurrentHashSet<String>();
-  static {
-    builtinClazzSet.addAll(Arrays.asList(builtinClazz));
-  }
-
-  public static boolean isBuiltinClass(String clazz) {
-    return builtinClazzSet.contains(clazz);
-  }
 }

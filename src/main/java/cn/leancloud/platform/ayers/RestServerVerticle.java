@@ -30,7 +30,6 @@ import io.vertx.ext.web.sstore.SessionStore;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import scala.collection.immutable.Stream;
 
 import java.time.Instant;
 import java.util.*;
@@ -73,7 +72,7 @@ public class RestServerVerticle extends CommonVerticle {
       badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PASSWORD.getCode()).put("error", "session_token is required."));
     } else {
       JsonObject body = commonResult.getObject();
-      sendMongoOperationEx(context, Constraints.USER_CLASS, null, Constraints.OP_OBJECT_UPSERT, body,
+      sendDataOperationEx(context, Constraints.USER_CLASS, null, Constraints.OP_OBJECT_UPSERT, body,
               jsonObject -> jsonObject.put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, body.getString(Constraints.BUILTIN_ATTR_SESSION_TOKEN)));
     }
   }
@@ -85,7 +84,7 @@ public class RestServerVerticle extends CommonVerticle {
       badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PASSWORD.getCode()).put("error", "session_token is required."));
     } else {
       JsonObject findCondition = new JsonObject().put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, sessionToken);
-      sendMongoOperationWithHandler(context, Constraints.USER_CLASS, objectId, Constraints.OP_OBJECT_QUERY,
+      sendDataOperationWithHandler(context, Constraints.USER_CLASS, objectId, Constraints.OP_OBJECT_QUERY,
               new JsonObject().put(Constraints.QUERY_KEY_WHERE, findCondition.toString()),
               res -> {
         if (res.failed()) {
@@ -100,7 +99,7 @@ public class RestServerVerticle extends CommonVerticle {
             notFound(context, ErrorCodes.USER_NOT_FOUND.toJson());
           } else {
             JsonObject newUser = new JsonObject().put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, newSessionToken);
-            sendMongoOperationEx(context, Constraints.USER_CLASS, objectId, Constraints.OP_OBJECT_UPSERT, newUser,
+            sendDataOperationEx(context, Constraints.USER_CLASS, objectId, Constraints.OP_OBJECT_UPSERT, newUser,
                     response -> {
               if (null != response) {
                 response.put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, newSessionToken);
@@ -162,7 +161,7 @@ public class RestServerVerticle extends CommonVerticle {
       operation = Constraints.OP_OBJECT_UPSERT;
     }
 
-    sendMongoOperationEx(context, Constraints.FILE_CLASS, null, operation, body, file -> {
+    sendDataOperationEx(context, Constraints.FILE_CLASS, null, operation, body, file -> {
       file.mergeIn(body);
       file.put(Constraints.PARAM_FILE_TOKEN, token);
       file.put(Constraints.PARAM_FILE_UPLOAD_URL, configure.fileUploadHost());
@@ -212,7 +211,7 @@ public class RestServerVerticle extends CommonVerticle {
       badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("message", commonResult.getMessage()));
     } else {
       JsonObject body = commonResult.getObject();
-      sendMongoOperationEx(context, Constraints.USER_CLASS, null, Constraints.OP_OBJECT_UPSERT, body,
+      sendDataOperationEx(context, Constraints.USER_CLASS, null, Constraints.OP_OBJECT_UPSERT, body,
               jsonObject -> jsonObject.put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, body.getString(Constraints.BUILTIN_ATTR_SESSION_TOKEN)));
     }
   }
@@ -223,7 +222,7 @@ public class RestServerVerticle extends CommonVerticle {
       badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("message", commonResult.getMessage()));
     } else {
       JsonObject body = commonResult.getObject();
-      sendMongoOperation(context, Constraints.USER_CLASS, null, Constraints.OP_USER_SIGNIN, body);
+      sendDataOperation(context, Constraints.USER_CLASS, null, Constraints.OP_USER_SIGNIN, body);
     }
   }
 
@@ -242,7 +241,7 @@ public class RestServerVerticle extends CommonVerticle {
 
     logger.debug("curl object. clazz=" + clazz + ", objectId=" + objectId + ", method=" + httpMethod + ", param=" + body);
 
-    sendMongoOperationEx(context, clazz, objectId, operation, body, handler);
+    sendDataOperationEx(context, clazz, objectId, operation, body, handler);
   }
 
   private static BatchRequest parseBatchRequest(Object req) {
@@ -304,7 +303,7 @@ public class RestServerVerticle extends CommonVerticle {
           operation = Constraints.OP_OBJECT_UPSERT;
         }
         DeliveryOptions options = new DeliveryOptions().addHeader(Constraints.INTERNAL_MSG_HEADER_OP, operation);
-        vertx.eventBus().send(Configure.MAILADDRESS_MONGO_QUEUE, request, options, res -> {
+        vertx.eventBus().send(Configure.MAILADDRESS_DATASTORE_QUEUE, request, options, res -> {
           if (res.failed()) {
             tmp.complete(new JsonObject().put("error", new JsonObject().put("code", ErrorCodes.DATABASE_ERROR.getCode()).put("error", res.cause().getMessage())));
           } else {
@@ -330,8 +329,8 @@ public class RestServerVerticle extends CommonVerticle {
     crudCommonDataEx(clazz, context, null);
   }
 
-  private void sendMongoOperationEx(RoutingContext context, String clazz, String objectId, String operation,
-                                    JsonObject param, final Handler<JsonObject> handler) {
+  private void sendDataOperationEx(RoutingContext context, String clazz, String objectId, String operation,
+                                   JsonObject param, final Handler<JsonObject> handler) {
     JsonObject request = new JsonObject();
     if (!StringUtils.isEmpty(clazz)) {
       request.put(Constraints.INTERNAL_MSG_ATTR_CLASS, clazz);
@@ -343,7 +342,7 @@ public class RestServerVerticle extends CommonVerticle {
       request.put(Constraints.INTERNAL_MSG_ATTR_PARAM, param);
     }
     DeliveryOptions options = new DeliveryOptions().addHeader(Constraints.INTERNAL_MSG_HEADER_OP, operation);
-    vertx.eventBus().send(Configure.MAILADDRESS_MONGO_QUEUE, request, options, reply -> {
+    vertx.eventBus().send(Configure.MAILADDRESS_DATASTORE_QUEUE, request, options, reply -> {
       if (reply.failed()) {
         if (reply.cause() instanceof ReplyException) {
           int failureCode = ((ReplyException) reply.cause()).failureCode();
@@ -373,8 +372,8 @@ public class RestServerVerticle extends CommonVerticle {
       }
     });
   }
-  private <T> void sendMongoOperationWithHandler(RoutingContext context, String clazz, String objectId, String operation,
-                                                   JsonObject param, Handler<AsyncResult<Message<T>>> replyHandler) {
+  private <T> void sendDataOperationWithHandler(RoutingContext context, String clazz, String objectId, String operation,
+                                                JsonObject param, Handler<AsyncResult<Message<T>>> replyHandler) {
     JsonObject request = new JsonObject();
     if (!StringUtils.isEmpty(clazz)) {
       request.put(Constraints.INTERNAL_MSG_ATTR_CLASS, clazz);
@@ -386,11 +385,11 @@ public class RestServerVerticle extends CommonVerticle {
       request.put(Constraints.INTERNAL_MSG_ATTR_PARAM, param);
     }
     DeliveryOptions options = new DeliveryOptions().addHeader(Constraints.INTERNAL_MSG_HEADER_OP, operation);
-    vertx.eventBus().send(Configure.MAILADDRESS_MONGO_QUEUE, request, options, replyHandler);
+    vertx.eventBus().send(Configure.MAILADDRESS_DATASTORE_QUEUE, request, options, replyHandler);
   }
 
-  private void sendMongoOperation(RoutingContext context, String clazz, String objectId, String operation, JsonObject param) {
-    sendMongoOperationEx(context, clazz, objectId, operation, param, null);
+  private void sendDataOperation(RoutingContext context, String clazz, String objectId, String operation, JsonObject param) {
+    sendDataOperationEx(context, clazz, objectId, operation, param, null);
   }
 
   private void healthcheck(RoutingContext context) {

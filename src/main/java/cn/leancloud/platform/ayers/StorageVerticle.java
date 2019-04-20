@@ -2,13 +2,12 @@ package cn.leancloud.platform.ayers;
 
 import cn.leancloud.platform.ayers.handler.UserHandler;
 import cn.leancloud.platform.common.*;
+import cn.leancloud.platform.persistence.DataStore;
+import cn.leancloud.platform.persistence.DataStoreFactory;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
-import io.vertx.ext.mongo.FindOptions;
-import io.vertx.ext.mongo.MongoClient;
-import io.vertx.ext.mongo.UpdateOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,50 +16,17 @@ import java.util.stream.Stream;
 
 import static cn.leancloud.platform.common.JsonFactory.toJsonArray;
 
-public class MongoDBVerticle extends CommonVerticle {
-  private static final Logger logger = LoggerFactory.getLogger(MongoDBVerticle.class);
+public class StorageVerticle extends CommonVerticle {
+  private static final Logger logger = LoggerFactory.getLogger(StorageVerticle.class);
   private static final int COUNT_FLAG = 1;
-  private static final String MONGO_POOL_NAME = "MongoDBPool";
-
-  private JsonObject mongoConfig;
+  private DataStoreFactory dataStoreFactory = null;
 
   private void prepareDatabase() {
-    Configure configure = Configure.getInstance();
-    String hosts = configure.mongoHosts();
-    String[] hostParts = hosts.split(":");
-    int port = 27017;
-    if (hostParts.length > 1) {
-      port = Integer.valueOf(hostParts[1]);
-    }
-    mongoConfig = new JsonObject()
-            .put("host", hostParts[0])
-            .put("port", port)
-            .put("db_name", configure.mongoDatabase())
-            .put("maxPoolSize", configure.mongoMaxPoolSize())
-            .put("minPoolSize", configure.mongoMinPoolSize())
-            .put("maxIdleTimeMS", configure.mongoMaxIdleTimeMS())
-            .put("maxLifeTimeMS", configure.mongoMaxLifeTimeMS())
-            .put("waitQueueMultiple", configure.mongoWaitQueueMultiple())
-            .put("waitQueueTimeoutMS", configure.mongoWaitQueueTimeoutMS())
-            .put("serverSelectionTimeoutMS", configure.mongoServerSelectionTimeoutMS())
-            .put("keepAlive", true);
-    logger.info("initialize mongo with config: " + mongoConfig);
-    MongoClient mongoClient = getSharedClient();
-    mongoClient.getCollections(re -> {
-      if (re.failed()) {
-        logger.error("failed to initialize mongo. cause: ", re.cause());
-      } else {
-        re.result().forEach( x -> System.out.println(x));
-      }
-    });
-  }
-
-  private MongoClient getSharedClient() {
-    return MongoClient.createShared(vertx, this.mongoConfig, MONGO_POOL_NAME);
+    dataStoreFactory = Configure.getInstance().getDataStoreFactory();
   }
 
   private void reportDatabaseError(Message<JsonObject> message, Throwable cause) {
-    logger.error("mongodb operation error", cause);
+    logger.error("datastore operation error", cause);
     message.fail(ErrorCodes.DATABASE_ERROR.getCode(), cause.getMessage());
   }
 
@@ -82,7 +48,8 @@ public class MongoDBVerticle extends CommonVerticle {
 
     String operation = message.headers().get(Constraints.INTERNAL_MSG_HEADER_OP);
 
-    final MongoClient client = getSharedClient();
+    final DataStore dataStore = dataStoreFactory.getStore();
+
     Instant now = Instant.now();
     // replace
     if (null != param && param.containsKey(Constraints.CLASS_ATTR_OBJECT_ID)) {
@@ -94,7 +61,8 @@ public class MongoDBVerticle extends CommonVerticle {
         String password = param.getString(UserHandler.PARAM_PASSWORD);
         param.remove(UserHandler.PARAM_PASSWORD);
         logger.debug("query= " + param.toString());
-        client.findOne(clazz, param, null, user -> {
+        dataStore.findOne(clazz, param, null, user -> {
+          dataStore.close();
           if (user.failed()) {
             reportDatabaseError(message, user.cause());
           } else if (null == user.result()) {
@@ -135,14 +103,12 @@ public class MongoDBVerticle extends CommonVerticle {
 
         if (isCreateOp) {
           logger.debug("doc=== " + param.toString());
-          client.insert(clazz, param, res -> {
-            client.close();
+          dataStore.insertWithOptions(clazz, param, null, res -> {
+            dataStore.close();
             if (res.failed()) {
               reportDatabaseError(message, res.cause());
             } else {
-              String docId = StringUtils.isEmpty(objectId) ? res.result() : objectId;
-              logger.debug("insert doc result:" + docId);
-              JsonObject result = new JsonObject().put("objectId", docId);
+              JsonObject result = res.result();
               result.put("createdAt", now.toString());
               message.reply(result);
             }
@@ -151,13 +117,14 @@ public class MongoDBVerticle extends CommonVerticle {
           logger.debug("doc=== " + param.toString());
           JsonObject query = new JsonObject().put(Constraints.CLASS_ATTR_MONGO_ID, objectId);
           logger.debug("query= " + query.toString());
-          UpdateOptions option = new UpdateOptions().setUpsert(false);
-          client.updateCollectionWithOptions(clazz, query, param, option, res -> {
-            client.close();
-            if (res.failed()) {
-              reportDatabaseError(message, res.cause());
+          // UpdateOptions option = new UpdateOptions().setUpsert(false);
+          JsonObject option = new JsonObject().put("upsert", false);
+          dataStore.updateWithOptions(clazz, query, param, option, res1 -> {
+            dataStore.close();
+            if (res1.failed()) {
+              reportDatabaseError(message, res1.cause());
             } else {
-              if (res.result().getDocModified() > 0) {
+              if (res1.result() > 0) {
                 JsonObject result = new JsonObject().put("objectId", objectId);
                 result.put("updatedAt", now.toString());
                 message.reply(result);
@@ -173,12 +140,12 @@ public class MongoDBVerticle extends CommonVerticle {
         if (!StringUtils.isEmpty(objectId)) {
           param.put(Constraints.CLASS_ATTR_MONGO_ID, objectId);
         }
-        client.removeDocument(clazz, param, res -> {
-          client.close();
+        dataStore.removeWithOptions(clazz, param, null, res -> {
+          dataStore.close();
           if (res.failed()) {
             reportDatabaseError(message, res.cause());
           } else {
-            message.reply(res.result().toJson());
+            message.reply(new JsonObject().put("removeCount", res.result()));
           }
         });
         break;
@@ -202,22 +169,34 @@ public class MongoDBVerticle extends CommonVerticle {
           return;
         }
 
-        FindOptions options = new FindOptions();
-        options.setLimit(limit);
-        options.setSkip(skip);
+//        FindOptions options = new FindOptions();
+//        options.setLimit(limit);
+//        options.setSkip(skip);
+//        JsonObject sortJson = Transformer.parseSortParam(order);
+//        if (null != sortJson) {
+//          options.setSort(sortJson);
+//        }
+//        JsonObject fieldJson = Transformer.parseProjectParam(keys);
+//        if (null != fieldJson) {
+//          options.setFields(fieldJson);
+//        }
+
+        JsonObject options = new JsonObject();
+        options.put("limit", limit);
+        options.put("skip", skip);
         JsonObject sortJson = Transformer.parseSortParam(order);
         if (null != sortJson) {
-          options.setSort(sortJson);
+          options.put("sort", sortJson);
         }
         JsonObject fieldJson = Transformer.parseProjectParam(keys);
         if (null != fieldJson) {
-          options.setFields(fieldJson);
+          options.put("fields", fieldJson);
         }
 
         if (COUNT_FLAG == count) {
           logger.debug("count clazz=" + clazz + ", condition=" + condition.toString());
-          client.count(clazz, condition, res -> {
-            client.close();
+          dataStore.count(clazz, condition, res -> {
+            dataStore.close();
             if (res.failed()) {
               reportDatabaseError(message, res.cause());
             } else {
@@ -225,9 +204,10 @@ public class MongoDBVerticle extends CommonVerticle {
             }
           });
         } else {
-          logger.debug("find clazz=" + clazz + ", condition=" + condition.toString() + ", options=" + options.toJson());
-          client.findWithOptions(clazz, condition, options, res->{
-            client.close();
+          logger.debug("find clazz=" + clazz + ", condition=" + condition.toString() + ", options=" + options);
+
+          dataStore.findWithOptions(clazz, condition, options, res->{
+            dataStore.close();
             if (res.failed()) {
               reportDatabaseError(message, res.cause());
             } else {
@@ -250,27 +230,17 @@ public class MongoDBVerticle extends CommonVerticle {
 
   @Override
   public void start(Future<Void> startFuture) throws Exception {
-    logger.info("start MongoDBVerticle...");
+    logger.info("start StorageVerticle...");
     prepareDatabase();
 
-//    Field field = CollectibleDocumentFieldNameValidator.class.getDeclaredField("EXCEPTIONS");
-//    field.setAccessible(true);
-//
-//    Field modifiers = Field.class.getDeclaredField("modifiers");
-//    modifiers.setAccessible(true);
-//    modifiers.setInt(field, field.getModifiers() & ~Modifier.FINAL);
-//
-//    List<String> newValue = Arrays.asList("$db","$ref","$id","$gte","_id", "$push","$pushAll", "$pull", "$each", "$set");
-//    field.set(null, newValue);
-
-    vertx.eventBus().consumer(Configure.MAILADDRESS_MONGO_QUEUE, this::onMessage);
-    logger.info("begin to consume address: " + Configure.MAILADDRESS_MONGO_QUEUE);
+    vertx.eventBus().consumer(Configure.MAILADDRESS_DATASTORE_QUEUE, this::onMessage);
+    logger.info("begin to consume address: " + Configure.MAILADDRESS_DATASTORE_QUEUE);
     startFuture.complete();
   }
 
   @Override
   public void stop(Future<Void> stopFuture) throws Exception {
-    logger.info("stop MongoDBVerticle...");
+    logger.info("stop StorageVerticle...");
     stopFuture.complete();
   }
 }

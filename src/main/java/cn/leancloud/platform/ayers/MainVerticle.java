@@ -1,44 +1,87 @@
 package cn.leancloud.platform.ayers;
 
 import cn.leancloud.platform.common.Configure;
+import cn.leancloud.platform.persistence.DataStoreFactory;
 import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Future;
 import io.vertx.core.json.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.CountDownLatch;
-
 public class MainVerticle extends CommonVerticle {
-  private static final Logger logger = LoggerFactory.getLogger(DatabaseVerticle.class);
+  private static final Logger logger = LoggerFactory.getLogger(MainVerticle.class);
+  private static final String DATASTORE_MONGO = "mongo";
 
   @Override
   public void start(Future<Void> startFuture) throws Exception {
     final Configure configure = Configure.getInstance();
     Future<JsonObject> configFuture = Future.future();
     configure.initialize(vertx, configFuture);
-
     configFuture.compose(response -> {
-      // start rest verticle.
+      boolean useMongoDB = DATASTORE_MONGO.equalsIgnoreCase(configure.dataStoreType());
+
+      // initialize mongo data store factory.
+      DataStoreFactory dataStoreFactory = null;
+      if (useMongoDB) {
+        String hosts = configure.mongoHosts();
+        String[] hostParts = hosts.split(":");
+        int port = 27017;
+        if (hostParts.length > 1) {
+          port = Integer.valueOf(hostParts[1]);
+        }
+        JsonObject mongoConfig = new JsonObject()
+                .put("host", hostParts[0])
+                .put("port", port)
+                .put("db_name", configure.mongoDatabase())
+                .put("maxPoolSize", configure.mongoMaxPoolSize())
+                .put("minPoolSize", configure.mongoMinPoolSize())
+                .put("maxIdleTimeMS", configure.mongoMaxIdleTimeMS())
+                .put("maxLifeTimeMS", configure.mongoMaxLifeTimeMS())
+                .put("waitQueueMultiple", configure.mongoWaitQueueMultiple())
+                .put("waitQueueTimeoutMS", configure.mongoWaitQueueTimeoutMS())
+                .put("serverSelectionTimeoutMS", configure.mongoServerSelectionTimeoutMS())
+                .put("keepAlive", true);
+        logger.info("initialize mongo with config: " + mongoConfig);
+        dataStoreFactory = new DataStoreFactory.Builder().setType(DataStoreFactory.SUPPORT_DATA_SOURCE_MONGO)
+                .setOptions(mongoConfig)
+                .setSourceName("MongoPool")
+                .build(vertx);
+      } else {
+        String hosts = configure.mysqlHosts();
+        String[] hostParts = hosts.split(":");
+        int port = 3306;
+        if (hostParts.length > 1) {
+          port = Integer.valueOf(hostParts[1]);
+        }
+        JsonObject mySQLClientConfig = new JsonObject()
+                .put("host", hostParts[0])
+                .put("port", port)
+                .put("username", configure.mysqlUsername())
+                .put("password", configure.mysqlPassword())
+                .put("database", configure.mysqlDatabase())
+                .put("charset", "utf-8")
+                .put("connectTimeout", configure.mysqlConnectTimeout())
+                .put("queryTimeout", configure.mysqlQueryTimeoutMS())
+                .put("connectionRetryDelay", configure.mysqlConnRetryDelay())
+                .put("maxPoolSize", configure.mysqlMaxPoolSize());
+        logger.info("initialize mysql with config: " + mySQLClientConfig);
+        dataStoreFactory = new DataStoreFactory.Builder().setType(DataStoreFactory.SUPPORT_DATA_SOURCE_MYSQL)
+                .setOptions(mySQLClientConfig)
+                .setSourceName("MysqlPool")
+                .build(vertx);
+      }
+      configure.setDataStoreFactory(dataStoreFactory);
+
       Future<String> httpVerticleDeployment = Future.future();
       vertx.deployVerticle(new RestServerVerticle(), httpVerticleDeployment);
       return httpVerticleDeployment;
-    }).compose(id1 -> {
-      // start database verticle.
-      logger.info("try to deploy "+ configure.mysqlVerticleCount() + " mysql verticles.");
-      Future<String> dbVerticleDeployment = Future.future();
-      vertx.deployVerticle(DatabaseVerticle.class,
-              new DeploymentOptions().setInstances(configure.mysqlVerticleCount()),
-              dbVerticleDeployment);
-      return dbVerticleDeployment;
     }).compose(id2 -> {
-      // start mongo verticle.
-      logger.info("try to deploy "+ configure.mysqlVerticleCount() + " mongodb verticles.");
-      Future<String> mongoVerticleDeployment = Future.future();
-      vertx.deployVerticle(MongoDBVerticle.class,
-              new DeploymentOptions().setInstances(configure.mongodbVerticleCount()),
-              mongoVerticleDeployment);
-      return mongoVerticleDeployment;
+      logger.info("try to deploy "+ configure.datastoreVerticleCount() + " dataStore verticles.");
+      Future<String> datastoreVerticleDeployment = Future.future();
+      vertx.deployVerticle(StorageVerticle.class,
+              new DeploymentOptions().setInstances(configure.datastoreVerticleCount()),
+              datastoreVerticleDeployment);
+      return datastoreVerticleDeployment;
     }).setHandler(arr -> {
       if (arr.succeeded()) {
         logger.info("main verticle start!");

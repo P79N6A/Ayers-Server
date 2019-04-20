@@ -1,4 +1,4 @@
-package cn.leancloud.platform.modules;
+package cn.leancloud.platform.auth;
 
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
