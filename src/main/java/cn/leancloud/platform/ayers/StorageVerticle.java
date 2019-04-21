@@ -12,6 +12,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static cn.leancloud.platform.common.JsonFactory.toJsonArray;
@@ -94,13 +97,6 @@ public class StorageVerticle extends CommonVerticle {
         }
         param.put(Constraints.CLASS_ATTR_UPDATED_TS, now);
 
-        try {
-          param = Transformer.encode2BsonRequest(param, isCreateOp? Transformer.REQUEST_OP.CREATE :Transformer.REQUEST_OP.UPDATE);
-        } catch (ClassCastException ex) {
-          reportUserError(message, 400, ex.getMessage());
-          return;
-        }
-
         if (isCreateOp) {
           logger.debug("doc=== " + param.toString());
           dataStore.insertWithOptions(clazz, param, null, res -> {
@@ -118,7 +114,8 @@ public class StorageVerticle extends CommonVerticle {
           JsonObject query = new JsonObject().put(Constraints.CLASS_ATTR_MONGO_ID, objectId);
           logger.debug("query= " + query.toString());
           // UpdateOptions option = new UpdateOptions().setUpsert(false);
-          JsonObject option = new JsonObject().put("upsert", false);
+          DataStore.UpdateOption option = new DataStore.UpdateOption();
+          option.setUpsert(false);;
           dataStore.updateWithOptions(clazz, query, param, option, res1 -> {
             dataStore.close();
             if (res1.failed()) {
@@ -162,36 +159,6 @@ public class StorageVerticle extends CommonVerticle {
         if (!StringUtils.isEmpty(objectId)) {
           condition.put(Constraints.CLASS_ATTR_MONGO_ID, objectId);
         }
-        try {
-          condition = Transformer.encode2BsonRequest(condition, Transformer.REQUEST_OP.QUERY);
-        } catch (ClassCastException ex) {
-          reportUserError(message, ErrorCodes.INVALID_PARAMETER.getCode(), ex.getMessage());
-          return;
-        }
-
-//        FindOptions options = new FindOptions();
-//        options.setLimit(limit);
-//        options.setSkip(skip);
-//        JsonObject sortJson = Transformer.parseSortParam(order);
-//        if (null != sortJson) {
-//          options.setSort(sortJson);
-//        }
-//        JsonObject fieldJson = Transformer.parseProjectParam(keys);
-//        if (null != fieldJson) {
-//          options.setFields(fieldJson);
-//        }
-
-        JsonObject options = new JsonObject();
-        options.put("limit", limit);
-        options.put("skip", skip);
-        JsonObject sortJson = Transformer.parseSortParam(order);
-        if (null != sortJson) {
-          options.put("sort", sortJson);
-        }
-        JsonObject fieldJson = Transformer.parseProjectParam(keys);
-        if (null != fieldJson) {
-          options.put("fields", fieldJson);
-        }
 
         if (COUNT_FLAG == count) {
           logger.debug("count clazz=" + clazz + ", condition=" + condition.toString());
@@ -204,8 +171,23 @@ public class StorageVerticle extends CommonVerticle {
             }
           });
         } else {
+          DataStore.QueryOption options = new DataStore.QueryOption();
+          options.setLimit(limit);
+          options.setSkip(skip);
+          JsonObject sortJson = Transformer.parseSortParam(order);
+          if (null != sortJson) {
+            options.setSort(sortJson);
+          }
+          JsonObject fieldJson = Transformer.parseProjectParam(keys);
+          if (null != fieldJson) {
+            options.setFields(fieldJson);
+          }
+          if (!StringUtils.isEmpty(include)) {
+            List<String> includeArray = Arrays.asList(include.split(",")).stream().filter(StringUtils::notEmpty)
+                    .collect(Collectors.toList());
+            options.setIncludes(includeArray);
+          }
           logger.debug("find clazz=" + clazz + ", condition=" + condition.toString() + ", options=" + options);
-
           dataStore.findWithOptions(clazz, condition, options, res->{
             dataStore.close();
             if (res.failed()) {

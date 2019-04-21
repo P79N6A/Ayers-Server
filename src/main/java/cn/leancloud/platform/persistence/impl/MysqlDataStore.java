@@ -23,15 +23,19 @@ public class MysqlDataStore implements DataStore {
   public DataStore findOne(String clazz, JsonObject query, JsonObject fields, Handler<AsyncResult<JsonObject>> resultHandler) {
     return this;
   }
-  public DataStore updateWithOptions(String clazz, JsonObject query, JsonObject fields, JsonObject options,
+  public DataStore updateWithOptions(String clazz, JsonObject query, JsonObject object, UpdateOption options,
                                      Handler<AsyncResult<Long>> resultHandler) {
     return this;
   }
-  public DataStore findWithOptions(String collection, JsonObject query, JsonObject findOptions,
+  public DataStore findWithOptions(String collection, JsonObject query, QueryOption findOptions,
                                    Handler<AsyncResult<List<JsonObject>>> resultHandler) {
     return this;
   }
   public DataStore findOneAndUpdate(String clazz, JsonObject query, JsonObject update, Handler<AsyncResult<JsonObject>> resultHandler) {
+    return this;
+  }
+  public DataStore findOneAndUpdateWithOptions(String clazz, JsonObject query, JsonObject update, QueryOption queryOption,
+                                        UpdateOption updateOption, Handler<AsyncResult<JsonObject>> resultHandler) {
     return this;
   }
   public DataStore removeWithOptions(String clazz, JsonObject query, JsonObject options, Handler<AsyncResult<Long>> resultHandler) {
@@ -45,18 +49,18 @@ public class MysqlDataStore implements DataStore {
     return this;
   }
 
-  public DataStore dropClass(String clazz, Handler<AsyncResult<JsonObject>> resultHandler) {
+  public DataStore dropClass(String clazz, Handler<AsyncResult<Void>> resultHandler) {
     return this;
   }
-  public DataStore createClass(String clazz, Handler<AsyncResult<JsonObject>> resultHandler) {
+  public DataStore createClass(String clazz, Handler<AsyncResult<Void>> resultHandler) {
     return this;
   }
 
   public DataStore dropIndex(String clazz, String indexName, Handler<AsyncResult<Void>> resultHandler) {
     return this;
   }
-  public DataStore createIndexWithOptions(String clazz, String indexName, JsonObject index, JsonObject options,
-                                          Handler<AsyncResult<JsonObject>> resultHandler) {
+  public DataStore createIndexWithOptions(String clazz, JsonObject keys, IndexOption options,
+                                          Handler<AsyncResult<Void>> resultHandler) {
     return this;
   }
   public DataStore listIndexes(String clazz, Handler<AsyncResult<JsonArray>> resultHandler) {
@@ -67,6 +71,9 @@ public class MysqlDataStore implements DataStore {
     return this;
   }
   public DataStore upsertSchema(String clazz, Schema schema, Handler<AsyncResult<JsonObject>> resultHandler) {
+    return this;
+  }
+  public DataStore listSchemas(Handler<AsyncResult<JsonArray>> resultHandler) {
     return this;
   }
   public void close() {
