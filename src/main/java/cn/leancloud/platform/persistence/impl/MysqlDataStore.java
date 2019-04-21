@@ -27,6 +27,9 @@ public class MysqlDataStore implements DataStore {
                                      Handler<AsyncResult<Long>> resultHandler) {
     return this;
   }
+  public DataStore find(String clazz, JsonObject query, Handler<AsyncResult<List<JsonObject>>> resultHandler) {
+    return this;
+  }
   public DataStore findWithOptions(String collection, JsonObject query, QueryOption findOptions,
                                    Handler<AsyncResult<List<JsonObject>>> resultHandler) {
     return this;
@@ -36,6 +39,9 @@ public class MysqlDataStore implements DataStore {
   }
   public DataStore findOneAndUpdateWithOptions(String clazz, JsonObject query, JsonObject update, QueryOption queryOption,
                                         UpdateOption updateOption, Handler<AsyncResult<JsonObject>> resultHandler) {
+    return this;
+  }
+  public DataStore remove(String clazz, JsonObject query, Handler<AsyncResult<Long>> resultHandler) {
     return this;
   }
   public DataStore removeWithOptions(String clazz, JsonObject query, JsonObject options, Handler<AsyncResult<Long>> resultHandler) {

@@ -53,11 +53,9 @@ public class MongoDBDataStore implements DataStore{
     if (StringUtils.isEmpty(clazz) || null == obj || obj.size() < 1) {
       resultHandler.handle(new InvalidParameterResult("class or object is required."));
     } else {
-      WriteOption writeOption = WriteOption.ACKNOWLEDGED;
-
       JsonObject encodedObject = Transformer.encode2BsonRequest(obj, Transformer.REQUEST_OP.CREATE);
 
-      this.mongoClient.insertWithOptions(clazz, encodedObject, writeOption, res -> {
+      this.mongoClient.insertWithOptions(clazz, encodedObject, WriteOption.ACKNOWLEDGED, res -> {
         if (null != resultHandler) {
           resultHandler.handle(new AsyncResult<JsonObject>() {
             @Override
@@ -144,6 +142,16 @@ public class MongoDBDataStore implements DataStore{
     return this;
   }
 
+  public DataStore find(String clazz, JsonObject query, Handler<AsyncResult<List<JsonObject>>> resultHandler) {
+    if (StringUtils.isEmpty(clazz) || null == query) {
+      resultHandler.handle(new InvalidParameterResult("class or query is required."));
+    } else {
+      JsonObject condition = Transformer.encode2BsonRequest(query, Transformer.REQUEST_OP.QUERY);
+      this.mongoClient.find(clazz, condition, resultHandler);
+    }
+    return this;
+  }
+
   public DataStore findWithOptions(String clazz, JsonObject query, QueryOption findOptions,
                                    Handler<AsyncResult<List<JsonObject>>> resultHandler) {
     if (StringUtils.isEmpty(clazz) || null == query) {
@@ -213,6 +221,43 @@ public class MongoDBDataStore implements DataStore{
       }
 
       this.mongoClient.findOneAndUpdateWithOptions(clazz, condition, updateObject, findOptions, updateOptions, resultHandler);
+    }
+    return this;
+  }
+
+  public DataStore remove(String clazz, JsonObject query, Handler<AsyncResult<Long>> resultHandler) {
+    if (StringUtils.isEmpty(clazz) || null == query) {
+      resultHandler.handle(new InvalidParameterResult("class or query is required."));
+    } else {
+      JsonObject condition = Transformer.encode2BsonRequest(query, Transformer.REQUEST_OP.QUERY);
+      this.mongoClient.removeDocuments(clazz, condition, res -> {
+        if (null != resultHandler) {
+          resultHandler.handle(new AsyncResult<Long>() {
+            @Override
+            public Long result() {
+              if (null != res.result()) {
+                return res.result().getRemovedCount();
+              }
+              return 0l;
+            }
+
+            @Override
+            public Throwable cause() {
+              return res.cause();
+            }
+
+            @Override
+            public boolean succeeded() {
+              return res.succeeded();
+            }
+
+            @Override
+            public boolean failed() {
+              return res.failed();
+            }
+          });
+        }
+      });
     }
     return this;
   }

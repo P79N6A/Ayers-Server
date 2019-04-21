@@ -145,10 +145,12 @@ public interface DataStore {
   DataStore findOne(String clazz, JsonObject query, JsonObject fields, Handler<AsyncResult<JsonObject>> resultHandler);
   DataStore updateWithOptions(String clazz, JsonObject query, JsonObject object, UpdateOption options,
                               Handler<AsyncResult<Long>> resultHandler);
+  DataStore find(String clazz, JsonObject query, Handler<AsyncResult<List<JsonObject>>> resultHandler);
   DataStore findWithOptions(String clazz, JsonObject query, QueryOption findOptions, Handler<AsyncResult<List<JsonObject>>> resultHandler);
   DataStore findOneAndUpdate(String clazz, JsonObject query, JsonObject update, Handler<AsyncResult<JsonObject>> resultHandler);
   DataStore findOneAndUpdateWithOptions(String clazz, JsonObject query, JsonObject update, QueryOption queryOption,
                                         UpdateOption updateOption, Handler<AsyncResult<JsonObject>> resultHandler);
+  DataStore remove(String clazz, JsonObject query, Handler<AsyncResult<Long>> resultHandler);
   DataStore removeWithOptions(String clazz, JsonObject query, JsonObject options, Handler<AsyncResult<Long>> resultHandler);
   DataStore count(String clazz, JsonObject query, Handler<AsyncResult<Long>> resultHandler);
 
