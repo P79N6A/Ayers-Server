@@ -1,7 +1,6 @@
 package cn.leancloud.platform.mongo;
 
-import cn.leancloud.platform.ayers.CommonVerticle;
-import cn.leancloud.platform.common.Transformer;
+import cn.leancloud.platform.common.BsonTransformer;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.mongo.MongoClient;
@@ -22,7 +21,7 @@ public class QuickTour {
     client.insert(collectionName, new JsonObject().put("$set", doc), res -> {
       System.out.println("insert: " + res.result());
       JsonObject tmp = new JsonObject("{\"city\": {\"__op\":\"AddRelation\", \"objects\":[\"beijing\",\"shanghai\"]}, \"$set\":{\"count\": 10}}");
-      JsonObject updated = Transformer.encode2BsonRequest(tmp, Transformer.REQUEST_OP.UPDATE);
+      JsonObject updated = BsonTransformer.encode2BsonRequest(tmp, BsonTransformer.REQUEST_OP.UPDATE);
       System.out.println(updated.toString());
       //new JsonObject().put("$push", new JsonObject().put("city", new JsonObject().put("$each", Arrays.asList("beijing", "shanghai"))));
       client.updateCollection(collectionName, new JsonObject().put("_id", res.result()), updated, res1 -> {

@@ -3,6 +3,10 @@ package cn.leancloud.platform.ayers;
 import cn.leancloud.platform.ayers.handler.UserHandler;
 import cn.leancloud.platform.cache.SimpleRedisClient;
 import cn.leancloud.platform.common.*;
+import cn.leancloud.platform.modules.LeanObject;
+import cn.leancloud.platform.modules.ObjectSpecifics;
+import cn.leancloud.platform.utils.MimeUtils;
+import cn.leancloud.platform.utils.StringUtils;
 import com.qiniu.util.Auth;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.CompositeFuture;
@@ -40,6 +44,8 @@ import java.util.stream.Collectors;
  */
 public class RestServerVerticle extends CommonVerticle {
   private static final Logger logger = LoggerFactory.getLogger(RestServerVerticle.class);
+  public static final String PARAM_FILE_UPLOAD_URL = "upload_url";
+  public static final String PARAM_FILE_TOKEN = "token";
 
   private SimpleRedisClient redisClient = new SimpleRedisClient();
   private HttpServer httpServer;
@@ -72,8 +78,8 @@ public class RestServerVerticle extends CommonVerticle {
       badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PASSWORD.getCode()).put("error", "session_token is required."));
     } else {
       JsonObject body = commonResult.getObject();
-      sendDataOperationEx(context, Constraints.USER_CLASS, null, Constraints.OP_OBJECT_UPSERT, body,
-              jsonObject -> jsonObject.put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, body.getString(Constraints.BUILTIN_ATTR_SESSION_TOKEN)));
+      sendDataOperationEx(context, Constraints.USER_CLASS, null, OP_OBJECT_UPSERT, body,
+              jsonObject -> jsonObject.put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, body.getString(LeanObject.BUILTIN_ATTR_SESSION_TOKEN)));
     }
   }
 
@@ -83,9 +89,9 @@ public class RestServerVerticle extends CommonVerticle {
     if (StringUtils.isEmpty(sessionToken)) {
       badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PASSWORD.getCode()).put("error", "session_token is required."));
     } else {
-      JsonObject findCondition = new JsonObject().put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, sessionToken);
-      sendDataOperationWithHandler(context, Constraints.USER_CLASS, objectId, Constraints.OP_OBJECT_QUERY,
-              new JsonObject().put(Constraints.QUERY_KEY_WHERE, findCondition.toString()),
+      JsonObject findCondition = new JsonObject().put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, sessionToken);
+      sendDataOperationWithHandler(context, Constraints.USER_CLASS, objectId, OP_OBJECT_QUERY,
+              new JsonObject().put(QUERY_KEY_WHERE, findCondition.toString()),
               res -> {
         if (res.failed()) {
           internalServerError(context, ErrorCodes.DATABASE_ERROR.toJson());
@@ -93,16 +99,16 @@ public class RestServerVerticle extends CommonVerticle {
           notFound(context, ErrorCodes.USER_NOT_FOUND.toJson());
         } else {
           JsonObject resultJson = (JsonObject) res.result().body();
-          String userId = resultJson.getString(Constraints.CLASS_ATTR_OBJECT_ID);
+          String userId = resultJson.getString(LeanObject.ATTR_NAME_OBJECTID);
           String newSessionToken = StringUtils.getRandomString(Constraints.SESSION_TOKEN_LENGTH);
           if (!objectId.equals(userId)) {
             notFound(context, ErrorCodes.USER_NOT_FOUND.toJson());
           } else {
-            JsonObject newUser = new JsonObject().put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, newSessionToken);
-            sendDataOperationEx(context, Constraints.USER_CLASS, objectId, Constraints.OP_OBJECT_UPSERT, newUser,
+            JsonObject newUser = new JsonObject().put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, newSessionToken);
+            sendDataOperationEx(context, Constraints.USER_CLASS, objectId, OP_OBJECT_UPSERT, newUser,
                     response -> {
               if (null != response) {
-                response.put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, newSessionToken);
+                response.put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, newSessionToken);
               }
             });
           }
@@ -146,25 +152,25 @@ public class RestServerVerticle extends CommonVerticle {
     Auth auth = Auth.create(configure.fileProviderAccessKey(), configure.fileProviderSecretKey());
     final String token = auth.uploadToken(bucketName, fileKey);
     body.remove("__type");
-    body.put(Constraints.BUILTIN_ATTR_FILE_URL, configure.fileDefaultHost() + fileKey)
-            .put(Constraints.BUILTIN_ATTR_FILE_MIMETYPE, mimeType)
-            .put(Constraints.BUILTIN_ATTR_FILE_PROVIDER,configure.fileProvideName())
-            .put(Constraints.BUILTIN_ATTR_FILE_BUCKET, bucketName);
+    body.put(LeanObject.BUILTIN_ATTR_FILE_URL, configure.fileDefaultHost() + fileKey)
+            .put(LeanObject.BUILTIN_ATTR_FILE_MIMETYPE, mimeType)
+            .put(LeanObject.BUILTIN_ATTR_FILE_PROVIDER,configure.fileProvideName())
+            .put(LeanObject.BUILTIN_ATTR_FILE_BUCKET, bucketName);
 
     HttpMethod httpMethod = context.request().method();
     String operation = "";
     if (HttpMethod.GET.equals(httpMethod)) {
-      operation = Constraints.OP_OBJECT_QUERY;
+      operation = OP_OBJECT_QUERY;
     } else if (HttpMethod.DELETE.equals(httpMethod)) {
-      operation = Constraints.OP_OBJECT_DELETE;
+      operation = OP_OBJECT_DELETE;
     } else if (HttpMethod.POST.equals(httpMethod) || HttpMethod.PUT.equals(httpMethod)) {
-      operation = Constraints.OP_OBJECT_UPSERT;
+      operation = OP_OBJECT_UPSERT;
     }
 
     sendDataOperationEx(context, Constraints.FILE_CLASS, null, operation, body, file -> {
       file.mergeIn(body);
-      file.put(Constraints.PARAM_FILE_TOKEN, token);
-      file.put(Constraints.PARAM_FILE_UPLOAD_URL, configure.fileUploadHost());
+      file.put(PARAM_FILE_TOKEN, token);
+      file.put(PARAM_FILE_UPLOAD_URL, configure.fileUploadHost());
       // TODO: add appId/objectId/token to cache.
     });
   }
@@ -211,8 +217,8 @@ public class RestServerVerticle extends CommonVerticle {
       badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("message", commonResult.getMessage()));
     } else {
       JsonObject body = commonResult.getObject();
-      sendDataOperationEx(context, Constraints.USER_CLASS, null, Constraints.OP_OBJECT_UPSERT, body,
-              jsonObject -> jsonObject.put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, body.getString(Constraints.BUILTIN_ATTR_SESSION_TOKEN)));
+      sendDataOperationEx(context, Constraints.USER_CLASS, null, OP_OBJECT_UPSERT, body,
+              jsonObject -> jsonObject.put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, body.getString(LeanObject.BUILTIN_ATTR_SESSION_TOKEN)));
     }
   }
 
@@ -222,7 +228,7 @@ public class RestServerVerticle extends CommonVerticle {
       badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("message", commonResult.getMessage()));
     } else {
       JsonObject body = commonResult.getObject();
-      sendDataOperation(context, Constraints.USER_CLASS, null, Constraints.OP_USER_SIGNIN, body);
+      sendDataOperation(context, Constraints.USER_CLASS, null, OP_USER_SIGNIN, body);
     }
   }
 
@@ -233,11 +239,11 @@ public class RestServerVerticle extends CommonVerticle {
     String fetchWhenSave = context.request().getParam("fetchWhenSave");
     String operation = "";
     if (HttpMethod.GET.equals(httpMethod)) {
-      operation = Constraints.OP_OBJECT_QUERY;
+      operation = OP_OBJECT_QUERY;
     } else if (HttpMethod.DELETE.equals(httpMethod)) {
-      operation = Constraints.OP_OBJECT_DELETE;
+      operation = OP_OBJECT_DELETE;
     } else if (HttpMethod.POST.equals(httpMethod) || HttpMethod.PUT.equals(httpMethod)) {
-      operation = Constraints.OP_OBJECT_UPSERT;
+      operation = OP_OBJECT_UPSERT;
     }
 
     logger.debug("curl object. clazz=" + clazz + ", objectId=" + objectId + ", method=" + httpMethod
@@ -290,21 +296,21 @@ public class RestServerVerticle extends CommonVerticle {
         String method = batchRequest.getMethod();
         JsonObject request = new JsonObject();
         if (!StringUtils.isEmpty(batchRequest.getClazz())) {
-          request.put(Constraints.INTERNAL_MSG_ATTR_CLASS, batchRequest.getClazz());
+          request.put(INTERNAL_MSG_ATTR_CLASS, batchRequest.getClazz());
         }
         if (!StringUtils.isEmpty(batchRequest.getObjectId())) {
-          request.put(Constraints.INTERNAL_MSG_ATTR_OBJECT_ID, batchRequest.getObjectId());
+          request.put(INTERNAL_MSG_ATTR_OBJECT_ID, batchRequest.getObjectId());
         }
         if (null != batchRequest.getBody()) {
-          request.put(Constraints.INTERNAL_MSG_ATTR_PARAM, batchRequest.getBody());
+          request.put(INTERNAL_MSG_ATTR_PARAM, batchRequest.getBody());
         }
-        String operation = Constraints.OP_OBJECT_QUERY;
+        String operation = OP_OBJECT_QUERY;
         if ("delete".equalsIgnoreCase(method)) {
-          operation = Constraints.OP_OBJECT_DELETE;
+          operation = OP_OBJECT_DELETE;
         } else if ("post".equalsIgnoreCase(method) || "put".equalsIgnoreCase(method)) {
-          operation = Constraints.OP_OBJECT_UPSERT;
+          operation = OP_OBJECT_UPSERT;
         }
-        DeliveryOptions options = new DeliveryOptions().addHeader(Constraints.INTERNAL_MSG_HEADER_OP, operation);
+        DeliveryOptions options = new DeliveryOptions().addHeader(INTERNAL_MSG_HEADER_OP, operation);
         vertx.eventBus().send(Configure.MAILADDRESS_DATASTORE_QUEUE, request, options, res -> {
           if (res.failed()) {
             tmp.complete(new JsonObject().put("error", new JsonObject().put("code", ErrorCodes.DATABASE_ERROR.getCode()).put("error", res.cause().getMessage())));
@@ -334,17 +340,17 @@ public class RestServerVerticle extends CommonVerticle {
   private void sendDataOperationWithOption(RoutingContext context, String clazz, String objectId, String operation,
                                            JsonObject param, boolean fetchWhenSave, final Handler<JsonObject> handler) {
     JsonObject request = new JsonObject();
-    request.put(Constraints.INTERNAL_MSG_ATTR_FETCHWHENSAVE, fetchWhenSave);
+    request.put(INTERNAL_MSG_ATTR_FETCHWHENSAVE, fetchWhenSave);
     if (!StringUtils.isEmpty(clazz)) {
-      request.put(Constraints.INTERNAL_MSG_ATTR_CLASS, clazz);
+      request.put(INTERNAL_MSG_ATTR_CLASS, clazz);
     }
     if (!StringUtils.isEmpty(objectId)) {
-      request.put(Constraints.INTERNAL_MSG_ATTR_OBJECT_ID, objectId);
+      request.put(INTERNAL_MSG_ATTR_OBJECT_ID, objectId);
     }
     if (null != param) {
-      request.put(Constraints.INTERNAL_MSG_ATTR_PARAM, param);
+      request.put(INTERNAL_MSG_ATTR_PARAM, param);
     }
-    DeliveryOptions options = new DeliveryOptions().addHeader(Constraints.INTERNAL_MSG_HEADER_OP, operation);
+    DeliveryOptions options = new DeliveryOptions().addHeader(INTERNAL_MSG_HEADER_OP, operation);
     vertx.eventBus().send(Configure.MAILADDRESS_DATASTORE_QUEUE, request, options, reply -> {
       if (reply.failed()) {
         if (reply.cause() instanceof ReplyException) {
@@ -364,11 +370,11 @@ public class RestServerVerticle extends CommonVerticle {
           handler.handle(result);
         }
         logger.debug("rest server response: " + result);
-        if (Constraints.OP_OBJECT_UPSERT.equalsIgnoreCase(operation) && StringUtils.isEmpty(objectId)) {
+        if (OP_OBJECT_UPSERT.equalsIgnoreCase(operation) && StringUtils.isEmpty(objectId)) {
           //Status: 201 Created
           //Location: https://heqfq0sw.api.lncld.net/1.1/classes/Post/<objectId>
           JsonObject location = new JsonObject().put("Location", Configure.getInstance().getBaseHost() + "/"
-                  + context.request().path() + result.getString(Constraints.CLASS_ATTR_OBJECT_ID));
+                  + context.request().path() + result.getString(LeanObject.ATTR_NAME_OBJECTID));
           created(context, location, result);
         } else {
           ok(context, result);
@@ -386,15 +392,15 @@ public class RestServerVerticle extends CommonVerticle {
                                                 JsonObject param, Handler<AsyncResult<Message<T>>> replyHandler) {
     JsonObject request = new JsonObject();
     if (!StringUtils.isEmpty(clazz)) {
-      request.put(Constraints.INTERNAL_MSG_ATTR_CLASS, clazz);
+      request.put(INTERNAL_MSG_ATTR_CLASS, clazz);
     }
     if (!StringUtils.isEmpty(objectId)) {
-      request.put(Constraints.INTERNAL_MSG_ATTR_OBJECT_ID, objectId);
+      request.put(INTERNAL_MSG_ATTR_OBJECT_ID, objectId);
     }
     if (null != param) {
-      request.put(Constraints.INTERNAL_MSG_ATTR_PARAM, param);
+      request.put(INTERNAL_MSG_ATTR_PARAM, param);
     }
-    DeliveryOptions options = new DeliveryOptions().addHeader(Constraints.INTERNAL_MSG_HEADER_OP, operation);
+    DeliveryOptions options = new DeliveryOptions().addHeader(INTERNAL_MSG_HEADER_OP, operation);
     vertx.eventBus().send(Configure.MAILADDRESS_DATASTORE_QUEUE, request, options, replyHandler);
   }
 
@@ -420,7 +426,7 @@ public class RestServerVerticle extends CommonVerticle {
             .setTcpQuickAck(true)
             .setReusePort(true));
 
-    ApplicationAuthenticator appKeyValidator = new ApplicationAuthenticator("testkey");
+    ApplicationAuthenticator appKeyValidator = new ApplicationAuthenticator();
     HTTPRequestValidationHandler appKeyValidationHandler = HTTPRequestValidationHandler.create().addCustomValidatorFunction(appKeyValidator);
     HTTPRequestValidationHandler sessionValidationHandler = HTTPRequestValidationHandler.create().addCustomValidatorFunction(new SessionValidator());
 

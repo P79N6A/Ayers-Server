@@ -1,8 +1,7 @@
 package cn.leancloud.platform.persistence.impl;
 
-import cn.leancloud.platform.common.Constraints;
-import cn.leancloud.platform.common.StringUtils;
-import cn.leancloud.platform.common.Transformer;
+import cn.leancloud.platform.utils.StringUtils;
+import cn.leancloud.platform.common.BsonTransformer;
 import cn.leancloud.platform.modules.LeanObject;
 import cn.leancloud.platform.modules.Schema;
 import cn.leancloud.platform.persistence.DataStore;
@@ -52,21 +51,21 @@ public class MongoDBDataStore implements DataStore {
     this.mongoClient = client;
   }
 
-  public DataStore insertWithOptions(String clazz, JsonObject obj, JsonObject options,
+  public DataStore insertWithOptions(String clazz, JsonObject obj, InsertOption options,
                                      Handler<AsyncResult<JsonObject>> resultHandler) {
     if (StringUtils.isEmpty(clazz) || null == obj || obj.size() < 1) {
       resultHandler.handle(new InvalidParameterResult("class or object is required."));
     } else {
-      JsonObject encodedObject = Transformer.encode2BsonRequest(obj, Transformer.REQUEST_OP.CREATE);
-      final boolean fetchWhenSave = (null != options)? options.getBoolean(Constraints.INTERNAL_MSG_ATTR_FETCHWHENSAVE, false) : false;
+      JsonObject encodedObject = BsonTransformer.encode2BsonRequest(obj, BsonTransformer.REQUEST_OP.CREATE);
+      final boolean returnNewDoc = (null != options)? options.isReturnNewDocument() : false;
 
       this.mongoClient.insertWithOptions(clazz, encodedObject, WriteOption.ACKNOWLEDGED, event -> {
         if (null != resultHandler) {
           resultHandler.handle(event.map(objectId -> {
-            if (fetchWhenSave) {
-              return Transformer.decodeBsonObject(new JsonObject().mergeIn(encodedObject));
+            if (returnNewDoc) {
+              return BsonTransformer.decodeBsonObject(new JsonObject().mergeIn(encodedObject));
             } else {
-              return new JsonObject().put(Constraints.CLASS_ATTR_OBJECT_ID, objectId);
+              return new JsonObject().put(LeanObject.ATTR_NAME_OBJECTID, objectId);
             }
           }));
         }
@@ -79,21 +78,21 @@ public class MongoDBDataStore implements DataStore {
     if (null == rawHandler) {
       return null;
     }
-    return event -> rawHandler.handle(event.map(obj -> Transformer.decodeBsonObject(obj)));
+    return event -> rawHandler.handle(event.map(obj -> BsonTransformer.decodeBsonObject(obj)));
   }
 
   private static Handler<AsyncResult<List<JsonObject>>> wrapResultListHandler(Handler<AsyncResult<List<JsonObject>>> rawHandler) {
     if (null == rawHandler) {
       return null;
     }
-    return event -> rawHandler.handle(event.map(obj -> obj.stream().map(Transformer::decodeBsonObject).collect(Collectors.toList())));
+    return event -> rawHandler.handle(event.map(obj -> obj.stream().map(BsonTransformer::decodeBsonObject).collect(Collectors.toList())));
   }
 
   public DataStore findOne(String clazz, JsonObject query, JsonObject fields, Handler<AsyncResult<JsonObject>> resultHandler) {
     if (StringUtils.isEmpty(clazz) || null == query) {
       resultHandler.handle(new InvalidParameterResult("class or query is required."));
     } else {
-      JsonObject condition = Transformer.encode2BsonRequest(query, Transformer.REQUEST_OP.QUERY);
+      JsonObject condition = BsonTransformer.encode2BsonRequest(query, BsonTransformer.REQUEST_OP.QUERY);
       this.mongoClient.findOne(clazz, condition, fields, wrapResultHandler(resultHandler));
     }
     return this;
@@ -104,8 +103,8 @@ public class MongoDBDataStore implements DataStore {
     if (StringUtils.isEmpty(clazz) || null == query || null == object) {
       resultHandler.handle(new InvalidParameterResult("class or query or object is required."));
     } else {
-      JsonObject encodedObject = Transformer.encode2BsonRequest(object, Transformer.REQUEST_OP.UPDATE);
-      JsonObject condition = Transformer.encode2BsonRequest(query, Transformer.REQUEST_OP.QUERY);
+      JsonObject encodedObject = BsonTransformer.encode2BsonRequest(object, BsonTransformer.REQUEST_OP.UPDATE);
+      JsonObject condition = BsonTransformer.encode2BsonRequest(query, BsonTransformer.REQUEST_OP.QUERY);
 
       UpdateOptions mongoOptions = null;
       if (null != options) {
@@ -127,7 +126,7 @@ public class MongoDBDataStore implements DataStore {
     if (StringUtils.isEmpty(clazz) || null == query) {
       resultHandler.handle(new InvalidParameterResult("class or query is required."));
     } else {
-      JsonObject condition = Transformer.encode2BsonRequest(query, Transformer.REQUEST_OP.QUERY);
+      JsonObject condition = BsonTransformer.encode2BsonRequest(query, BsonTransformer.REQUEST_OP.QUERY);
       this.mongoClient.find(clazz, condition, wrapResultListHandler(resultHandler));
     }
     return this;
@@ -138,7 +137,7 @@ public class MongoDBDataStore implements DataStore {
     if (StringUtils.isEmpty(clazz) || null == query) {
       resultHandler.handle(new InvalidParameterResult("class or query is required."));
     } else {
-      JsonObject condition = Transformer.encode2BsonRequest(query, Transformer.REQUEST_OP.QUERY);
+      JsonObject condition = BsonTransformer.encode2BsonRequest(query, BsonTransformer.REQUEST_OP.QUERY);
 
       FindOptions options = null;
       if (null != findOptions) {
@@ -163,8 +162,8 @@ public class MongoDBDataStore implements DataStore {
     if (StringUtils.isEmpty(clazz) || null == query || null == update) {
       resultHandler.handle(new InvalidParameterResult("class or query or update is required."));
     } else {
-      JsonObject condition = Transformer.encode2BsonRequest(query, Transformer.REQUEST_OP.QUERY);
-      JsonObject updateObject = Transformer.encode2BsonRequest(update, Transformer.REQUEST_OP.UPDATE);
+      JsonObject condition = BsonTransformer.encode2BsonRequest(query, BsonTransformer.REQUEST_OP.QUERY);
+      JsonObject updateObject = BsonTransformer.encode2BsonRequest(update, BsonTransformer.REQUEST_OP.UPDATE);
 
       this.mongoClient.findOneAndUpdate(clazz, condition, updateObject, wrapResultHandler(resultHandler));
     }
@@ -177,8 +176,8 @@ public class MongoDBDataStore implements DataStore {
       resultHandler.handle(new InvalidParameterResult("class or query or update is required."));
     } else {
 
-      JsonObject condition = Transformer.encode2BsonRequest(query, Transformer.REQUEST_OP.QUERY);
-      JsonObject updateObject = Transformer.encode2BsonRequest(update, Transformer.REQUEST_OP.UPDATE);
+      JsonObject condition = BsonTransformer.encode2BsonRequest(query, BsonTransformer.REQUEST_OP.QUERY);
+      JsonObject updateObject = BsonTransformer.encode2BsonRequest(update, BsonTransformer.REQUEST_OP.UPDATE);
 
       FindOptions findOptions = null;
       if (null != queryOption) {
@@ -211,7 +210,7 @@ public class MongoDBDataStore implements DataStore {
     if (StringUtils.isEmpty(clazz) || null == query) {
       resultHandler.handle(new InvalidParameterResult("class or query is required."));
     } else {
-      JsonObject condition = Transformer.encode2BsonRequest(query, Transformer.REQUEST_OP.QUERY);
+      JsonObject condition = BsonTransformer.encode2BsonRequest(query, BsonTransformer.REQUEST_OP.QUERY);
       this.mongoClient.removeDocuments(clazz, condition, event -> {
         if (null != resultHandler) {
           resultHandler.handle(event.map(MongoClientDeleteResult::getRemovedCount));
@@ -225,7 +224,7 @@ public class MongoDBDataStore implements DataStore {
     if (StringUtils.isEmpty(clazz) || null == query) {
       resultHandler.handle(new InvalidParameterResult("class or query is required."));
     } else {
-      JsonObject condition = Transformer.encode2BsonRequest(query, Transformer.REQUEST_OP.QUERY);
+      JsonObject condition = BsonTransformer.encode2BsonRequest(query, BsonTransformer.REQUEST_OP.QUERY);
 
       this.mongoClient.removeDocumentsWithOptions(clazz, condition, null, res -> {
         if (null != resultHandler) {
@@ -239,7 +238,7 @@ public class MongoDBDataStore implements DataStore {
     if (StringUtils.isEmpty(clazz) || null == query) {
       resultHandler.handle(new InvalidParameterResult("class or query is required."));
     } else {
-      JsonObject condition = Transformer.encode2BsonRequest(query, Transformer.REQUEST_OP.QUERY);
+      JsonObject condition = BsonTransformer.encode2BsonRequest(query, BsonTransformer.REQUEST_OP.QUERY);
 
       this.mongoClient.count(clazz, condition, resultHandler);
     }

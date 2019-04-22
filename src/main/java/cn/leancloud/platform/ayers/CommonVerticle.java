@@ -1,7 +1,6 @@
 package cn.leancloud.platform.ayers;
 
-import cn.leancloud.platform.common.StringUtils;
-import cn.leancloud.platform.modules.ACL;
+import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.AbstractVerticle;
 
 import io.vertx.core.http.HttpMethod;
@@ -9,7 +8,6 @@ import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
-import io.vertx.ext.web.api.validation.HTTPRequestValidationHandler;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,10 +18,30 @@ import java.util.stream.Collectors;
 
 public class CommonVerticle extends AbstractVerticle {
   private static final Logger logger = LoggerFactory.getLogger(CommonVerticle.class);
+
   protected static final String HEADER_CONTENT_TYPE = "Content-Type";
   protected static final String CONTENT_TYPE_JSON = "application/json; charset=utf-8";
   protected static final String REQUEST_PARAM_OBJECTID = "objectId";
   protected static final String REQUEST_PARAM_CLAZZ = "clazz";
+
+  protected static final String QUERY_KEY_COUNT = "count";
+  protected static final String QUERY_KEY_WHERE = "where";
+  protected static final String QUERY_KEY_LIMIT = "limit";
+  protected static final String QUERY_KEY_SKIP = "skip";
+  protected static final String QUERY_KEY_ORDER = "order";
+  protected static final String QUERY_KEY_INCLUDE = "include";
+  protected static final String QUERY_KEY_KEYS = "keys";
+
+  protected static final String INTERNAL_MSG_ATTR_CLASS = "class";
+  protected static final String INTERNAL_MSG_ATTR_OBJECT_ID = "objectId";
+  protected static final String INTERNAL_MSG_ATTR_PARAM = "param";
+  protected static final String INTERNAL_MSG_HEADER_OP = "operation";
+  protected static final String INTERNAL_MSG_ATTR_FETCHWHENSAVE = "fetchWhenSave";
+
+  protected static final String OP_OBJECT_UPSERT = "upsert";
+  protected static final String OP_OBJECT_DELETE = "delete";
+  protected static final String OP_OBJECT_QUERY = "query";
+  protected static final String OP_USER_SIGNIN = "login";
 
   protected Supplier<JsonObject> dummyJsonGenerator = new Supplier<JsonObject>() {
     @Override

@@ -4,6 +4,9 @@ import cn.leancloud.platform.codec.Base64;
 import cn.leancloud.platform.codec.MessageDigest;
 import cn.leancloud.platform.common.*;
 import cn.leancloud.platform.modules.ACL;
+import cn.leancloud.platform.modules.LeanObject;
+import cn.leancloud.platform.modules.ObjectSpecifics;
+import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.json.JsonObject;
 
 public class UserHandler {
@@ -67,7 +70,7 @@ public class UserHandler {
         data.put(PARAM_EMAIL, email);
         data.put(PARAM_PASSWORD, password);
       } else {
-        data.put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, sessionToken);
+        data.put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, sessionToken);
       }
     }
     return result;
@@ -106,15 +109,15 @@ public class UserHandler {
           String salt = StringUtils.getRandomString(Constraints.SALT_LENGTH);
           String hashPassword = hashPassword(password, salt);
           data.put(PARAM_PASSWORD, hashPassword);
-          data.put(Constraints.BUILTIN_ATTR_SALT, salt);
+          data.put(LeanObject.BUILTIN_ATTR_SALT, salt);
         } else {
           // TODO： check smsCode is valid.
           data.remove(PARAM_SMSCODE);
         }
-        data.put(Constraints.BUILTIN_ATTR_ACL, getUserDefaultACL());
-        data.put(Constraints.BUILTIN_ATTR_SESSION_TOKEN, StringUtils.getRandomString(Constraints.SESSION_TOKEN_LENGTH));
-        data.put(Constraints.BUILTIN_ATTR_EMAIL_VERIFIED, false);
-        data.put(Constraints.BUILTIN_ATTR_PHONENUM_VERIFIED, false);
+        data.put(LeanObject.BUILTIN_ATTR_ACL, getUserDefaultACL());
+        data.put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, StringUtils.getRandomString(Constraints.SESSION_TOKEN_LENGTH));
+        data.put(LeanObject.BUILTIN_ATTR_EMAIL_VERIFIED, false);
+        data.put(LeanObject.BUILTIN_ATTR_PHONENUM_VERIFIED, false);
       }
     }
     return result;

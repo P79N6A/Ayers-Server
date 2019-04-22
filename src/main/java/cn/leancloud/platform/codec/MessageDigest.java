@@ -1,6 +1,6 @@
 package cn.leancloud.platform.codec;
 
-import cn.leancloud.platform.common.StringUtils;
+import cn.leancloud.platform.utils.StringUtils;
 import org.apache.commons.codec.binary.Hex;
 
 import javax.crypto.Mac;

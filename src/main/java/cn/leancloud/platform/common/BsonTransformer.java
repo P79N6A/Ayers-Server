@@ -1,22 +1,19 @@
 package cn.leancloud.platform.common;
 
+import cn.leancloud.platform.modules.LeanObject;
+import cn.leancloud.platform.utils.JsonFactory;
+import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import org.bson.types.ObjectId;
 
-import java.util.AbstractMap;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class Transformer {
-  private static final String TYPE_DATE = "Date";
-  private static final String TYPE_POINTER = "Pointer";
-  private static final String TYPE_GEOPOINTER = "GeoPoint";
-  private static final String DATE_FORMAT_REG = "\\d-\\d-\\d-\\dT\\d:\\d:\\d.\\dZ";
+public class BsonTransformer {
   private static final String[] ALWAYS_PROJECT_KEYS = {"_id", "createdAt", "updatedAt", "ACL"};
+  public static final String CLASS_ATTR_MONGO_ID = "_id";
 
   private static final String REST_OP_REMOVE_RELATION = "removerelation";
   private static final String REST_OP_ADD_RELATION = "addrelation";
@@ -52,20 +49,20 @@ public class Transformer {
       return o;
     }
     JsonObject result = null;
-    if (o.containsKey("__type")) {
-      String type = o.getString("__type");
-      if (TYPE_DATE.equalsIgnoreCase(type)) {
-        String isoString = o.getString("iso");
+    if (o.containsKey(LeanObject.ATTR_NAME_TYPE)) {
+      String type = o.getString(LeanObject.ATTR_NAME_TYPE);
+      if (LeanObject.DATA_TYPE_DATE.equalsIgnoreCase(type)) {
+        String isoString = o.getString(LeanObject.ATTR_NAME_ISO);
         result = new JsonObject().put("$date", isoString);
-      } else if (TYPE_POINTER.equalsIgnoreCase(type)) {
-        String className = o.getString("className");
-        String objectId = o.getString("objectId");
+      } else if (LeanObject.DATA_TYPE_POINTER.equalsIgnoreCase(type)) {
+        String className = o.getString(LeanObject.ATTR_NAME_CLASSNAME);
+        String objectId = o.getString(LeanObject.ATTR_NAME_OBJECTID);
         result = new JsonObject();
         result.put("$ref", className);
         result.put("$id", new ObjectId(objectId).toString());
-      } else if (TYPE_GEOPOINTER.equalsIgnoreCase(type)) {
-        double latitude = o.getDouble("latitude");
-        double longitude = o.getDouble("longitude");
+      } else if (LeanObject.DATA_TYPE_GEOPOINTER.equalsIgnoreCase(type)) {
+        double latitude = o.getDouble(LeanObject.ATTR_NAME_LATITUDE);
+        double longitude = o.getDouble(LeanObject.ATTR_NAME_LONGITUDE);
         result = new JsonObject().put("type", "Point");
         result.put("coordinates", new JsonArray(Arrays.asList(longitude, latitude)));
       }
@@ -86,8 +83,8 @@ public class Transformer {
               String key = entry.getKey();
               Object value = entry.getValue();
               Object newValue = value;
-              if ("objectId".equals(key)) {
-                result = new AbstractMap.SimpleEntry<>("_id", newValue);
+              if (LeanObject.ATTR_NAME_OBJECTID.equals(key)) {
+                result = new AbstractMap.SimpleEntry<>(CLASS_ATTR_MONGO_ID, newValue);
               } else if (null == value) {
                 // do nothing
               } else if (value instanceof JsonObject) {
@@ -138,8 +135,8 @@ public class Transformer {
         addOperatorEntry(directSetEntries, "$set", key, value, isCreateOp);
       } else {
         JsonObject newValue = (JsonObject)value;
-        if (newValue.containsKey("__op") && (newValue.getValue("__op") instanceof String)) {
-          String op = newValue.getString("__op").toLowerCase();
+        if (newValue.containsKey(LeanObject.ATTR_NAME_OP) && (newValue.getValue(LeanObject.ATTR_NAME_OP) instanceof String)) {
+          String op = newValue.getString(LeanObject.ATTR_NAME_OP).toLowerCase();
           switch (op) {
             case REST_OP_BITAND:
             case REST_OP_BITOR:
@@ -169,7 +166,7 @@ public class Transformer {
             case REST_OP_REMOVE_RELATION:
             case REST_OP_ADD:
             case REST_OP_REMOVE:
-              JsonArray objects = newValue.getJsonArray("objects");
+              JsonArray objects = newValue.getJsonArray(LeanObject.ATTR_NAME_OBJECTS);
               if (isCreateOp) {
                 if (op.equals(REST_OP_REMOVE) || op.equals(REST_OP_REMOVE_RELATION)) {
                   // ignore
@@ -186,7 +183,7 @@ public class Transformer {
               }
               break;
             case REST_OP_ADD_UNIQUE:
-              JsonArray uniqueObjects = newValue.getJsonArray("objects").stream().distinct().collect(JsonFactory.toJsonArray());
+              JsonArray uniqueObjects = newValue.getJsonArray(LeanObject.ATTR_NAME_OBJECTS).stream().distinct().collect(JsonFactory.toJsonArray());
               if (isCreateOp) {
                 addOperatorEntry(directSetEntries, "$set", key, uniqueObjects, isCreateOp);
               } else {
@@ -195,7 +192,7 @@ public class Transformer {
               }
               break;
             case REST_OP_SETONINSERT:
-              addOperatorEntry(directSetEntries, "$setoninsert", key, newValue.remove("__op"), isCreateOp);
+              addOperatorEntry(directSetEntries, "$setoninsert", key, newValue.remove(LeanObject.ATTR_NAME_OP), isCreateOp);
               break;
             case REST_OP_DELETE:
               if (isCreateOp) {
@@ -228,20 +225,20 @@ public class Transformer {
     if (o.containsKey("$ref") && o.containsKey("$id")) {
       String className = o.getString("$ref");
       String objectId = o.getString("$id");
-      newValue = new JsonObject().put("__type", "Pointer");
-      newValue.put("objectId", objectId);
-      newValue.put("className", className);
+      newValue = new JsonObject().put(LeanObject.ATTR_NAME_TYPE, LeanObject.DATA_TYPE_POINTER);
+      newValue.put(LeanObject.ATTR_NAME_OBJECTID, objectId);
+      newValue.put(LeanObject.ATTR_NAME_CLASSNAME, className);
     } else if (o.containsKey("$date")) {
-      newValue = new JsonObject().put("__type", "Date");
-      newValue.put("iso", o.getString("$date"));
+      newValue = new JsonObject().put(LeanObject.ATTR_NAME_TYPE, LeanObject.DATA_TYPE_DATE);
+      newValue.put(LeanObject.ATTR_NAME_ISO, o.getString("$date"));
     } else if ("Point".equalsIgnoreCase(o.getString("type")) && null != o.getJsonArray("coordinates")) {
       JsonArray coordinates = o.getJsonArray("coordinates");
       if (coordinates.size() == 2) {
         double longitude = coordinates.getDouble(0);
         double latitude = coordinates.getDouble(1);
-        newValue = new JsonObject().put("__type", TYPE_GEOPOINTER);
-        newValue.put("longitude", longitude);
-        newValue.put("latitude", latitude);
+        newValue = new JsonObject().put(LeanObject.ATTR_NAME_TYPE, LeanObject.DATA_TYPE_GEOPOINTER);
+        newValue.put(LeanObject.ATTR_NAME_LONGITUDE, longitude);
+        newValue.put(LeanObject.ATTR_NAME_LATITUDE, latitude);
       } else {
         // log warning.
       }
@@ -262,12 +259,12 @@ public class Transformer {
       String key = entry.getKey();
       Object value = entry.getValue();
       Map.Entry<String, Object> result = entry;
-      if (Constraints.CLASS_ATTR_MONGO_ID.equalsIgnoreCase(key)) {
+      if (CLASS_ATTR_MONGO_ID.equalsIgnoreCase(key)) {
         // replace _id with objectId.
         if (value instanceof JsonObject && ((JsonObject) value).containsKey("$oid")) {
-          result = new AbstractMap.SimpleEntry<String, Object>(Constraints.CLASS_ATTR_OBJECT_ID, ((JsonObject) value).getString("$oid"));
+          result = new AbstractMap.SimpleEntry<String, Object>(LeanObject.ATTR_NAME_OBJECTID, ((JsonObject) value).getString("$oid"));
         } else {
-          result = new AbstractMap.SimpleEntry<String, Object>(Constraints.CLASS_ATTR_OBJECT_ID, value);
+          result = new AbstractMap.SimpleEntry<String, Object>(LeanObject.ATTR_NAME_OBJECTID, value);
         }
       } else if (value instanceof JsonObject) {
         JsonObject newValue = decodeBsonUnit((JsonObject) value);

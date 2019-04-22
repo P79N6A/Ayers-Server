@@ -1,6 +1,6 @@
 package cn.leancloud.platform.codec;
 
-import cn.leancloud.platform.common.StringUtils;
+import cn.leancloud.platform.utils.StringUtils;
 
 public class Base64 {
   public static byte[] decode(String input) {

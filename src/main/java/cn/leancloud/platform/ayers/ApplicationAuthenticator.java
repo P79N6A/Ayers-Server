@@ -1,6 +1,6 @@
 package cn.leancloud.platform.ayers;
 
-import cn.leancloud.platform.common.StringUtils;
+import cn.leancloud.platform.utils.StringUtils;
 
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.api.validation.CustomValidator;
@@ -10,23 +10,6 @@ import org.slf4j.LoggerFactory;
 
 public class ApplicationAuthenticator implements CustomValidator {
   private static final Logger logger = LoggerFactory.getLogger(ApplicationAuthenticator.class);
-
-  // validate (appid, appkey/sign) through meta service, work for bigquery.
-  // for api service, it's not useful. ignore.
-  private final String metaServiceAuthKey;
-
-  public ApplicationAuthenticator(String metaServiceAuthKey) {
-    this.metaServiceAuthKey = metaServiceAuthKey;
-  }
-
-  private String getCurrentTs() {
-    return String.valueOf(System.currentTimeMillis());
-  }
-
-  private String rpcAuthSign(String method, String ts) {
-    String wholeInput = String.format("%s:%s:%s", this.metaServiceAuthKey, method, ts);
-    return String.format("%s,%s,%s", this.metaServiceAuthKey, ts, StringUtils.computeSHA1(wholeInput, this.metaServiceAuthKey));
-  }
 
   public void validate(RoutingContext context) throws ValidationException {
     String cookie = RequestParse.getCookie(context);

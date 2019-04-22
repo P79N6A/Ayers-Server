@@ -1,5 +1,6 @@
-package cn.leancloud.platform.common;
+package cn.leancloud.platform.utils;
 
+import cn.leancloud.platform.utils.JsonFactory;
 import io.vertx.core.json.JsonObject;
 import junit.framework.TestCase;
 

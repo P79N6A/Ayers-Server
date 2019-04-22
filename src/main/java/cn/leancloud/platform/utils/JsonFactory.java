@@ -1,4 +1,4 @@
-package cn.leancloud.platform.common;
+package cn.leancloud.platform.utils;
 
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;

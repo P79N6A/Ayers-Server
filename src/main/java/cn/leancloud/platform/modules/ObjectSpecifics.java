@@ -1,4 +1,4 @@
-package cn.leancloud.platform.common;
+package cn.leancloud.platform.modules;
 
 import io.vertx.core.impl.ConcurrentHashSet;
 
@@ -12,6 +12,7 @@ public class ObjectSpecifics {
   private static final String REG_PATTERN_ATTRNAME = "[a-zA-Z0-9_]+";
   private static final String REG_PATTERN_REQUEST_PATH = "^\\/1\\.1\\/classes\\/.+";
   private static final String REG_PATTERN_EMAIL = "(?i)^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$";
+  private static final String REG_PATTERN_DATE = "\\d-\\d-\\d-\\dT\\d:\\d:\\d.\\dZ";
 
   public static final String[] builtinClazz = new String[]{"_User", "_Installation", "_Conversation",
           "_File", "_Follower", "_Followee", "_Role"};

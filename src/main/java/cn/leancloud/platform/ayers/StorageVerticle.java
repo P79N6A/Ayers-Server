@@ -2,8 +2,10 @@ package cn.leancloud.platform.ayers;
 
 import cn.leancloud.platform.ayers.handler.UserHandler;
 import cn.leancloud.platform.common.*;
+import cn.leancloud.platform.modules.LeanObject;
 import cn.leancloud.platform.persistence.DataStore;
 import cn.leancloud.platform.persistence.DataStoreFactory;
+import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.JsonArray;
@@ -17,7 +19,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static cn.leancloud.platform.common.JsonFactory.toJsonArray;
+import static cn.leancloud.platform.utils.JsonFactory.toJsonArray;
 
 public class StorageVerticle extends CommonVerticle {
   private static final Logger logger = LoggerFactory.getLogger(StorageVerticle.class);
@@ -38,30 +40,26 @@ public class StorageVerticle extends CommonVerticle {
   }
 
   public void onMessage(Message<JsonObject> message) {
-    if (!message.headers().contains(Constraints.INTERNAL_MSG_HEADER_OP)) {
+    if (!message.headers().contains(INTERNAL_MSG_HEADER_OP)) {
       message.fail(ErrorCodes.INTERNAL_ERROR.ordinal(), "no operation specified.");
       return;
     }
     logger.debug("received message: " + message.body().toString());
 
     JsonObject body = message.body();
-    String clazz = body.getString(Constraints.INTERNAL_MSG_ATTR_CLASS, "");
-    String objectId = body.getString(Constraints.INTERNAL_MSG_ATTR_OBJECT_ID);
-    JsonObject param = body.getJsonObject(Constraints.INTERNAL_MSG_ATTR_PARAM, new JsonObject());
-    boolean fetchWhenSave = body.getBoolean(Constraints.INTERNAL_MSG_ATTR_FETCHWHENSAVE, false);
+    String clazz = body.getString(INTERNAL_MSG_ATTR_CLASS, "");
+    String objectId = body.getString(INTERNAL_MSG_ATTR_OBJECT_ID);
+    JsonObject param = body.getJsonObject(INTERNAL_MSG_ATTR_PARAM, new JsonObject());
+    boolean fetchWhenSave = body.getBoolean(INTERNAL_MSG_ATTR_FETCHWHENSAVE, false);
 
-    String operation = message.headers().get(Constraints.INTERNAL_MSG_HEADER_OP);
+    String operation = message.headers().get(INTERNAL_MSG_HEADER_OP);
 
     final DataStore dataStore = dataStoreFactory.getStore();
 
     Instant now = Instant.now();
-    // replace
-    if (null != param && param.containsKey(Constraints.CLASS_ATTR_OBJECT_ID)) {
-      param.put(Constraints.CLASS_ATTR_MONGO_ID, param.getString(Constraints.CLASS_ATTR_OBJECT_ID)).remove(Constraints.CLASS_ATTR_OBJECT_ID);
-    }
 
     switch (operation) {
-      case Constraints.OP_USER_SIGNIN:
+      case OP_USER_SIGNIN:
         String password = param.getString(UserHandler.PARAM_PASSWORD);
         param.remove(UserHandler.PARAM_PASSWORD);
         logger.debug("query= " + param.toString());
@@ -73,10 +71,10 @@ public class StorageVerticle extends CommonVerticle {
             reportUserError(message, ErrorCodes.OBJECT_NOT_FOUND.ordinal(), "username is not existed.");
           } else {
             JsonObject mongoUser = user.result();
-            String salt = mongoUser.getString(Constraints.BUILTIN_ATTR_SALT);
-            String mongoPassword = mongoUser.getString(Constraints.BUILTIN_ATTR_PASSWORD);
-            mongoUser.remove(Constraints.BUILTIN_ATTR_SALT);
-            mongoUser.remove(Constraints.BUILTIN_ATTR_PASSWORD);
+            String salt = mongoUser.getString(LeanObject.BUILTIN_ATTR_SALT);
+            String mongoPassword = mongoUser.getString(LeanObject.BUILTIN_ATTR_PASSWORD);
+            mongoUser.remove(LeanObject.BUILTIN_ATTR_SALT);
+            mongoUser.remove(LeanObject.BUILTIN_ATTR_PASSWORD);
             if (StringUtils.isEmpty(password)) {
               message.reply(mongoUser);
             } else {
@@ -90,18 +88,19 @@ public class StorageVerticle extends CommonVerticle {
           }
         });
         break;
-      case Constraints.OP_OBJECT_UPSERT:
+      case OP_OBJECT_UPSERT:
         boolean isCreateOp = false;
         if (StringUtils.isEmpty(objectId)) {
           isCreateOp = true;
-          param.put(Constraints.CLASS_ATTR_CREATED_TS, now);
+          param.put(LeanObject.ATTR_NAME_CREATED_TS, now);
         }
-        param.put(Constraints.CLASS_ATTR_UPDATED_TS, now);
+        param.put(LeanObject.ATTR_NAME_UPDATED_TS, now);
 
         if (isCreateOp) {
           logger.debug("doc=== " + param.toString());
-          JsonObject option = new JsonObject().put(Constraints.INTERNAL_MSG_ATTR_FETCHWHENSAVE, fetchWhenSave);
-          dataStore.insertWithOptions(clazz, param, option, res -> {
+          DataStore.InsertOption insertOption = new DataStore.InsertOption();
+          insertOption.setReturnNewDocument(fetchWhenSave);
+          dataStore.insertWithOptions(clazz, param, insertOption, res -> {
             dataStore.close();
             if (res.failed()) {
               reportDatabaseError(message, res.cause());
@@ -116,9 +115,8 @@ public class StorageVerticle extends CommonVerticle {
           });
         } else {
           logger.debug("doc=== " + param.toString());
-          JsonObject query = new JsonObject().put(Constraints.CLASS_ATTR_MONGO_ID, objectId);
+          JsonObject query = new JsonObject().put(LeanObject.ATTR_NAME_OBJECTID, objectId);
           logger.debug("query= " + query.toString());
-          // UpdateOptions option = new UpdateOptions().setUpsert(false);
           DataStore.UpdateOption option = new DataStore.UpdateOption();
           option.setUpsert(false);
           option.setReturnNewDocument(fetchWhenSave);
@@ -154,9 +152,9 @@ public class StorageVerticle extends CommonVerticle {
           }
         }
         break;
-      case Constraints.OP_OBJECT_DELETE:
+      case OP_OBJECT_DELETE:
         if (!StringUtils.isEmpty(objectId)) {
-          param.put(Constraints.CLASS_ATTR_MONGO_ID, objectId);
+          param.put(LeanObject.ATTR_NAME_OBJECTID, objectId);
         }
         dataStore.removeWithOptions(clazz, param, null, res -> {
           dataStore.close();
@@ -167,18 +165,18 @@ public class StorageVerticle extends CommonVerticle {
           }
         });
         break;
-      case Constraints.OP_OBJECT_QUERY:
-        String where = param.getString(Constraints.QUERY_KEY_WHERE, "{}");
-        String order = param.getString(Constraints.QUERY_KEY_ORDER);
-        int limit = Integer.valueOf(param.getString(Constraints.QUERY_KEY_LIMIT, "100"));
-        int skip = Integer.valueOf(param.getString(Constraints.QUERY_KEY_SKIP, "0"));
-        int count = Integer.valueOf(param.getString(Constraints.QUERY_KEY_COUNT, "0"));
-        String include = param.getString(Constraints.QUERY_KEY_INCLUDE);
-        String keys = param.getString(Constraints.QUERY_KEY_KEYS);
+      case OP_OBJECT_QUERY:
+        String where = param.getString(QUERY_KEY_WHERE, "{}");
+        String order = param.getString(QUERY_KEY_ORDER);
+        int limit = Integer.valueOf(param.getString(QUERY_KEY_LIMIT, "100"));
+        int skip = Integer.valueOf(param.getString(QUERY_KEY_SKIP, "0"));
+        int count = Integer.valueOf(param.getString(QUERY_KEY_COUNT, "0"));
+        String include = param.getString(QUERY_KEY_INCLUDE);
+        String keys = param.getString(QUERY_KEY_KEYS);
 
         JsonObject condition = new JsonObject(where);
         if (!StringUtils.isEmpty(objectId)) {
-          condition.put(Constraints.CLASS_ATTR_MONGO_ID, objectId);
+          condition.put(LeanObject.ATTR_NAME_OBJECTID, objectId);
         }
 
         if (COUNT_FLAG == count) {
@@ -195,11 +193,11 @@ public class StorageVerticle extends CommonVerticle {
           DataStore.QueryOption options = new DataStore.QueryOption();
           options.setLimit(limit);
           options.setSkip(skip);
-          JsonObject sortJson = Transformer.parseSortParam(order);
+          JsonObject sortJson = BsonTransformer.parseSortParam(order);
           if (null != sortJson) {
             options.setSort(sortJson);
           }
-          JsonObject fieldJson = Transformer.parseProjectParam(keys);
+          JsonObject fieldJson = BsonTransformer.parseProjectParam(keys);
           if (null != fieldJson) {
             options.setFields(fieldJson);
           }
@@ -214,7 +212,7 @@ public class StorageVerticle extends CommonVerticle {
             if (res.failed()) {
               reportDatabaseError(message, res.cause());
             } else {
-              Stream<JsonObject> resultStream = res.result().stream().map(Transformer::decodeBsonObject);
+              Stream<JsonObject> resultStream = res.result().stream().map(BsonTransformer::decodeBsonObject);
               if (StringUtils.isEmpty(objectId)) {
                 JsonArray results = resultStream.collect(toJsonArray());
                 message.reply(new JsonObject().put("results", results));

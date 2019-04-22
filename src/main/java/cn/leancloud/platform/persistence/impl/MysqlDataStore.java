@@ -17,7 +17,7 @@ public class MysqlDataStore implements DataStore {
     this.sqlClient = sqlClient;
   }
 
-  public DataStore insertWithOptions(String clazz, JsonObject obj, JsonObject options, Handler<AsyncResult<JsonObject>> resultHandler) {
+  public DataStore insertWithOptions(String clazz, JsonObject obj, InsertOption options, Handler<AsyncResult<JsonObject>> resultHandler) {
     return this;
   }
   public DataStore findOne(String clazz, JsonObject query, JsonObject fields, Handler<AsyncResult<JsonObject>> resultHandler) {

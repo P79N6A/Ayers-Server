@@ -3,9 +3,6 @@ package cn.leancloud.platform.common;
 import io.vertx.core.json.JsonObject;
 import junit.framework.TestCase;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
 public class TransformerTest extends TestCase {
 
   @Override
@@ -19,7 +16,7 @@ public class TransformerTest extends TestCase {
   public void testConvert2BsonCreate() throws Exception {
     String param = "{\"birthday\":{\"iso\":\"2019-04-12T07:04:35.016Z\",\"__type\":\"Date\"},\"name\":\"Automatic Tester\",\"ACL\":{\"*\":{\"read\":true,\"write\":true}},\"favorite\":{\"__type\":\"Pointer\",\"className\":\"Course\",\"objectId\":\"5cb03965c3a4593f60745a1a\"},\"age\":19}";
     JsonObject paramObj = new JsonObject(param);
-    JsonObject newObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.CREATE);
+    JsonObject newObj = BsonTransformer.encode2BsonRequest(paramObj, BsonTransformer.REQUEST_OP.CREATE);
     System.out.println(newObj.toString());
     assertTrue(newObj.getJsonObject("birthday").getString("$date").length() > 0);
     assertTrue(newObj.getJsonObject("favorite").getString("$id").equals("5cb03965c3a4593f60745a1a"));
@@ -34,7 +31,7 @@ public class TransformerTest extends TestCase {
             " \"users\" : { \"__op\" : \"AddRelation\", \"objects\" : [ { \"__type\" : \"Pointer\", \"className\" : \"_User\", \"objectId\" : \"55a47496e4b05001a7732c5f\" } ] }," +
             " \"updatedAt\" : \"2019-04-15T08:49:18.633Z\" }";
     JsonObject paramObj = new JsonObject(param);
-    JsonObject newObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.UPDATE);
+    JsonObject newObj = BsonTransformer.encode2BsonRequest(paramObj, BsonTransformer.REQUEST_OP.UPDATE);
     System.out.println(newObj.toString());
     assertTrue(newObj.getJsonObject("$set").size() == 5);
     assertTrue(newObj.getJsonObject("$push").size() == 2);
@@ -51,7 +48,7 @@ public class TransformerTest extends TestCase {
             " \"users\" : { \"$nin\": [ { \"__type\" : \"Pointer\", \"className\" : \"_User\", \"objectId\" : \"55a47496e4b05001a7732c5f\" } ] }," +
             " \"updatedAt\" : \"2019-04-15T08:49:18.633Z\" }";
     JsonObject paramObj = new JsonObject(param);
-    JsonObject newObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.QUERY);
+    JsonObject newObj = BsonTransformer.encode2BsonRequest(paramObj, BsonTransformer.REQUEST_OP.QUERY);
     System.out.println(newObj.toString());
     assertTrue(newObj.getString("_id").equals("5cb4458ea8cb3d591a16308e"));
   }
@@ -59,7 +56,7 @@ public class TransformerTest extends TestCase {
   public void testConvertPointerArray2BsonCreate() throws Exception {
     String param = "{\"birthday\":{\"iso\":\"2019-04-12T07:04:35.016Z\",\"__type\":\"Date\"},\"name\":\"Automatic Tester\",\"ACL\":{\"*\":{\"read\":true,\"write\":true}},\"favorite\":[{\"__type\":\"Pointer\",\"className\":\"Course\",\"objectId\":\"5cb03965c3a4593f60745a1a\"},{\"__type\":\"Pointer\",\"className\":\"Course\",\"objectId\":\"5cb03965c3a4593f60745a1a\"},{\"__type\":\"Pointer\",\"className\":\"Course\",\"objectId\":\"5cb03965c3a4593f60745a1a\"}],\"age\":19}";
     JsonObject paramObj = new JsonObject(param);
-    JsonObject newObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.CREATE);
+    JsonObject newObj = BsonTransformer.encode2BsonRequest(paramObj, BsonTransformer.REQUEST_OP.CREATE);
     System.out.println(newObj.toString());
     assertTrue(newObj.getJsonArray("favorite").size() == 3);
   }
@@ -67,7 +64,7 @@ public class TransformerTest extends TestCase {
   public void testConvertGeoPoint2BsonUpdate() throws Exception {
     String param = "{\"location\":{\"$nearSphere\":{\"__type\":\"GeoPoint\",\"latitude\":39.9,\"longitude\":116.4}}}";
     JsonObject paramObj = new JsonObject(param);
-    JsonObject newObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.UPDATE);
+    JsonObject newObj = BsonTransformer.encode2BsonRequest(paramObj, BsonTransformer.REQUEST_OP.UPDATE);
     System.out.println(newObj.toString());
     assertTrue(newObj.getJsonObject("$set").getJsonObject("location").getJsonObject("$nearSphere").getJsonArray("coordinates").size() == 2);
   }
@@ -75,7 +72,7 @@ public class TransformerTest extends TestCase {
   public void testConvertGeoPoint2BsonQuery() throws Exception {
     String param = "{\"location\":{\"$nearSphere\":{\"__type\":\"GeoPoint\",\"latitude\":39.9,\"longitude\":116.4}}}";
     JsonObject paramObj = new JsonObject(param);
-    JsonObject newObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.QUERY);
+    JsonObject newObj = BsonTransformer.encode2BsonRequest(paramObj, BsonTransformer.REQUEST_OP.QUERY);
     System.out.println(newObj.toString());
     assertTrue(newObj.getJsonObject("location").getJsonObject("$nearSphere").getJsonArray("coordinates").size() == 2);
   }
@@ -110,7 +107,7 @@ public class TransformerTest extends TestCase {
             "\"$or\":[{\"pubUserCertificate\":{\"$gt\":2}},{\"pubUserCertificate\":{\"$lt\":3}}]\n" +
             "}";
     JsonObject paramObj = new JsonObject(query);
-    JsonObject newObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.QUERY);
+    JsonObject newObj = BsonTransformer.encode2BsonRequest(paramObj, BsonTransformer.REQUEST_OP.QUERY);
     System.out.println(newObj.toString());
     assertTrue(newObj.getJsonObject("createdAt").getJsonObject("$gte").getString("$date").equals("2015-06-29T00:00:00.000Z"));
     assertTrue(newObj.getJsonObject("post").getString("$id").equals("558e20cbe4b060308e3eb36c"));
@@ -119,14 +116,14 @@ public class TransformerTest extends TestCase {
   public void testConvert2Rest() throws Exception {
     String param = "{\"birthday\":{\"$date\" : \"2019-04-12T10:34:52.274Z\"},\"name\":\"Automatic Tester\",\"ACL\":{\"*\":{\"read\":true,\"write\":true}},\"favorite\":{\"$ref\":\"Course\",\"$id\":\"5cb03965c3a4593f60745a1a\"},\"age\":19}";
     JsonObject paramObj = new JsonObject(param);
-    JsonObject newObj = Transformer.decodeBsonObject(paramObj);
+    JsonObject newObj = BsonTransformer.decodeBsonObject(paramObj);
     System.out.println(newObj.toString());
   }
 
   public void testDecodeBsonObject() throws Exception {
     String param = "{\"_id\":\"thisisobjectId\", \"birthday\":{\"$date\" : \"2019-04-12T10:34:52.274Z\"},\"name\":\"Automatic Tester\",\"ACL\":{\"*\":{\"read\":true,\"write\":true}},\"favorite\":{\"$ref\":\"Course\",\"$id\":\"5cb03965c3a4593f60745a1a\"},\"age\":19}";
     JsonObject paramObj = new JsonObject(param);
-    JsonObject newObj = Transformer.decodeBsonObject(paramObj);
+    JsonObject newObj = BsonTransformer.decodeBsonObject(paramObj);
     System.out.println(newObj.toString());
     assertTrue(newObj.getString("objectId").equals("thisisobjectId"));
   }
@@ -134,7 +131,7 @@ public class TransformerTest extends TestCase {
   public void testConvertRefArray2Rest() throws Exception {
     String param = "{\"birthday\":{\"$date\" : \"2019-04-12T10:34:52.274Z\"},\"name\":\"Automatic Tester\",\"ACL\":{\"*\":{\"read\":true,\"write\":true}},\"favorite\":[{\"$ref\":\"Course\",\"$id\":\"5cb03965c3a4593f60745a1a\"},{\"$ref\":\"Course\",\"$id\":\"5cb03965c3a4593f60745a1a\"},{\"$ref\":\"Course\",\"$id\":\"5cb03965c3a4593f60745a1a\"}],\"age\":19}";
     JsonObject paramObj = new JsonObject(param);
-    JsonObject newObj = Transformer.decodeBsonObject(paramObj);
+    JsonObject newObj = BsonTransformer.decodeBsonObject(paramObj);
     System.out.println(newObj.toString());
   }
 
@@ -177,7 +174,7 @@ public class TransformerTest extends TestCase {
             "  \"favor\": {\"__op\":\"Remove\",\"objects\":[\"Frontend\",\"JavaScript\"]}, \n" +
             " \"familyName\": \"Stark\"}";
     JsonObject paramObj = new JsonObject(param);
-    JsonObject newObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.CREATE);
+    JsonObject newObj = BsonTransformer.encode2BsonRequest(paramObj, BsonTransformer.REQUEST_OP.CREATE);
     System.out.println(newObj.toString());
     assertTrue(newObj.getJsonArray("roles").size() == 1);
     assertTrue(!newObj.containsKey("users"));
@@ -186,7 +183,7 @@ public class TransformerTest extends TestCase {
     assertTrue(newObj.getString("familyName").equals("Stark"));
 
     System.out.println("try to convert for Update...");
-    JsonObject updateObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.UPDATE);
+    JsonObject updateObj = BsonTransformer.encode2BsonRequest(paramObj, BsonTransformer.REQUEST_OP.UPDATE);
     System.out.println(updateObj.toString());
     assertTrue(updateObj.getJsonObject("$unset").getString("nickname").length() == 0);
     assertTrue(updateObj.getJsonObject("$inc").getInteger("balance") == -30);
@@ -223,13 +220,13 @@ public class TransformerTest extends TestCase {
             "  \"tags\":{\"__op\":\"AddUnique\",\"objects\":[\"Frontend\",\"Frontend\",\"Frontend\",\"JavaScript\"]}\n" +
             "}";
     JsonObject paramObj = new JsonObject(param);
-    JsonObject newObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.CREATE);
+    JsonObject newObj = BsonTransformer.encode2BsonRequest(paramObj, BsonTransformer.REQUEST_OP.CREATE);
     System.out.println(newObj.toString());
     assertTrue(newObj.getJsonArray("tags").size() == 2);
     assertTrue(newObj.getJsonArray("parents").size() == 2);
 
     System.out.println("try to convert for Update...");
-    JsonObject updateObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.UPDATE);
+    JsonObject updateObj = BsonTransformer.encode2BsonRequest(paramObj, BsonTransformer.REQUEST_OP.UPDATE);
     System.out.println(updateObj.toString());
     assertTrue(updateObj.getJsonObject("$addToSet").size() == 2);
     assertTrue(updateObj.getJsonObject("$addToSet").getJsonObject("parents").getJsonArray("$each").size() == 2);
@@ -239,7 +236,7 @@ public class TransformerTest extends TestCase {
   public void testEncodeNullValue() throws Exception {
     String param = "{\"class\":\"_File\",\"param\":{\"key\":\"b2d5cb4e988cd6f19198.js\",\"name\":\"stream-test.js\",\"metaData\":{\"owner\":\"unknown\"},\"url\":\"http://lc-ohqhxu3m.cn-n1.lcfile.com/b2d5cb4e988cd6f19198.js\",\"mime_type\":null,\"provider\":\"qiniu\",\"bucket\":\"ohqhxu3m\"}}";
     JsonObject paramObj = new JsonObject(param);
-    JsonObject newObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.UPDATE);
+    JsonObject newObj = BsonTransformer.encode2BsonRequest(paramObj, BsonTransformer.REQUEST_OP.UPDATE);
     System.out.println(newObj.toString());
     assertTrue(newObj.getJsonObject("$set").getJsonObject("param").getValue("mime_type") == null);
     assertTrue(newObj.getJsonObject("$set").getJsonObject("param").getString("provider").equals("qiniu"));
@@ -248,10 +245,10 @@ public class TransformerTest extends TestCase {
   public void testJsonMerge() throws Exception {
     String input = "{\"name\":\"hallo\", \"first\": null}";
     JsonObject paramObj = new JsonObject(input);
-    JsonObject createObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.CREATE);
+    JsonObject createObj = BsonTransformer.encode2BsonRequest(paramObj, BsonTransformer.REQUEST_OP.CREATE);
     System.out.println(createObj.toString());
     assertTrue(createObj.getValue("first") == null);
-    JsonObject newObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.UPDATE);
+    JsonObject newObj = BsonTransformer.encode2BsonRequest(paramObj, BsonTransformer.REQUEST_OP.UPDATE);
     System.out.println(newObj.toString());
     assertTrue(null == newObj.getJsonObject("$set").getValue("first"));
   }

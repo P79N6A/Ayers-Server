@@ -62,6 +62,17 @@ public interface DataStore {
     }
   }
 
+  class InsertOption {
+    private boolean returnNewDocument = false;
+    public boolean isReturnNewDocument() {
+      return returnNewDocument;
+    }
+
+    public void setReturnNewDocument(boolean returnNewDocument) {
+      this.returnNewDocument = returnNewDocument;
+    }
+
+  }
   class UpdateOption {
     private boolean upsert = false;
     private boolean multi = false;
@@ -141,7 +152,7 @@ public interface DataStore {
       return json;
     }
   }
-  DataStore insertWithOptions(String clazz, JsonObject obj, JsonObject options, Handler<AsyncResult<JsonObject>> resultHandler);
+  DataStore insertWithOptions(String clazz, JsonObject obj, InsertOption options, Handler<AsyncResult<JsonObject>> resultHandler);
   DataStore findOne(String clazz, JsonObject query, JsonObject fields, Handler<AsyncResult<JsonObject>> resultHandler);
   DataStore updateWithOptions(String clazz, JsonObject query, JsonObject object, UpdateOption options,
                               Handler<AsyncResult<Long>> resultHandler);

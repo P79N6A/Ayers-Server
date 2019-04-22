@@ -1,6 +1,6 @@
 package cn.leancloud.platform.ayers;
 
-import cn.leancloud.platform.common.StringUtils;
+import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.ext.web.Cookie;
 import io.vertx.ext.web.RoutingContext;
 import org.slf4j.Logger;
