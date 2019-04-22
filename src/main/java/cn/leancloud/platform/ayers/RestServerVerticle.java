@@ -507,6 +507,15 @@ public class RestServerVerticle extends CommonVerticle {
 
     router.post("/1.1/batch").handler(this::batchWrite);
 
+    router.optionsWithRegex("\\/1\\.1\\/.*").handler(routingContext -> {
+      String origin = routingContext.request().getHeader("Origin");
+      JsonObject responseHeader = new JsonObject().put("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
+      responseHeader.put("Access-Control-Allow-Origin", StringUtils.isEmpty(origin)? "*" : origin);
+      responseHeader.put("Access-Control-Allow-Headers", RequestParse.ALLOWED_HEADERS_STRING);
+      responseHeader.put("Access-Control-Allow-Credentials", "true");
+      response(routingContext, HttpStatus.SC_OK, responseHeader, "");
+    });
+
     router.errorHandler(400, routingContext -> {
       if (routingContext.failure() instanceof ValidationException) {
         // Something went wrong during validation!

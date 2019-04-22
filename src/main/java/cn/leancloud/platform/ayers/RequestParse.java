@@ -29,6 +29,11 @@ public class RequestParse {
 
   public static final String COOKIE_USER_NAME = "uluru_user";
 
+  public static final String[] ALLOWED_HEADERS = new String[]{HEADER_APPID, HEADER_APPID_SHORTER, HEADER_APPKEY,
+          HEADER_APPKEY_SHORTER, HEADER_MASTERKEY, HEADER_REQUEST_SIGN, HEADER_REQUEST_SIGN_SHORTER, HEADER_SESSION_TOKEN};
+
+  public static final String ALLOWED_HEADERS_STRING = String.join(",", ALLOWED_HEADERS);
+
   private static String getHeader(RoutingContext context, String first, String second) {
     String value = context.request().getHeader(first);
     if (StringUtils.isEmpty(value) && !StringUtils.isEmpty(second)) {

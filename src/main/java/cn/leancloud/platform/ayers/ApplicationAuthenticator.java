@@ -2,6 +2,7 @@ package cn.leancloud.platform.ayers;
 
 import cn.leancloud.platform.utils.StringUtils;
 
+import io.vertx.core.http.HttpMethod;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.api.validation.CustomValidator;
 import io.vertx.ext.web.api.validation.ValidationException;
@@ -12,6 +13,9 @@ public class ApplicationAuthenticator implements CustomValidator {
   private static final Logger logger = LoggerFactory.getLogger(ApplicationAuthenticator.class);
 
   public void validate(RoutingContext context) throws ValidationException {
+    if (context.request().method() == HttpMethod.OPTIONS) {
+      return;
+    }
     String cookie = RequestParse.getCookie(context);
     String appId = RequestParse.getAppId(context);
     String appKey = RequestParse.getAppKey(context);
