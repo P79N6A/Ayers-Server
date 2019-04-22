@@ -76,7 +76,6 @@ public class LeanObject extends JsonObject{
     this.className = className;
   }
 
-
   private static JsonObject guessValueType(Object value) {
     if (null == value) {
       return null;
@@ -100,9 +99,9 @@ public class LeanObject extends JsonObject{
           return new JsonObject().put("type", LeanGeoPoint.class.getName());
         }
       }
-      JsonObject recurSchema = newValue.stream().map(entry -> {
-        return new AbstractMap.SimpleEntry(entry.getKey(), guessValueType(entry.getValue()));
-      }).collect(JsonFactory.toJsonObject());
+      JsonObject recurSchema = newValue.stream()
+              .map(entry -> new AbstractMap.SimpleEntry(entry.getKey(), guessValueType(entry.getValue())))
+              .collect(JsonFactory.toJsonObject());
       return new JsonObject().put("type", JsonObject.class.getName()).put("schema", recurSchema);
     }
     return new JsonObject().put("type", value.getClass().getName());

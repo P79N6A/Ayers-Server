@@ -27,6 +27,8 @@ public class Schema extends JsonObject {
    *         -1 -
    */
   public CompatResult compatiableWith(Schema other) {
+    // TODO: maybe we need to process update operations indicated by __OP
+
     if (null == other) {
       return OVER_MATCHED;
     }
