@@ -90,7 +90,7 @@ public class RestServerVerticle extends CommonVerticle {
       badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PASSWORD.getCode()).put("error", "session_token is required."));
     } else {
       JsonObject findCondition = new JsonObject().put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, sessionToken);
-      sendDataOperationWithHandler(context, Constraints.USER_CLASS, objectId, OP_OBJECT_QUERY,
+      queryUserWithHandler(context, Constraints.USER_CLASS, objectId, OP_OBJECT_QUERY,
               new JsonObject().put(QUERY_KEY_WHERE, findCondition.toString()),
               res -> {
         if (res.failed()) {
@@ -337,20 +337,8 @@ public class RestServerVerticle extends CommonVerticle {
     crudCommonDataEx(clazz, context, null);
   }
 
-  private void sendDataOperationWithOption(RoutingContext context, String clazz, String objectId, String operation,
-                                           JsonObject param, boolean fetchWhenSave, final Handler<JsonObject> handler) {
-    JsonObject request = new JsonObject();
-    request.put(INTERNAL_MSG_ATTR_FETCHWHENSAVE, fetchWhenSave);
-    if (!StringUtils.isEmpty(clazz)) {
-      request.put(INTERNAL_MSG_ATTR_CLASS, clazz);
-    }
-    if (!StringUtils.isEmpty(objectId)) {
-      request.put(INTERNAL_MSG_ATTR_OBJECT_ID, objectId);
-    }
-    if (null != param) {
-      request.put(INTERNAL_MSG_ATTR_PARAM, param);
-    }
-    DeliveryOptions options = new DeliveryOptions().addHeader(INTERNAL_MSG_HEADER_OP, operation);
+  private void directlySendEvent(RoutingContext context, JsonObject request, String objectId, String operation,
+                                 DeliveryOptions options, final Handler<JsonObject> handler) {
     vertx.eventBus().send(Configure.MAILADDRESS_DATASTORE_QUEUE, request, options, reply -> {
       if (reply.failed()) {
         if (reply.cause() instanceof ReplyException) {
@@ -383,13 +371,43 @@ public class RestServerVerticle extends CommonVerticle {
     });
   }
 
+  private void sendDataOperationWithOption(RoutingContext context, String clazz, String objectId, String operation,
+                                           JsonObject param, boolean fetchWhenSave, final Handler<JsonObject> handler) {
+    JsonObject request = new JsonObject();
+    request.put(INTERNAL_MSG_ATTR_FETCHWHENSAVE, fetchWhenSave);
+    if (!StringUtils.isEmpty(clazz)) {
+      request.put(INTERNAL_MSG_ATTR_CLASS, clazz);
+    }
+    if (!StringUtils.isEmpty(objectId)) {
+      request.put(INTERNAL_MSG_ATTR_OBJECT_ID, objectId);
+    }
+    if (null != param) {
+      request.put(INTERNAL_MSG_ATTR_PARAM, param);
+    }
+    DeliveryOptions options = new DeliveryOptions().addHeader(INTERNAL_MSG_HEADER_OP, operation);
+    if (operation.equals(OP_OBJECT_UPSERT)) {
+      vertx.eventBus().send(Configure.MAILADDRESS_DEMOCLES_QUEUE, request, options, response -> {
+        if (response.failed()) {
+          int failureCode = ((ReplyException) response.cause()).failureCode();
+          JsonObject responseJson = new JsonObject().put("code", failureCode).put("error", response.cause().getMessage());
+          badRequest(context, responseJson);
+        } else {
+          directlySendEvent(context, request, objectId, operation, options, handler);
+        }
+      });
+    } else {
+      directlySendEvent(context, request, objectId, operation, options, handler);
+    }
+  }
+
   private void sendDataOperationEx(RoutingContext context, String clazz, String objectId, String operation,
                                    JsonObject param, final Handler<JsonObject> handler) {
     sendDataOperationWithOption(context, clazz, objectId, operation, param, false, handler);
   }
 
-  private <T> void sendDataOperationWithHandler(RoutingContext context, String clazz, String objectId, String operation,
-                                                JsonObject param, Handler<AsyncResult<Message<T>>> replyHandler) {
+  // only for user refresh session token.
+  private <T> void queryUserWithHandler(RoutingContext context, String clazz, String objectId, String operation,
+                                        JsonObject param, Handler<AsyncResult<Message<T>>> replyHandler) {
     JsonObject request = new JsonObject();
     if (!StringUtils.isEmpty(clazz)) {
       request.put(INTERNAL_MSG_ATTR_CLASS, clazz);
@@ -440,10 +458,9 @@ public class RestServerVerticle extends CommonVerticle {
     router.get("/ping").handler(this::healthcheck);
 
     SessionStore sessionStore = LocalSessionStore.create(vertx, "ayers.sessionmap");
-    router.route("/1.1/*").handler(BodyHandler.create())
-            .handler(CookieHandler.create())
+    router.route("/1.1/*").handler(CookieHandler.create())
             .handler(SessionHandler.create(sessionStore))
-            .handler(appKeyValidationHandler);
+            .handler(appKeyValidationHandler).handler(BodyHandler.create());
 
     /**
      * Storage Service endpoints.

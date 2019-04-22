@@ -15,7 +15,7 @@ public class ObjectSpecifics {
   private static final String REG_PATTERN_DATE = "\\d-\\d-\\d-\\dT\\d:\\d:\\d.\\dZ";
 
   public static final String[] builtinClazz = new String[]{"_User", "_Installation", "_Conversation",
-          "_File", "_Follower", "_Followee", "_Role"};
+          "_File", "_Follower", "_Followee", "_Role", "_ClassMeta"};
   public static final Set<String> builtinClazzSet = new ConcurrentHashSet<String>();
 
   static {

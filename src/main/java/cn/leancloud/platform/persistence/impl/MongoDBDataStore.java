@@ -1,5 +1,6 @@
 package cn.leancloud.platform.persistence.impl;
 
+import cn.leancloud.platform.common.Constraints;
 import cn.leancloud.platform.utils.StringUtils;
 import cn.leancloud.platform.common.BsonTransformer;
 import cn.leancloud.platform.modules.LeanObject;
@@ -299,15 +300,25 @@ public class MongoDBDataStore implements DataStore {
   }
 
   public DataStore findSchema(String clazz, Handler<AsyncResult<JsonObject>> resultHandler) {
-    return this;
+    JsonObject query = new JsonObject().put("class", clazz);
+    return this.findOne(Constraints.METADATA_CLASS, query, null, resultHandler);
   }
 
   public DataStore upsertSchema(String clazz, Schema schema, Handler<AsyncResult<JsonObject>> resultHandler) {
-    return this;
+    JsonObject query = new JsonObject().put("class", clazz);
+    JsonObject update = new JsonObject().put("class", clazz).put("schema", schema);
+    QueryOption queryOption = new QueryOption();
+    UpdateOption option = new UpdateOption().setUpsert(true).setReturnNewDocument(true);
+    return this.findOneAndUpdateWithOptions(Constraints.METADATA_CLASS, query, update, queryOption, option, resultHandler);
   }
 
-  public DataStore listSchemas(Handler<AsyncResult<JsonArray>> resultHandler) {
-    return this;
+  public DataStore listSchemas(Handler<AsyncResult<List<JsonObject>>> resultHandler) {
+    return this.find(Constraints.METADATA_CLASS, new JsonObject(), resultHandler);
+  }
+
+  public DataStore removeSchema(String clazz, Handler<AsyncResult<Long>> resultHandler) {
+    JsonObject query = new JsonObject().put("class", clazz);
+    return this.remove(Constraints.METADATA_CLASS, query, resultHandler);
   }
 
   public void close() {

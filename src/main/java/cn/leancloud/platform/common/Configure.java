@@ -1,5 +1,6 @@
 package cn.leancloud.platform.common;
 
+import cn.leancloud.platform.cache.InMemoryLRUCache;
 import cn.leancloud.platform.persistence.DataStoreFactory;
 import io.vertx.config.ConfigRetriever;
 import io.vertx.config.ConfigRetrieverOptions;
@@ -14,16 +15,26 @@ import org.slf4j.LoggerFactory;
 public class Configure {
   private static final Logger logger = LoggerFactory.getLogger(Configure.class);
   public static final String MAILADDRESS_DATASTORE_QUEUE = "datastore.queue";
+  public static final String MAILADDRESS_DEMOCLES_QUEUE = "democles.queue";
 
   private static Configure instance = null;
   private JsonObject settings = new JsonObject();
   private DataStoreFactory dataStoreFactory = null;
+  private InMemoryLRUCache<String, JsonObject> schemaCache;
 
   public static Configure getInstance() {
     if (null == instance) {
       instance = new Configure();
     }
     return instance;
+  }
+
+  public InMemoryLRUCache<String, JsonObject> getSchemaCache() {
+    return schemaCache;
+  }
+
+  public void setSchemaCache(InMemoryLRUCache<String, JsonObject> schemaCache) {
+    this.schemaCache = schemaCache;
   }
 
   public DataStoreFactory getDataStoreFactory() {

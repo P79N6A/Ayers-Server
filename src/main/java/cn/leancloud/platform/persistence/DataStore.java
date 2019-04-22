@@ -82,24 +82,27 @@ public interface DataStore {
       return upsert;
     }
 
-    public void setUpsert(boolean upsert) {
+    public UpdateOption setUpsert(boolean upsert) {
       this.upsert = upsert;
+      return this;
     }
 
     public boolean isMulti() {
       return multi;
     }
 
-    public void setMulti(boolean multi) {
+    public UpdateOption setMulti(boolean multi) {
       this.multi = multi;
+      return this;
     }
 
     public boolean isReturnNewDocument() {
       return returnNewDocument;
     }
 
-    public void setReturnNewDocument(boolean returnNewDocument) {
+    public UpdateOption setReturnNewDocument(boolean returnNewDocument) {
       this.returnNewDocument = returnNewDocument;
+      return this;
     }
   }
 
@@ -177,6 +180,7 @@ public interface DataStore {
 
   DataStore findSchema(String clazz, Handler<AsyncResult<JsonObject>> resultHandler);
   DataStore upsertSchema(String clazz, Schema schema, Handler<AsyncResult<JsonObject>> resultHandler);
-  DataStore listSchemas(Handler<AsyncResult<JsonArray>> resultHandler);
+  DataStore listSchemas(Handler<AsyncResult<List<JsonObject>>> resultHandler);
+  DataStore removeSchema(String clazz, Handler<AsyncResult<Long>> resultHandler);
   void close();
 }

@@ -79,7 +79,10 @@ public class MysqlDataStore implements DataStore {
   public DataStore upsertSchema(String clazz, Schema schema, Handler<AsyncResult<JsonObject>> resultHandler) {
     return this;
   }
-  public DataStore listSchemas(Handler<AsyncResult<JsonArray>> resultHandler) {
+  public DataStore listSchemas(Handler<AsyncResult<List<JsonObject>>> resultHandler) {
+    return this;
+  }
+  public DataStore removeSchema(String clazz, Handler<AsyncResult<Long>> resultHandler) {
     return this;
   }
   public void close() {

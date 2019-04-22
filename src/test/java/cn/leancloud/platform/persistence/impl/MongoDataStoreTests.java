@@ -1,11 +1,14 @@
 package cn.leancloud.platform.persistence.impl;
 
+import cn.leancloud.platform.modules.LeanObject;
+import cn.leancloud.platform.modules.Schema;
 import cn.leancloud.platform.persistence.DataStore;
 import io.vertx.core.*;
 import io.vertx.core.json.JsonObject;
 import junit.framework.TestCase;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 
 public class MongoDataStoreTests extends TestCase {
@@ -85,5 +88,65 @@ public class MongoDataStoreTests extends TestCase {
       latch.countDown();
     });
     latch.await();
+  }
+
+  public void testSchemaOperation() throws Exception {
+    LeanObject object = new LeanObject("Post");
+    object.put("title", "LeanCloud");
+    object.put("publishTime", Instant.now());
+    object.put("commentCounts", 199);
+    object.put("dislike", -199);
+    object.put("spam", false);
+
+    Schema schema1 = object.guessSchema();
+
+    object.put("likes", Arrays.asList("One", "Two", "Three"));
+    object.put("author", new JsonObject().put("__type", "Pointer").put("className", "_User").put("objectId", "dhfiafheiire"));
+    object.put("location", new JsonObject().put("latitude", 34.5).put("longitude", -87.4));
+
+    Schema schema2 = object.guessSchema();
+
+    dataStore.upsertSchema("Post", schema1, event -> {
+      if (event.failed()) {
+        System.out.println("failed to upsert first schema. cause: " + event.cause());
+        latch.countDown();
+      } else {
+        System.out.println("succeed to upsert first schema. result: " + event.result());
+        dataStore.listSchemas(event2 -> {
+          if (event2.failed()) {
+            System.out.println("failed to list schema after first upsert. cause: " + event2.cause());
+            latch.countDown();
+          } else if (null == event2.result() || event2.result().size() < 1) {
+            System.out.println("list schema result is wrong: " + event2.result().size() + ", expected=1");
+            latch.countDown();
+          } else {
+            System.out.println("succeed to list schema after first upsert. result: " + event2.result());
+            dataStore.upsertSchema("Post", schema2, event1 -> {
+              if (event1.failed()) {
+                System.out.println("failed to upsert schema again. cause: " + event1.cause());
+                latch.countDown();
+              } else {
+                System.out.println("succeed to upsert schema again. result: " + event1.result());
+                dataStore.removeSchema("Post", event3 -> {
+                  if (event3.failed()) {
+                    System.out.println("failed to remove schema. cause: " + event3.cause());
+                    latch.countDown();
+                  } else {
+                    if (event3.result() == 1) {
+                      testSuccessed = true;
+                    } else {
+                      System.out.println("remove schema count is wrong: " + event3.result() + ", expected=1");
+                    }
+                    latch.countDown();
+                  }
+                });
+              }
+            });
+          }
+        });
+      }
+    });
+    latch.await();
+    assertTrue(testSuccessed);
   }
 }

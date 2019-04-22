@@ -20,6 +20,7 @@ public class ApplicationAuthenticator implements CustomValidator {
     if (StringUtils.isEmpty(masterKey) && !StringUtils.isEmpty(appKey) && appKey.endsWith(RequestParse.MASTERKEY_SUFFIX)) {
       masterKey = appKey.substring(0, appKey.length() - RequestParse.MASTERKEY_SUFFIX.length());
     }
+    logger.debug("request. appId=" + appId + ", appKey=" + appKey + ", masterkey=" + masterKey + ", sign=" + requestSign);
     if (StringUtils.isEmpty(appId) || (StringUtils.isEmpty(appKey) && StringUtils.isEmpty(masterKey) && StringUtils.isEmpty(requestSign))) {
       logger.warn("invalid request. appId=" + appId + ", appKey=" + appKey + ", masterkey=" + masterKey + ", sign=" + requestSign);
       throw new ValidationException("appKey authentication failed.");

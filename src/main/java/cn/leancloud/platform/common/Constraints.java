@@ -7,6 +7,7 @@ public class Constraints {
   public static final String FILE_CLASS = "_File";
   public static final String ROLE_CLASS = "_Role";
   public static final String FOLLOWSHIP_CLASS = "_Follow";
+  public static final String METADATA_CLASS = "_ClassMeta";
 
   public static final int SESSION_TOKEN_LENGTH = 24;
   public static final int SALT_LENGTH = 24;

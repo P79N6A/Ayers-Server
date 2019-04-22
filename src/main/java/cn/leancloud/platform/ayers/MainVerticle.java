@@ -1,6 +1,8 @@
 package cn.leancloud.platform.ayers;
 
+import cn.leancloud.platform.cache.InMemoryLRUCache;
 import cn.leancloud.platform.common.Configure;
+import cn.leancloud.platform.common.Constraints;
 import cn.leancloud.platform.persistence.DataStoreFactory;
 import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Future;
@@ -71,10 +73,18 @@ public class MainVerticle extends CommonVerticle {
                 .build(vertx);
       }
       configure.setDataStoreFactory(dataStoreFactory);
+      configure.setSchemaCache(new InMemoryLRUCache<>(Constraints.MAX_CLASS_COUNT));
 
       Future<String> httpVerticleDeployment = Future.future();
       vertx.deployVerticle(new RestServerVerticle(), httpVerticleDeployment);
       return httpVerticleDeployment;
+    }).compose(id1 -> {
+      logger.info("try to deploy "+ configure.datastoreVerticleCount() + " democles verticles.");
+      Future<String> democlesVerticleDeployment = Future.future();
+      vertx.deployVerticle(DemoclesVerticle.class,
+              new DeploymentOptions().setInstances(configure.datastoreVerticleCount()),
+              democlesVerticleDeployment);
+      return democlesVerticleDeployment;
     }).compose(id2 -> {
       logger.info("try to deploy "+ configure.datastoreVerticleCount() + " dataStore verticles.");
       Future<String> datastoreVerticleDeployment = Future.future();
