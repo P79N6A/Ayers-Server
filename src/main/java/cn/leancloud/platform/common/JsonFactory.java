@@ -4,8 +4,11 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
 import java.util.Arrays;
+import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.stream.Collector;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public final class JsonFactory {
@@ -96,5 +99,13 @@ public final class JsonFactory {
    */
   public static <T> Collector<T, JsonArray, JsonArray> toJsonArray() {
     return Collector.of(JsonArray::new, JsonArray::add, JsonArray::addAll);
+  }
+
+  public static Collector<Map.Entry, JsonObject, JsonObject> toJsonObject() {
+    return Collector.of(JsonObject::new, new BiConsumer<JsonObject, Map.Entry>() {
+      public void accept(JsonObject t, Map.Entry u) {
+        t.put((String) u.getKey(), u.getValue());
+      }
+    }, JsonObject::mergeIn);
   }
 }

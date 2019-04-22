@@ -12,11 +12,15 @@ import io.vertx.core.Handler;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.mongo.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.security.InvalidParameterException;
 import java.util.List;
+import java.util.stream.Collectors;
 
-public class MongoDBDataStore implements DataStore{
+public class MongoDBDataStore implements DataStore {
+  private static final Logger logger = LoggerFactory.getLogger(MongoDBDataStore.class);
   private MongoClient mongoClient;
   private static class InvalidParameterResult<T> implements AsyncResult<T> {
     private String errorMessage;
@@ -54,44 +58,43 @@ public class MongoDBDataStore implements DataStore{
       resultHandler.handle(new InvalidParameterResult("class or object is required."));
     } else {
       JsonObject encodedObject = Transformer.encode2BsonRequest(obj, Transformer.REQUEST_OP.CREATE);
+      final boolean fetchWhenSave = (null != options)? options.getBoolean(Constraints.INTERNAL_MSG_ATTR_FETCHWHENSAVE, false) : false;
 
-      this.mongoClient.insertWithOptions(clazz, encodedObject, WriteOption.ACKNOWLEDGED, res -> {
+      this.mongoClient.insertWithOptions(clazz, encodedObject, WriteOption.ACKNOWLEDGED, event -> {
         if (null != resultHandler) {
-          resultHandler.handle(new AsyncResult<JsonObject>() {
-            @Override
-            public JsonObject result() {
-              if (res.succeeded() && null != res.result()) {
-                return new JsonObject().put(Constraints.CLASS_ATTR_OBJECT_ID, res.result());
-              }
-              return null;
+          resultHandler.handle(event.map(objectId -> {
+            if (fetchWhenSave) {
+              return Transformer.decodeBsonObject(new JsonObject().mergeIn(encodedObject));
+            } else {
+              return new JsonObject().put(Constraints.CLASS_ATTR_OBJECT_ID, objectId);
             }
-
-            @Override
-            public Throwable cause() {
-              return res.cause();
-            }
-
-            @Override
-            public boolean succeeded() {
-              return res.succeeded();
-            }
-
-            @Override
-            public boolean failed() {
-              return res.failed();
-            }
-          });
+          }));
         }
       });
     }
     return this;
   }
 
+  private static Handler<AsyncResult<JsonObject>> wrapResultHandler(Handler<AsyncResult<JsonObject>> rawHandler) {
+    if (null == rawHandler) {
+      return null;
+    }
+    return event -> rawHandler.handle(event.map(obj -> Transformer.decodeBsonObject(obj)));
+  }
+
+  private static Handler<AsyncResult<List<JsonObject>>> wrapResultListHandler(Handler<AsyncResult<List<JsonObject>>> rawHandler) {
+    if (null == rawHandler) {
+      return null;
+    }
+    return event -> rawHandler.handle(event.map(obj -> obj.stream().map(Transformer::decodeBsonObject).collect(Collectors.toList())));
+  }
+
   public DataStore findOne(String clazz, JsonObject query, JsonObject fields, Handler<AsyncResult<JsonObject>> resultHandler) {
     if (StringUtils.isEmpty(clazz) || null == query) {
       resultHandler.handle(new InvalidParameterResult("class or query is required."));
     } else {
-      this.mongoClient.findOne(clazz, query, fields, resultHandler);
+      JsonObject condition = Transformer.encode2BsonRequest(query, Transformer.REQUEST_OP.QUERY);
+      this.mongoClient.findOne(clazz, condition, fields, wrapResultHandler(resultHandler));
     }
     return this;
   }
@@ -108,34 +111,12 @@ public class MongoDBDataStore implements DataStore{
       if (null != options) {
         mongoOptions = new UpdateOptions();
         mongoOptions.setUpsert(options.isUpsert());
+        mongoOptions.setReturningNewDocument(options.isReturnNewDocument());
       }
 
-      this.mongoClient.updateCollectionWithOptions(clazz, condition, encodedObject, mongoOptions, res ->{
+      this.mongoClient.updateCollectionWithOptions(clazz, condition, encodedObject, mongoOptions, event ->{
         if (null != resultHandler) {
-          resultHandler.handle(new AsyncResult<Long>() {
-            @Override
-            public Long result() {
-              if (null != res.result()) {
-                return res.result().getDocModified();
-              }
-              return 0l;
-            }
-
-            @Override
-            public Throwable cause() {
-              return res.cause();
-            }
-
-            @Override
-            public boolean succeeded() {
-              return res.succeeded();
-            }
-
-            @Override
-            public boolean failed() {
-              return res.failed();
-            }
-          });
+          resultHandler.handle(event.map(MongoClientUpdateResult::getDocModified));
         }
       });
     }
@@ -147,7 +128,7 @@ public class MongoDBDataStore implements DataStore{
       resultHandler.handle(new InvalidParameterResult("class or query is required."));
     } else {
       JsonObject condition = Transformer.encode2BsonRequest(query, Transformer.REQUEST_OP.QUERY);
-      this.mongoClient.find(clazz, condition, resultHandler);
+      this.mongoClient.find(clazz, condition, wrapResultListHandler(resultHandler));
     }
     return this;
   }
@@ -172,7 +153,7 @@ public class MongoDBDataStore implements DataStore{
         }
       }
 
-      this.mongoClient.findWithOptions(clazz, condition, options, resultHandler);
+      this.mongoClient.findWithOptions(clazz, condition, options, wrapResultListHandler(resultHandler));
     }
     return this;
   }
@@ -185,7 +166,7 @@ public class MongoDBDataStore implements DataStore{
       JsonObject condition = Transformer.encode2BsonRequest(query, Transformer.REQUEST_OP.QUERY);
       JsonObject updateObject = Transformer.encode2BsonRequest(update, Transformer.REQUEST_OP.UPDATE);
 
-      this.mongoClient.findOneAndUpdate(clazz, condition, updateObject, resultHandler);
+      this.mongoClient.findOneAndUpdate(clazz, condition, updateObject, wrapResultHandler(resultHandler));
     }
     return this;
   }
@@ -220,7 +201,8 @@ public class MongoDBDataStore implements DataStore{
         updateOptions.setReturningNewDocument(updateOption.isReturnNewDocument());
       }
 
-      this.mongoClient.findOneAndUpdateWithOptions(clazz, condition, updateObject, findOptions, updateOptions, resultHandler);
+      this.mongoClient.findOneAndUpdateWithOptions(clazz, condition, updateObject, findOptions, updateOptions,
+              wrapResultHandler(resultHandler));
     }
     return this;
   }
@@ -230,32 +212,9 @@ public class MongoDBDataStore implements DataStore{
       resultHandler.handle(new InvalidParameterResult("class or query is required."));
     } else {
       JsonObject condition = Transformer.encode2BsonRequest(query, Transformer.REQUEST_OP.QUERY);
-      this.mongoClient.removeDocuments(clazz, condition, res -> {
+      this.mongoClient.removeDocuments(clazz, condition, event -> {
         if (null != resultHandler) {
-          resultHandler.handle(new AsyncResult<Long>() {
-            @Override
-            public Long result() {
-              if (null != res.result()) {
-                return res.result().getRemovedCount();
-              }
-              return 0l;
-            }
-
-            @Override
-            public Throwable cause() {
-              return res.cause();
-            }
-
-            @Override
-            public boolean succeeded() {
-              return res.succeeded();
-            }
-
-            @Override
-            public boolean failed() {
-              return res.failed();
-            }
-          });
+          resultHandler.handle(event.map(MongoClientDeleteResult::getRemovedCount));
         }
       });
     }
@@ -270,30 +229,7 @@ public class MongoDBDataStore implements DataStore{
 
       this.mongoClient.removeDocumentsWithOptions(clazz, condition, null, res -> {
         if (null != resultHandler) {
-          resultHandler.handle(new AsyncResult<Long>() {
-            @Override
-            public Long result() {
-              if (null != res.result()) {
-                return res.result().getRemovedCount();
-              }
-              return 0l;
-            }
-
-            @Override
-            public Throwable cause() {
-              return res.cause();
-            }
-
-            @Override
-            public boolean succeeded() {
-              return res.succeeded();
-            }
-
-            @Override
-            public boolean failed() {
-              return res.failed();
-            }
-          });
+          resultHandler.handle(res.map(MongoClientDeleteResult::getRemovedCount));
         }
       });
     }
@@ -339,6 +275,7 @@ public class MongoDBDataStore implements DataStore{
     }
     return this;
   }
+
   public DataStore createIndexWithOptions(String clazz, JsonObject keys, IndexOption options,
                                           Handler<AsyncResult<Void>> resultHandler) {
     if (StringUtils.isEmpty(clazz) || null == keys || keys.size() < 1) {
@@ -352,6 +289,7 @@ public class MongoDBDataStore implements DataStore{
     }
     return this;
   }
+
   public DataStore listIndexes(String clazz, Handler<AsyncResult<JsonArray>> resultHandler) {
     if (StringUtils.isEmpty(clazz)) {
       resultHandler.handle(new InvalidParameterResult<>("class is required."));
@@ -364,9 +302,11 @@ public class MongoDBDataStore implements DataStore{
   public DataStore findSchema(String clazz, Handler<AsyncResult<JsonObject>> resultHandler) {
     return this;
   }
+
   public DataStore upsertSchema(String clazz, Schema schema, Handler<AsyncResult<JsonObject>> resultHandler) {
     return this;
   }
+
   public DataStore listSchemas(Handler<AsyncResult<JsonArray>> resultHandler) {
     return this;
   }

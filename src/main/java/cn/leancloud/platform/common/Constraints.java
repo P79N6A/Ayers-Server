@@ -30,6 +30,7 @@ public class Constraints {
   public static final String INTERNAL_MSG_ATTR_OBJECT_ID = "objectId";
   public static final String INTERNAL_MSG_ATTR_PARAM = "param";
   public static final String INTERNAL_MSG_HEADER_OP = "operation";
+  public static final String INTERNAL_MSG_ATTR_FETCHWHENSAVE = "fetchWhenSave";
 
   public static final String CLASS_ATTR_OBJECT_ID = "objectId";
   public static final String CLASS_ATTR_CREATED_TS = "createdAt";

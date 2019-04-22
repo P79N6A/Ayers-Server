@@ -42,6 +42,20 @@ public class TransformerTest extends TestCase {
     assertTrue(newObj.getJsonObject("$push").getJsonObject("users").getJsonArray("$each").size() == 1);
   }
 
+  public void testEncodeJsonQuery() throws Exception {
+    String param = "{ \"objectId\" : \"5cb4458ea8cb3d591a16308e\"," +
+            " \"createdAt\" : \"2019-04-15T08:49:18.633Z\"," +
+            " \"roles\" : { \"$in\": [ { \"__type\" : \"Pointer\", \"className\" : \"_Role\", \"objectId\" : \"55a48351e4b05001a774a89f\" } ] }," +
+            " \"name\" : \"CLevel\"," +
+            " \"ACL\" : { \"*\" : { \"read\" : true } }," +
+            " \"users\" : { \"$nin\": [ { \"__type\" : \"Pointer\", \"className\" : \"_User\", \"objectId\" : \"55a47496e4b05001a7732c5f\" } ] }," +
+            " \"updatedAt\" : \"2019-04-15T08:49:18.633Z\" }";
+    JsonObject paramObj = new JsonObject(param);
+    JsonObject newObj = Transformer.encode2BsonRequest(paramObj, Transformer.REQUEST_OP.QUERY);
+    System.out.println(newObj.toString());
+    assertTrue(newObj.getString("_id").equals("5cb4458ea8cb3d591a16308e"));
+  }
+
   public void testConvertPointerArray2BsonCreate() throws Exception {
     String param = "{\"birthday\":{\"iso\":\"2019-04-12T07:04:35.016Z\",\"__type\":\"Date\"},\"name\":\"Automatic Tester\",\"ACL\":{\"*\":{\"read\":true,\"write\":true}},\"favorite\":[{\"__type\":\"Pointer\",\"className\":\"Course\",\"objectId\":\"5cb03965c3a4593f60745a1a\"},{\"__type\":\"Pointer\",\"className\":\"Course\",\"objectId\":\"5cb03965c3a4593f60745a1a\"},{\"__type\":\"Pointer\",\"className\":\"Course\",\"objectId\":\"5cb03965c3a4593f60745a1a\"}],\"age\":19}";
     JsonObject paramObj = new JsonObject(param);
@@ -107,6 +121,14 @@ public class TransformerTest extends TestCase {
     JsonObject paramObj = new JsonObject(param);
     JsonObject newObj = Transformer.decodeBsonObject(paramObj);
     System.out.println(newObj.toString());
+  }
+
+  public void testDecodeBsonObject() throws Exception {
+    String param = "{\"_id\":\"thisisobjectId\", \"birthday\":{\"$date\" : \"2019-04-12T10:34:52.274Z\"},\"name\":\"Automatic Tester\",\"ACL\":{\"*\":{\"read\":true,\"write\":true}},\"favorite\":{\"$ref\":\"Course\",\"$id\":\"5cb03965c3a4593f60745a1a\"},\"age\":19}";
+    JsonObject paramObj = new JsonObject(param);
+    JsonObject newObj = Transformer.decodeBsonObject(paramObj);
+    System.out.println(newObj.toString());
+    assertTrue(newObj.getString("objectId").equals("thisisobjectId"));
   }
 
   public void testConvertRefArray2Rest() throws Exception {

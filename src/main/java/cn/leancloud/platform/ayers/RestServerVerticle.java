@@ -230,6 +230,7 @@ public class RestServerVerticle extends CommonVerticle {
     String objectId = parseRequestObjectId(context);
     JsonObject body = parseRequestBody(context);
     HttpMethod httpMethod = context.request().method();
+    String fetchWhenSave = context.request().getParam("fetchWhenSave");
     String operation = "";
     if (HttpMethod.GET.equals(httpMethod)) {
       operation = Constraints.OP_OBJECT_QUERY;
@@ -239,9 +240,10 @@ public class RestServerVerticle extends CommonVerticle {
       operation = Constraints.OP_OBJECT_UPSERT;
     }
 
-    logger.debug("curl object. clazz=" + clazz + ", objectId=" + objectId + ", method=" + httpMethod + ", param=" + body);
+    logger.debug("curl object. clazz=" + clazz + ", objectId=" + objectId + ", method=" + httpMethod
+            + ", param=" + body + ", fetchWhenSave=" + fetchWhenSave);
 
-    sendDataOperationEx(context, clazz, objectId, operation, body, handler);
+    sendDataOperationWithOption(context, clazz, objectId, operation, body, "true".equalsIgnoreCase(fetchWhenSave), handler);
   }
 
   private static BatchRequest parseBatchRequest(Object req) {
@@ -329,9 +331,10 @@ public class RestServerVerticle extends CommonVerticle {
     crudCommonDataEx(clazz, context, null);
   }
 
-  private void sendDataOperationEx(RoutingContext context, String clazz, String objectId, String operation,
-                                   JsonObject param, final Handler<JsonObject> handler) {
+  private void sendDataOperationWithOption(RoutingContext context, String clazz, String objectId, String operation,
+                                           JsonObject param, boolean fetchWhenSave, final Handler<JsonObject> handler) {
     JsonObject request = new JsonObject();
+    request.put(Constraints.INTERNAL_MSG_ATTR_FETCHWHENSAVE, fetchWhenSave);
     if (!StringUtils.isEmpty(clazz)) {
       request.put(Constraints.INTERNAL_MSG_ATTR_CLASS, clazz);
     }
@@ -360,6 +363,7 @@ public class RestServerVerticle extends CommonVerticle {
         if (null != handler) {
           handler.handle(result);
         }
+        logger.debug("rest server response: " + result);
         if (Constraints.OP_OBJECT_UPSERT.equalsIgnoreCase(operation) && StringUtils.isEmpty(objectId)) {
           //Status: 201 Created
           //Location: https://heqfq0sw.api.lncld.net/1.1/classes/Post/<objectId>
@@ -372,6 +376,12 @@ public class RestServerVerticle extends CommonVerticle {
       }
     });
   }
+
+  private void sendDataOperationEx(RoutingContext context, String clazz, String objectId, String operation,
+                                   JsonObject param, final Handler<JsonObject> handler) {
+    sendDataOperationWithOption(context, clazz, objectId, operation, param, false, handler);
+  }
+
   private <T> void sendDataOperationWithHandler(RoutingContext context, String clazz, String objectId, String operation,
                                                 JsonObject param, Handler<AsyncResult<Message<T>>> replyHandler) {
     JsonObject request = new JsonObject();

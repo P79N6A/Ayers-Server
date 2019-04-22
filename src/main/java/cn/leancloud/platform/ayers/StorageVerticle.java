@@ -48,6 +48,7 @@ public class StorageVerticle extends CommonVerticle {
     String clazz = body.getString(Constraints.INTERNAL_MSG_ATTR_CLASS, "");
     String objectId = body.getString(Constraints.INTERNAL_MSG_ATTR_OBJECT_ID);
     JsonObject param = body.getJsonObject(Constraints.INTERNAL_MSG_ATTR_PARAM, new JsonObject());
+    boolean fetchWhenSave = body.getBoolean(Constraints.INTERNAL_MSG_ATTR_FETCHWHENSAVE, false);
 
     String operation = message.headers().get(Constraints.INTERNAL_MSG_HEADER_OP);
 
@@ -99,13 +100,17 @@ public class StorageVerticle extends CommonVerticle {
 
         if (isCreateOp) {
           logger.debug("doc=== " + param.toString());
-          dataStore.insertWithOptions(clazz, param, null, res -> {
+          JsonObject option = new JsonObject().put(Constraints.INTERNAL_MSG_ATTR_FETCHWHENSAVE, fetchWhenSave);
+          dataStore.insertWithOptions(clazz, param, option, res -> {
             dataStore.close();
             if (res.failed()) {
               reportDatabaseError(message, res.cause());
             } else {
               JsonObject result = res.result();
-              result.put("createdAt", now.toString());
+              if (!fetchWhenSave) {
+                result.put("createdAt", now.toString());
+              }
+              logger.debug("storage verticle response: " + result);
               message.reply(result);
             }
           });
@@ -115,22 +120,38 @@ public class StorageVerticle extends CommonVerticle {
           logger.debug("query= " + query.toString());
           // UpdateOptions option = new UpdateOptions().setUpsert(false);
           DataStore.UpdateOption option = new DataStore.UpdateOption();
-          option.setUpsert(false);;
-          dataStore.updateWithOptions(clazz, query, param, option, res1 -> {
-            dataStore.close();
-            if (res1.failed()) {
-              reportDatabaseError(message, res1.cause());
-            } else {
-              if (res1.result() > 0) {
-                JsonObject result = new JsonObject().put("objectId", objectId);
-                result.put("updatedAt", now.toString());
-                message.reply(result);
+          option.setUpsert(false);
+          option.setReturnNewDocument(fetchWhenSave);
+          if (fetchWhenSave) {
+            DataStore.QueryOption queryOption = new DataStore.QueryOption();
+            dataStore.findOneAndUpdateWithOptions(clazz, query, param, queryOption, option, res -> {
+              dataStore.close();
+              if (res.failed()) {
+                reportDatabaseError(message, res.cause());
               } else {
-                reportUserError(message, 404, "object not found");
+                if (null != res.result()) {
+                  message.reply(res.result());
+                } else {
+                  reportUserError(message, 404, "object not found");
+                }
               }
-            }
-
-          });
+            });
+          } else {
+            dataStore.updateWithOptions(clazz, query, param, option, res1 -> {
+              dataStore.close();
+              if (res1.failed()) {
+                reportDatabaseError(message, res1.cause());
+              } else {
+                if (res1.result() > 0) {
+                  JsonObject result = new JsonObject().put("objectId", objectId);
+                  result.put("updatedAt", now.toString());
+                  message.reply(result);
+                } else {
+                  reportUserError(message, 404, "object not found");
+                }
+              }
+            });
+          }
         }
         break;
       case Constraints.OP_OBJECT_DELETE:

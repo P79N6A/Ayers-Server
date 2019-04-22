@@ -47,7 +47,7 @@ public class Transformer {
 
   // "location":{"__type":"GeoPoint","latitude":45.9,"longitude":76.3}
   //    to {"type":"Point","coordinates":[124.6682391,-17.8978304]}
-  private static JsonObject encode2BsonUnit(JsonObject o) {
+  private static JsonObject convertBuiltinTypeUnit(JsonObject o) {
     if (null == o) {
       return o;
     }
@@ -77,19 +77,22 @@ public class Transformer {
     if (null == o) {
       return o;
     }
-    JsonObject tmp = encode2BsonUnit(o);
+    JsonObject tmp = convertBuiltinTypeUnit(o);
     if (null != tmp) {
       return tmp;
     }
-    JsonObject resultObject = new JsonObject();
-    o.stream().forEach(entry -> {
+    JsonObject resultObject = o.stream().map(entry -> {
               Map.Entry<String, Object> result = entry;
               String key = entry.getKey();
               Object value = entry.getValue();
               Object newValue = value;
-              if (null == value) {
+              if ("objectId".equals(key)) {
+                result = new AbstractMap.SimpleEntry<>("_id", newValue);
+              } else if (null == value) {
+                // do nothing
               } else if (value instanceof JsonObject) {
                 newValue = encode2BsonObject((JsonObject) value, isCreateOp);
+                result = new AbstractMap.SimpleEntry<>(key, newValue);
               } else if (value instanceof JsonArray) {
                 newValue = ((JsonArray) value).stream()
                         .map(v ->{
@@ -98,9 +101,10 @@ public class Transformer {
                           else
                             return v;
                         }).collect(JsonFactory.toJsonArray());
+                result = new AbstractMap.SimpleEntry<>(key, newValue);
               }
-              resultObject.put(key, newValue);
-            });
+              return result;
+            }).collect(JsonFactory.toJsonObject());
     return resultObject;
   }
 
@@ -254,7 +258,7 @@ public class Transformer {
       return tmp;
     }
 
-    Map<String, Object> all = o.stream().map(entry  -> {
+    JsonObject jsonResult = o.stream().map(entry  -> {
       String key = entry.getKey();
       Object value = entry.getValue();
       Map.Entry<String, Object> result = entry;
@@ -280,9 +284,9 @@ public class Transformer {
         result = new AbstractMap.SimpleEntry<>(key, newValue);
       }
       return result;
-    }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }).collect(JsonFactory.toJsonObject());
 
-    return new JsonObject(all);
+    return jsonResult;
   }
 
   public static JsonObject parseSortParam(String order) {
