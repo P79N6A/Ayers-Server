@@ -15,18 +15,18 @@ public class BsonTransformer {
   private static final String[] ALWAYS_PROJECT_KEYS = {"_id", "createdAt", "updatedAt", "ACL"};
   public static final String CLASS_ATTR_MONGO_ID = "_id";
 
-  private static final String REST_OP_REMOVE_RELATION = "removerelation";
-  private static final String REST_OP_ADD_RELATION = "addrelation";
-  private static final String REST_OP_INCREMENT = "increment";
-  private static final String REST_OP_DECREMENT = "decrement";
-  private static final String REST_OP_BITAND = "bitand";
-  private static final String REST_OP_BITOR = "bitor";
-  private static final String REST_OP_BITXOR = "bitxor";
-  private static final String REST_OP_ADD = "add";
-  private static final String REST_OP_DELETE = "delete";
-  private static final String REST_OP_ADD_UNIQUE = "addunique";
-  private static final String REST_OP_REMOVE = "remove";
-  private static final String REST_OP_SETONINSERT = "setoninsert";
+  public static final String REST_OP_REMOVE_RELATION = "removerelation";
+  public static final String REST_OP_ADD_RELATION = "addrelation";
+  public static final String REST_OP_INCREMENT = "increment";
+  public static final String REST_OP_DECREMENT = "decrement";
+  public static final String REST_OP_BITAND = "bitand";
+  public static final String REST_OP_BITOR = "bitor";
+  public static final String REST_OP_BITXOR = "bitxor";
+  public static final String REST_OP_ADD = "add";
+  public static final String REST_OP_DELETE = "delete";
+  public static final String REST_OP_ADD_UNIQUE = "addunique";
+  public static final String REST_OP_REMOVE = "remove";
+  public static final String REST_OP_SETONINSERT = "setoninsert";
 
   private static final Map<String, String> bsonModifierMap = new HashMap<>();
   static {

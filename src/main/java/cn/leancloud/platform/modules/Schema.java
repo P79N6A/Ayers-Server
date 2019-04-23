@@ -19,16 +19,7 @@ public class Schema extends JsonObject {
     }
   }
 
-  /**
-   *
-   * @param other
-   * @return 1  -
-   *         0  -
-   *         -1 -
-   */
-  public CompatResult compatiableWith(Schema other) {
-    // TODO: maybe we need to process update operations indicated by __OP
-
+  public CompatResult compatiableWith(Schema other) throws ConsistencyViolationException {
     if (null == other) {
       return OVER_MATCHED;
     }
@@ -43,11 +34,17 @@ public class Schema extends JsonObject {
       if (null != value && otherValue != null) {
         String myType = value.getString("type");
         String otherType = otherValue.getString("type");
-        if (!myType.equals(otherType)) {
-          return NOT_MATCHED;
+        if (Object.class.getName().equalsIgnoreCase(otherType)) {
+          // pass all Object type
+          continue;
+        } else if (!myType.equals(otherType)) {
+          throw new ConsistencyViolationException("data consistency violated. key:" + key
+                  + ", expectedType:" + otherType + ", actualType:" + myType);
         } else if (LeanPointer.class.getName().equals(myType)) {
           if (!value.getString("reference", "").equals(otherValue.getString("reference"))) {
-            return NOT_MATCHED;
+            throw new ConsistencyViolationException("data consisitency violated. key:" + key
+                    + ", expectedPoint2Type:" + otherValue.getString("reference")
+                    + ", actualPoint2Type:" + value.getString("reference"));
           }
         } else if (JsonObject.class.getName().equals(myType)) {
           Schema mySchema = new Schema(value.getJsonObject("schema"));

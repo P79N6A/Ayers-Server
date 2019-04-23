@@ -506,6 +506,7 @@ public class RestServerVerticle extends CommonVerticle {
     router.delete("/1.1/roles/:objectId").handler(this::crudRole);
 
     router.post("/1.1/batch").handler(this::batchWrite);
+    router.post("/1.1/batch/save").handler(this::batchWrite);
 
     router.optionsWithRegex("\\/1\\.1\\/.*").handler(routingContext -> {
       String origin = routingContext.request().getHeader("Origin");

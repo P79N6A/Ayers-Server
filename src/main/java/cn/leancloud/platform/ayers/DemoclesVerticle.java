@@ -53,7 +53,7 @@ public class DemoclesVerticle extends CommonVerticle {
           Schema.CompatResult compatResult = inputSchema.compatiableWith(cachedSchema);
           logger.debug("compatiable test. input=" + inputSchema + ", rule=" + cachedSchema + ", result=" + compatResult);
           if (compatResult == Schema.CompatResult.NOT_MATCHED) {
-            message.fail(INVALID_PARAMETER.getCode(), "violation data consistency.");
+            message.fail(INVALID_PARAMETER.getCode(), "data consistency violated.");
           } else {
             if (compatResult == Schema.CompatResult.OVER_MATCHED) {
               saveSchema(clazz, inputSchema);

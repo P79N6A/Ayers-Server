@@ -1,10 +1,12 @@
 package cn.leancloud.platform.modules;
 
+import cn.leancloud.platform.common.BsonTransformer;
 import cn.leancloud.platform.utils.JsonFactory;
 import cn.leancloud.platform.utils.StringUtils;
 import cn.leancloud.platform.modules.type.LeanDate;
 import cn.leancloud.platform.modules.type.LeanGeoPoint;
 import cn.leancloud.platform.modules.type.LeanPointer;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
 import java.util.AbstractMap;
@@ -98,21 +100,42 @@ public class LeanObject extends JsonObject{
         } else if (DATA_TYPE_GEOPOINTER.equalsIgnoreCase(type)) {
           return new JsonObject().put("type", LeanGeoPoint.class.getName());
         }
+      } else if (newValue.containsKey(ATTR_NAME_OP)) {
+        String operation = newValue.getString(ATTR_NAME_OP);
+        switch (operation.toLowerCase()) {
+          case BsonTransformer.REST_OP_ADD:
+          case BsonTransformer.REST_OP_ADD_RELATION:
+          case BsonTransformer.REST_OP_ADD_UNIQUE:
+          case BsonTransformer.REST_OP_REMOVE_RELATION:
+          case BsonTransformer.REST_OP_REMOVE:
+            return new JsonObject().put("type", JsonArray.class.getName());
+          case BsonTransformer.REST_OP_BITAND:
+          case BsonTransformer.REST_OP_BITOR:
+          case BsonTransformer.REST_OP_BITXOR:
+          case BsonTransformer.REST_OP_INCREMENT:
+          case BsonTransformer.REST_OP_DECREMENT:
+            return new JsonObject().put("type", Number.class.getName());
+          case BsonTransformer.REST_OP_DELETE:
+            return null;
+          default:
+            break;
+        }
       }
       JsonObject recurSchema = newValue.stream()
               .map(entry -> new AbstractMap.SimpleEntry(entry.getKey(), guessValueType(entry.getValue())))
+              .filter(simpleEntry -> simpleEntry.getValue() != null)
               .collect(JsonFactory.toJsonObject());
       return new JsonObject().put("type", JsonObject.class.getName()).put("schema", recurSchema);
     }
     return new JsonObject().put("type", value.getClass().getName());
   }
 
-  public Schema guessSchema() throws ConsistencyViolationException {
+  public Schema guessSchema() {
     JsonObject result = stream().filter(entry -> null != entry.getValue()).map(entry -> {
       Object value = entry.getValue();
       JsonObject valueType = guessValueType(value);
       return new AbstractMap.SimpleEntry(entry.getKey(), valueType);
-    }).collect(JsonFactory.toJsonObject());
+    }).filter(simpleEntry -> simpleEntry.getValue() != null).collect(JsonFactory.toJsonObject());
     return new Schema(result);
   }
 }
