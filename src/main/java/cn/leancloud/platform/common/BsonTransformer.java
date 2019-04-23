@@ -49,7 +49,7 @@ public class BsonTransformer {
       return o;
     }
     JsonObject result = null;
-    if (o.containsKey(LeanObject.ATTR_NAME_TYPE)) {
+    if (o.containsKey(LeanObject.ATTR_NAME_TYPE) && o.getValue(LeanObject.ATTR_NAME_TYPE) instanceof String) {
       String type = o.getString(LeanObject.ATTR_NAME_TYPE);
       if (LeanObject.DATA_TYPE_DATE.equalsIgnoreCase(type)) {
         String isoString = o.getString(LeanObject.ATTR_NAME_ISO);

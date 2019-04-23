@@ -194,7 +194,7 @@ public class RestServerVerticle extends CommonVerticle {
   private void crudSingleFile(RoutingContext context) {
     crudCommonData(Constraints.FILE_CLASS, context);
   }
-
+x
   private void crudRole(RoutingContext context) {
     JsonObject body = parseRequestBody(context);
     HttpMethod httpMethod = context.request().method();
@@ -313,11 +313,18 @@ public class RestServerVerticle extends CommonVerticle {
           operation = OP_OBJECT_UPSERT;
         }
         DeliveryOptions options = new DeliveryOptions().addHeader(INTERNAL_MSG_HEADER_OP, operation);
-        vertx.eventBus().send(Configure.MAILADDRESS_DATASTORE_QUEUE, request, options, res -> {
-          if (res.failed()) {
-            tmp.complete(new JsonObject().put("error", new JsonObject().put("code", ErrorCodes.DATABASE_ERROR.getCode()).put("error", res.cause().getMessage())));
+        vertx.eventBus().send(Configure.MAILADDRESS_DEMOCLES_QUEUE, request, options, response -> {
+          if (response.failed()) {
+            tmp.complete(new JsonObject().put("error",
+                    new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("error", response.cause().getMessage())));
           } else {
-            tmp.complete(new JsonObject().put("success", (JsonObject) res.result().body()));
+            vertx.eventBus().send(Configure.MAILADDRESS_DATASTORE_QUEUE, request, options, res -> {
+              if (res.failed()) {
+                tmp.complete(new JsonObject().put("error", new JsonObject().put("code", ErrorCodes.DATABASE_ERROR.getCode()).put("error", res.cause().getMessage())));
+              } else {
+                tmp.complete(new JsonObject().put("success", (JsonObject) res.result().body()));
+              }
+            });
           }
         });
       }
