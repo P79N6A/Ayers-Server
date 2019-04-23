@@ -1,5 +1,6 @@
 package cn.leancloud.platform.modules;
 
+import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.json.JsonObject;
 import junit.framework.TestCase;
 
@@ -44,7 +45,12 @@ public class LeanObjectTests extends TestCase {
     object2.put("commentCounts", 199);
     object2.put("dislike", -199);
     object2.put("spam", "false");
-    assertTrue(CompatResult.NOT_MATCHED == object.guessSchema().compatiableWith(object2.guessSchema()));
+    try {
+      object.guessSchema().compatiableWith(object2.guessSchema());
+      fail();
+    } catch (ConsistencyViolationException ex) {
+      ;
+    }
   }
 
   public void testSchemaCheckPointer() throws Exception {
@@ -80,7 +86,80 @@ public class LeanObjectTests extends TestCase {
     object2.put("dislike", -199);
     object2.put("author", new JsonObject().put("__type", "Pointer").put("className", "Person").put("objectId", "dhfiafheiire"));
     System.out.println(object2.guessSchema());
-    CompatResult result = object.guessSchema().compatiableWith(object2.guessSchema());
-    assertTrue(CompatResult.NOT_MATCHED == result);
+    try {
+      CompatResult result = object.guessSchema().compatiableWith(object2.guessSchema());
+      fail();
+    } catch (ConsistencyViolationException ex) {
+
+    }
+  }
+
+  public void testSchemaFindGeoPointWithNone() throws Exception {
+    LeanObject object = new LeanObject("Post");
+    object.put("title", "LeanCloud");
+    object.put("publishTime", Instant.now());
+    object.put("commentCounts", 199);
+    object.put("dislike", -199);
+    object.put("spam", false);
+    object.put("likes", Arrays.asList("One", "Two", "Three"));
+    object.put("author", new JsonObject().put("__type", "Pointer").put("className", "_User").put("objectId", "dhfiafheiire"));
+    Schema schema = object.guessSchema();
+    System.out.println(schema);
+    String geoPointAttrPath = schema.findGeoPointAttr();
+    assertTrue(StringUtils.isEmpty(geoPointAttrPath));
+  }
+
+  public void testSchemaFindGeoPointWithFirstLayer() throws Exception {
+    LeanObject object = new LeanObject("Post");
+    object.put("title", "LeanCloud");
+    object.put("publishTime", Instant.now());
+    object.put("commentCounts", 199);
+    object.put("dislike", -199);
+    object.put("spam", false);
+    object.put("likes", Arrays.asList("One", "Two", "Three"));
+    object.put("author", new JsonObject().put("__type", "Pointer").put("className", "_User").put("objectId", "dhfiafheiire"));
+    object.put("location", new JsonObject().put("__type", "GeoPoint").put("latitude", 34.5).put("longitude", -87.4));
+    Schema schema = object.guessSchema();
+    System.out.println(schema);
+    String geoPointAttrPath = schema.findGeoPointAttr();
+    assertTrue(geoPointAttrPath.equals("location"));
+  }
+
+  public void testSchemaFindGeoPointWithSubLayer() throws Exception {
+    JsonObject location = new JsonObject().put("location",
+            new JsonObject().put("__type", "GeoPoint").put("latitude", 34.5).put("longitude", -87.4));
+    LeanObject object = new LeanObject("Post");
+    object.put("title", "LeanCloud");
+    object.put("publishTime", Instant.now());
+    object.put("commentCounts", 199);
+    object.put("dislike", -199);
+    object.put("spam", false);
+    object.put("likes", Arrays.asList("One", "Two", "Three"));
+    object.put("author", new JsonObject().put("__type", "Pointer").put("className", "_User").put("objectId", "dhfiafheiire"));
+    object.put("hometown", location);
+    Schema schema = object.guessSchema();
+    System.out.println(schema);
+    String geoPointAttrPath = schema.findGeoPointAttr();
+    System.out.println(geoPointAttrPath);
+    assertTrue(geoPointAttrPath.equals("hometown.location"));
+  }
+
+  public void testSchemaFindGeoPointWithSubLayer2() throws Exception {
+    JsonObject location = new JsonObject().put("location",
+            new JsonObject().put("__type", "GeoPoint").put("latitude", 34.5).put("longitude", -87.4));
+    LeanObject object = new LeanObject("Post");
+    object.put("title", "LeanCloud");
+    object.put("publishTime", Instant.now());
+    object.put("commentCounts", 199);
+    object.put("dislike", -199);
+    object.put("spam", false);
+    object.put("likes", Arrays.asList("One", "Two", "Three"));
+    object.put("author", new JsonObject().put("__type", "Pointer").put("className", "_User").put("objectId", "dhfiafheiire"));
+    object.put("hometown", new JsonObject().put("province", "beijing").put("geo", location));
+    Schema schema = object.guessSchema();
+    System.out.println(schema);
+    String geoPointAttrPath = schema.findGeoPointAttr();
+    System.out.println(geoPointAttrPath);
+    assertTrue(geoPointAttrPath.equals("hometown.geo.location"));
   }
 }

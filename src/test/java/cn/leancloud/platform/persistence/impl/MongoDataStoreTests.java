@@ -3,7 +3,9 @@ package cn.leancloud.platform.persistence.impl;
 import cn.leancloud.platform.modules.LeanObject;
 import cn.leancloud.platform.modules.Schema;
 import cn.leancloud.platform.persistence.DataStore;
+import cn.leancloud.platform.utils.JsonFactory;
 import io.vertx.core.*;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import junit.framework.TestCase;
 
@@ -74,7 +76,7 @@ public class MongoDataStoreTests extends TestCase {
   }
 
   public void testUpdateWithOptions() throws Exception {
-    JsonObject query = new JsonObject().put("_id", "5cbc637de7573f0226106226");
+    JsonObject query = new JsonObject().put("objectId", "5cbc637de7573f0226106226");
     JsonObject update = new JsonObject().put("updatedAt", Instant.now()).put("source", "modified by unit test");
     DataStore.QueryOption option = new DataStore.QueryOption();
     option.setLimit(100);
@@ -144,6 +146,69 @@ public class MongoDataStoreTests extends TestCase {
             });
           }
         });
+      }
+    });
+    latch.await();
+    assertTrue(testSuccessed);
+  }
+
+  public void testListEmptyIndex() throws Exception {
+    dataStore.listIndices("test", res -> {
+      if (res.succeeded()) {
+        System.out.println(res.result().toString());
+        JsonArray result = res.result().stream().filter(json -> !"_id_".equals(((JsonObject)json).getString("name")))
+                .collect(JsonFactory.toJsonArray());
+        System.out.println("net result: " + result.toString());
+        testSuccessed = true;
+      }
+      latch.countDown();
+    });
+    latch.await();
+    assertTrue(testSuccessed);
+  }
+
+  public void testIndexCRUD() throws Exception {
+    LeanObject object = new LeanObject("Post");
+    object.put("title", "LeanCloud");
+    object.put("publishTime", Instant.now());
+    object.put("commentCounts", 199);
+    object.put("dislike", -199);
+    object.put("spam", false);
+    object.put("likes", Arrays.asList("One", "Two", "Three"));
+    object.put("location", new JsonObject().put("__type", "GeoPoint").put("latitude", 34.5).put("longitude", -87.4));
+    dataStore.insertWithOptions("Post", object, new DataStore.InsertOption().setReturnNewDocument(true), res -> {
+      if (res.failed()) {
+        System.out.println("failed to insert document. cause: " + res.cause());
+        latch.countDown();
+      } else {
+        DataStore.IndexOption indexOption = new DataStore.IndexOption();
+        indexOption.setName("location");
+        indexOption.setSparse(true);
+        dataStore.createIndexWithOptions("Post", new JsonObject().put("localtion", "2dsphere"), indexOption,
+                res2 -> {
+          if (res2.failed()) {
+            System.out.println("failed to create index. cause: " + res2.cause());
+            latch.countDown();
+          } else {
+            dataStore.listIndices("Post", res3 -> {
+              if (res3.failed()) {
+                System.out.println("failed to list indexes document. cause: " + res3.cause());
+                latch.countDown();
+              } else {
+                testSuccessed = res3.result().size() > 0;
+                System.out.println("index results: " + res3.result().toString());
+                dataStore.dropIndex("Post", "location", res4 -> {
+                  if (res4.failed()) {
+                    System.out.println("failed to drop indexes document. cause: " + res4.cause());
+                  } else {
+                    testSuccessed &= true;
+                  }
+                  latch.countDown();
+                });
+              }
+            });
+          }
+                });
       }
     });
     latch.await();
