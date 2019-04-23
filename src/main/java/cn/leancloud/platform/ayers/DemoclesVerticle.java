@@ -60,7 +60,7 @@ public class DemoclesVerticle extends CommonVerticle {
   public void onMessage(Message<JsonObject> message) {
     JsonObject body = message.body();
     String clazz = body.getString(INTERNAL_MSG_ATTR_CLASS, "");
-    JsonObject param = body.getJsonObject(INTERNAL_MSG_ATTR_PARAM, new JsonObject());
+    JsonObject param = body.getJsonObject(INTERNAL_MSG_ATTR_PARAM);
     if (null == param || StringUtils.isEmpty(clazz)) {
       logger.warn("clazz or param json is empty, ignore schema check...");
       message.reply("ok");
@@ -88,6 +88,7 @@ public class DemoclesVerticle extends CommonVerticle {
           message.reply("ok");
         }
       } catch (ConsistencyViolationException ex) {
+        logger.warn("failed to parse object schema. cause: " + ex.getMessage());
         message.fail(INVALID_PARAMETER.getCode(), ex.getMessage());
       }
     }

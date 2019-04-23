@@ -194,7 +194,7 @@ public class RestServerVerticle extends CommonVerticle {
   private void crudSingleFile(RoutingContext context) {
     crudCommonData(Constraints.FILE_CLASS, context);
   }
-x
+
   private void crudRole(RoutingContext context) {
     JsonObject body = parseRequestBody(context);
     HttpMethod httpMethod = context.request().method();
@@ -359,7 +359,7 @@ x
             badRequest(context, responseJson);
           }
         } else {
-          context.fail(reply.cause());
+          internalServerError(context, ErrorCodes.DATABASE_ERROR.toJson());
         }
       } else {
         JsonObject result = (JsonObject) reply.result().body();
@@ -400,6 +400,7 @@ x
           int failureCode = ((ReplyException) response.cause()).failureCode();
           JsonObject responseJson = new JsonObject().put("code", failureCode).put("error", response.cause().getMessage());
           badRequest(context, responseJson);
+          return;
         } else {
           directlySendEvent(context, request, objectId, operation, options, handler);
         }
@@ -524,15 +525,6 @@ x
     router.post("/1.1/batch").handler(this::batchWrite);
     router.post("/1.1/batch/save").handler(this::batchWrite);
 
-//    router.optionsWithRegex("\\/1\\.1\\/.*").handler(routingContext -> {
-//      String origin = routingContext.request().getHeader("Origin");
-//      JsonObject responseHeader = new JsonObject().put("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
-//      responseHeader.put("Access-Control-Allow-Origin", StringUtils.isEmpty(origin)? "*" : origin);
-//      responseHeader.put("Access-Control-Allow-Headers", RequestParse.ALLOWED_HEADERS_STRING);
-//      responseHeader.put("Access-Control-Allow-Credentials", "true");
-//      response(routingContext, HttpStatus.SC_OK, responseHeader, "");
-//    });
-
     router.errorHandler(400, routingContext -> {
       if (routingContext.failure() instanceof ValidationException) {
         // Something went wrong during validation!
@@ -542,11 +534,11 @@ x
         // Unknown 400 failure happened
       }
     });
-    router.errorHandler(HttpStatus.SC_INTERNAL_SERVER_ERROR, routingContext -> {
-      if (routingContext.failed()) {
-        logger.warn("internal error. cause: " + routingContext.failure().getMessage());
-      }
-    });
+//    router.errorHandler(HttpStatus.SC_INTERNAL_SERVER_ERROR, routingContext -> {
+//      if (routingContext.failed()) {
+//        logger.warn("internal error. cause: " + routingContext.failure().getMessage());
+//      }
+//    });
 
     int portNumber = Configure.getInstance().listenPort();
     httpServer.requestHandler(router).listen(portNumber, ar -> {
