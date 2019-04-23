@@ -33,7 +33,7 @@ public class RequestParse {
 
   public static final String HEADER_USERAGENT = "X-LC-UA";
 
-  public static final String COOKIE_USER_NAME = "uluru_user";
+//  public static final String COOKIE_USER_NAME = "uluru_user";
 
   public static final String HEADER_HOOK_KEY = "X-LC-Hook-Key";
   public static final String HEADER_PROD_KEY = "X-LC-Prod";
@@ -62,11 +62,19 @@ public class RequestParse {
   }
 
   public static String getAppId(RoutingContext context) {
-    return getHeader(context, HEADER_APPID, HEADER_APPID_SHORTER);
+    String result = getHeader(context, HEADER_APPID, HEADER_APPID_SHORTER);
+    if (StringUtils.isEmpty(result)) {
+      result = getHeader(context, HEADER_ULURU_APPID, null);
+    }
+    return result;
   }
 
   public static String getAppKey(RoutingContext context) {
-    return getHeader(context, HEADER_APPKEY, HEADER_APPKEY_SHORTER);
+    String result = getHeader(context, HEADER_APPKEY, HEADER_APPKEY_SHORTER);
+    if (StringUtils.isEmpty(result)) {
+      result = getHeader(context, HEADER_ULURU_APPKEY, null);
+    }
+    return result;
   }
 
   public static String getAppMasterKey(RoutingContext context) {
@@ -78,20 +86,24 @@ public class RequestParse {
   }
 
   public static String getSessionToken(RoutingContext context) {
-    return getHeader(context, HEADER_SESSION_TOKEN, null);
+    String result = getHeader(context, HEADER_SESSION_TOKEN, HEADER_SESSION_TOKEN_SHORTER);
+    if (StringUtils.isEmpty(result)) {
+      result = getHeader(context, HEADER_ULURU_SESSION_TOKEN, null);
+    }
+    return result;
   }
 
-  public static String getCookie(RoutingContext context) {
-    Cookie cookie = context.getCookie(COOKIE_USER_NAME);
-    if (null != cookie) {
-      try {
-        return URLDecoder.decode(cookie.getValue(), "UTF-8");
-      } catch (UnsupportedEncodingException ex) {
-        logger.warn("failed to decode cookie, cause: ", ex);
-        return null;
-      }
-    } else {
-      return null;
-    }
-  }
+//  public static String getCookie(RoutingContext context) {
+//    Cookie cookie = context.getCookie(COOKIE_USER_NAME);
+//    if (null != cookie) {
+//      try {
+//        return URLDecoder.decode(cookie.getValue(), "UTF-8");
+//      } catch (UnsupportedEncodingException ex) {
+//        logger.warn("failed to decode cookie, cause: ", ex);
+//        return null;
+//      }
+//    } else {
+//      return null;
+//    }
+//  }
 }

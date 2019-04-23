@@ -21,7 +21,6 @@ public class ApplicationAuthenticator implements CustomValidator {
     if (context.request().method() == HttpMethod.OPTIONS) {
       return;
     }
-    String cookie = RequestParse.getCookie(context);
     String appId = RequestParse.getAppId(context);
     String appKey = RequestParse.getAppKey(context);
     String masterKey = RequestParse.getAppMasterKey(context);

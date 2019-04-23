@@ -60,7 +60,7 @@ public class CommonVerticle extends AbstractVerticle {
 
   protected JsonObject parseRequestBody(RoutingContext context) {
     HttpMethod httpMethod = context.request().method();
-    JsonObject body = null;
+    JsonObject body;
     if (HttpMethod.GET.equals(httpMethod)) {
       Map<String, String> filteredEntries = context.request().params().entries()
               .stream().parallel()

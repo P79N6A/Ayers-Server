@@ -82,7 +82,7 @@ public class StorageVerticle extends CommonVerticle {
               if (hashPassword.equals(mongoPassword)) {
                 message.reply(mongoUser);
               } else {
-                reportUserError(message, ErrorCodes.PASSWORD_WRONG.getCode(), "password is wrong.");
+                reportUserError(message, ErrorCodes.PASSWORD_WRONG.getCode(), ErrorCodes.PASSWORD_WRONG.getMessage());
               }
             }
           }

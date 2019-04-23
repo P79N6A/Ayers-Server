@@ -27,11 +27,7 @@ import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.api.validation.HTTPRequestValidationHandler;
 import io.vertx.ext.web.api.validation.ValidationException;
 import io.vertx.ext.web.handler.BodyHandler;
-import io.vertx.ext.web.handler.CookieHandler;
 import io.vertx.ext.web.handler.CorsHandler;
-import io.vertx.ext.web.handler.SessionHandler;
-import io.vertx.ext.web.sstore.LocalSessionStore;
-import io.vertx.ext.web.sstore.SessionStore;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,8 +35,6 @@ import org.slf4j.LoggerFactory;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
-
-import static cn.leancloud.platform.ayers.RequestParse.ALLOWED_HEADERS;
 
 /**
  * Hello world!
@@ -75,10 +69,15 @@ public class RestServerVerticle extends CommonVerticle {
     crudCommonData(Constraints.USER_CLASS, context);
   }
 
-  private void recoverUser(RoutingContext context) {
-    CommonResult commonResult = UserHandler.fillSigninParam(parseRequestBody(context));
+  private void validateUser(RoutingContext context) {
+    JsonObject request = parseRequestBody(context);
+    if (!request.containsKey(UserHandler.PARAM_SESSION_TOKEN)) {
+      String sessionToken = RequestParse.getSessionToken(context);
+      request.put(UserHandler.PARAM_SESSION_TOKEN, sessionToken);
+    }
+    CommonResult commonResult = UserHandler.fillSigninParam(request);
     if (commonResult.isFailed()) {
-      badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PASSWORD.getCode()).put("error", "session_token is required."));
+      badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("error", "session_token is required."));
     } else {
       JsonObject body = commonResult.getObject();
       sendDataOperationEx(context, Constraints.USER_CLASS, null, OP_OBJECT_UPSERT, body,
@@ -90,7 +89,7 @@ public class RestServerVerticle extends CommonVerticle {
     String sessionToken = RequestParse.getSessionToken(context);
     String objectId = parseRequestObjectId(context);
     if (StringUtils.isEmpty(sessionToken)) {
-      badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PASSWORD.getCode()).put("error", "session_token is required."));
+      badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("error", "session_token is required."));
     } else {
       JsonObject findCondition = new JsonObject().put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, sessionToken);
       queryUserWithHandler(context, Constraints.USER_CLASS, objectId, OP_OBJECT_QUERY,
@@ -201,12 +200,12 @@ public class RestServerVerticle extends CommonVerticle {
     HttpMethod httpMethod = context.request().method();
     if (HttpMethod.POST.equals(httpMethod)) {
       String roleName = body.getString("name");
-      JsonObject acl = body.getJsonObject("ACL");
+      JsonObject acl = body.getJsonObject(LeanObject.BUILTIN_ATTR_ACL);
       if (!ObjectSpecifics.validRoleName(roleName)) {
         badRequest(context, ErrorCodes.INVALID_ROLENAME.toJson());
         return;
       }
-      if (null == acl) {
+      if (null == acl || acl.size() < 1) {
         badRequest(context, new JsonObject().put("message", "Role ACL is required."));
         return;
       }
@@ -497,7 +496,7 @@ public class RestServerVerticle extends CommonVerticle {
     router.delete("/1.1/users/:objectId").handler(this::crudUser);
     router.put("/1.1/users/:objectId").handler(this::crudUser);
 
-    router.get("/1.1/users/me").handler(sessionValidationHandler).handler(this::recoverUser);
+    router.get("/1.1/users/me").handler(sessionValidationHandler).handler(this::validateUser);
     router.put("/1.1/users/:objectId/refreshSessionToken").handler(sessionValidationHandler).handler(this::refreshUserToken);
     router.put("/1.1/users/:objectId/updatePassword").handler(sessionValidationHandler).handler(this::updateUserPassword);
     router.post("/1.1/requestEmailVerify").handler(this::requestEmailVerify);
