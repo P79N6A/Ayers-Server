@@ -82,17 +82,14 @@ public class CommonVerticle extends AbstractVerticle {
   }
 
   protected void response(RoutingContext context, int status, JsonObject header, JsonObject result) {
-    HttpServerResponse response = context.response();
-    response.setStatusCode(status).putHeader(HEADER_CONTENT_TYPE, CONTENT_TYPE_JSON);
-    if (null != header) {
-      header.stream().forEach(entry -> response.putHeader(entry.getKey(), (String) entry.getValue()));
-    }
-    response.end(Json.encodePrettily(result));
+    response(context, status, header, Json.encodePrettily(result));
   }
 
   protected void response(RoutingContext context, int status, JsonObject header, String result) {
+    String origin = context.request().getHeader("Origin");
     HttpServerResponse response = context.response();
-    response.setStatusCode(status).putHeader(HEADER_CONTENT_TYPE, CONTENT_TYPE_JSON);
+    response.setStatusCode(status).putHeader(HEADER_CONTENT_TYPE, CONTENT_TYPE_JSON)
+            .putHeader("Access-Control-Allow-Origin", StringUtils.isEmpty(origin)? "*" : origin);
     if (null != header) {
       header.stream().forEach(entry -> response.putHeader(entry.getKey(), (String) entry.getValue()));
     }

@@ -28,6 +28,7 @@ import io.vertx.ext.web.api.validation.HTTPRequestValidationHandler;
 import io.vertx.ext.web.api.validation.ValidationException;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CookieHandler;
+import io.vertx.ext.web.handler.CorsHandler;
 import io.vertx.ext.web.handler.SessionHandler;
 import io.vertx.ext.web.sstore.LocalSessionStore;
 import io.vertx.ext.web.sstore.SessionStore;
@@ -38,6 +39,8 @@ import org.slf4j.LoggerFactory;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
+
+import static cn.leancloud.platform.ayers.RequestParse.ALLOWED_HEADERS;
 
 /**
  * Hello world!
@@ -457,10 +460,17 @@ public class RestServerVerticle extends CommonVerticle {
                     .put("Contacts", "support@leancloud.rocks")));
     router.get("/ping").handler(this::healthcheck);
 
-    SessionStore sessionStore = LocalSessionStore.create(vertx, "ayers.sessionmap");
-    router.route("/1.1/*").handler(CookieHandler.create())
-            .handler(SessionHandler.create(sessionStore))
-            .handler(appKeyValidationHandler).handler(BodyHandler.create());
+//    SessionStore sessionStore = LocalSessionStore.create(vertx, "ayers.sessionmap");
+    router.route("/1.1/*").handler(appKeyValidationHandler).handler(BodyHandler.create())
+            .handler(CorsHandler.create("*")
+                    .allowedMethod(HttpMethod.GET).allowedMethod(HttpMethod.POST).allowedMethod(HttpMethod.PUT)
+                    .allowedMethod(HttpMethod.DELETE).allowedMethod(HttpMethod.OPTIONS).allowedMethod(HttpMethod.HEAD)
+//                    .allowCredentials(true)
+                    .allowedHeader("Access-Control-Request-Method").allowedHeader("Access-Control-Allow-Credentials")
+                    .allowedHeader("Access-Control-Allow-Origin").allowedHeader("Access-Control-Allow-Headers")
+                    .allowedHeader("Content-Type").allowedHeader("Origin").allowedHeader("Accept")
+                            .allowedHeaders(RequestParse.ALLOWED_HEADERS_SET)
+            );
 
     /**
      * Storage Service endpoints.
@@ -508,14 +518,14 @@ public class RestServerVerticle extends CommonVerticle {
     router.post("/1.1/batch").handler(this::batchWrite);
     router.post("/1.1/batch/save").handler(this::batchWrite);
 
-    router.optionsWithRegex("\\/1\\.1\\/.*").handler(routingContext -> {
-      String origin = routingContext.request().getHeader("Origin");
-      JsonObject responseHeader = new JsonObject().put("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
-      responseHeader.put("Access-Control-Allow-Origin", StringUtils.isEmpty(origin)? "*" : origin);
-      responseHeader.put("Access-Control-Allow-Headers", RequestParse.ALLOWED_HEADERS_STRING);
-      responseHeader.put("Access-Control-Allow-Credentials", "true");
-      response(routingContext, HttpStatus.SC_OK, responseHeader, "");
-    });
+//    router.optionsWithRegex("\\/1\\.1\\/.*").handler(routingContext -> {
+//      String origin = routingContext.request().getHeader("Origin");
+//      JsonObject responseHeader = new JsonObject().put("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
+//      responseHeader.put("Access-Control-Allow-Origin", StringUtils.isEmpty(origin)? "*" : origin);
+//      responseHeader.put("Access-Control-Allow-Headers", RequestParse.ALLOWED_HEADERS_STRING);
+//      responseHeader.put("Access-Control-Allow-Credentials", "true");
+//      response(routingContext, HttpStatus.SC_OK, responseHeader, "");
+//    });
 
     router.errorHandler(400, routingContext -> {
       if (routingContext.failure() instanceof ValidationException) {

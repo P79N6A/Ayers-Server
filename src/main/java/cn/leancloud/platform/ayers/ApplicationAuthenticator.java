@@ -1,5 +1,6 @@
 package cn.leancloud.platform.ayers;
 
+import cn.leancloud.platform.codec.MessageDigest;
 import cn.leancloud.platform.utils.StringUtils;
 
 import io.vertx.core.http.HttpMethod;
@@ -11,6 +12,10 @@ import org.slf4j.LoggerFactory;
 
 public class ApplicationAuthenticator implements CustomValidator {
   private static final Logger logger = LoggerFactory.getLogger(ApplicationAuthenticator.class);
+
+  private String computeMD5Sign(String key, String timestamp) {
+    return MessageDigest.compute("MD5", timestamp + key);
+  }
 
   public void validate(RoutingContext context) throws ValidationException {
     if (context.request().method() == HttpMethod.OPTIONS) {
