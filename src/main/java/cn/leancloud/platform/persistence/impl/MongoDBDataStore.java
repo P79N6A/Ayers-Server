@@ -290,7 +290,7 @@ public class MongoDBDataStore implements DataStore {
     return this;
   }
 
-  public DataStore listIndexes(String clazz, Handler<AsyncResult<JsonArray>> resultHandler) {
+  public DataStore listIndices(String clazz, Handler<AsyncResult<JsonArray>> resultHandler) {
     if (StringUtils.isEmpty(clazz)) {
       resultHandler.handle(new InvalidParameterResult<>("class is required."));
     } else {

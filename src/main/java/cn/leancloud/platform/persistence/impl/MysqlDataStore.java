@@ -69,7 +69,7 @@ public class MysqlDataStore implements DataStore {
                                           Handler<AsyncResult<Void>> resultHandler) {
     return this;
   }
-  public DataStore listIndexes(String clazz, Handler<AsyncResult<JsonArray>> resultHandler) {
+  public DataStore listIndices(String clazz, Handler<AsyncResult<JsonArray>> resultHandler) {
     return this;
   }
 

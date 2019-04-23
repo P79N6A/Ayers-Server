@@ -1,7 +1,11 @@
 package cn.leancloud.platform.modules;
 
+import cn.leancloud.platform.modules.type.LeanGeoPoint;
 import cn.leancloud.platform.modules.type.LeanPointer;
+import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.json.JsonObject;
+
+import java.util.Map;
 
 import static cn.leancloud.platform.modules.Schema.CompatResult.*;
 
@@ -17,6 +21,45 @@ public class Schema extends JsonObject {
     if (null != object) {
       mergeIn(object);
     }
+  }
+
+  public String findGeoPointAttr() {
+    return lookupGeoPoint(null, this);
+  }
+
+  private static String lookupGeoPoint(String base, JsonObject object) {
+    if (null == object) {
+      return null;
+    }
+    boolean foundFirst = false;
+    String firstAttrName = null;
+    for (Map.Entry<String, Object> entry : object.getMap().entrySet()) {
+      String attr = entry.getKey();
+      JsonObject typeJson = (JsonObject) entry.getValue();
+      String typeString = typeJson.getString("type", "");
+      if (LeanGeoPoint.class.getName().equals(typeString)) {
+        firstAttrName = attr;
+        foundFirst = true;
+        break;
+      } else if (JsonObject.class.getName().equals(typeString)) {
+        JsonObject subJson = typeJson.getJsonObject("schema");
+        String tmp = lookupGeoPoint(attr, subJson);
+        if (StringUtils.notEmpty(tmp)) {
+          firstAttrName = tmp;
+          foundFirst = true;
+          break;
+        }
+      }
+    }
+    String result = null;
+    if (foundFirst) {
+      if (StringUtils.isEmpty(base)) {
+        result = firstAttrName;
+      } else {
+        result = base + "." + firstAttrName;
+      }
+    }
+    return result;
   }
 
   public CompatResult compatiableWith(Schema other) throws ConsistencyViolationException {

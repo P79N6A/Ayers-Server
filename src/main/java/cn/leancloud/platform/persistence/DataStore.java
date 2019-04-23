@@ -68,8 +68,9 @@ public interface DataStore {
       return returnNewDocument;
     }
 
-    public void setReturnNewDocument(boolean returnNewDocument) {
+    public InsertOption setReturnNewDocument(boolean returnNewDocument) {
       this.returnNewDocument = returnNewDocument;
+      return this;
     }
 
   }
@@ -116,32 +117,36 @@ public interface DataStore {
       return background;
     }
 
-    public void setBackground(boolean background) {
+    public IndexOption setBackground(boolean background) {
       this.background = background;
+      return this;
     }
 
     public boolean isUnique() {
       return unique;
     }
 
-    public void setUnique(boolean unique) {
+    public IndexOption setUnique(boolean unique) {
       this.unique = unique;
+      return this;
     }
 
     public String getName() {
       return name;
     }
 
-    public void setName(String name) {
+    public IndexOption setName(String name) {
       this.name = name;
+      return this;
     }
 
     public boolean isSparse() {
       return sparse;
     }
 
-    public void setSparse(boolean sparse) {
+    public IndexOption setSparse(boolean sparse) {
       this.sparse = sparse;
+      return this;
     }
 
     public JsonObject toJson() {
@@ -176,7 +181,7 @@ public interface DataStore {
   DataStore dropIndex(String clazz, String indexName, Handler<AsyncResult<Void>> resultHandler);
   DataStore createIndexWithOptions(String clazz, JsonObject keys, IndexOption options,
                                    Handler<AsyncResult<Void>> resultHandler);
-  DataStore listIndexes(String clazz, Handler<AsyncResult<JsonArray>> resultHandler);
+  DataStore listIndices(String clazz, Handler<AsyncResult<JsonArray>> resultHandler);
 
   DataStore findSchema(String clazz, Handler<AsyncResult<JsonObject>> resultHandler);
   DataStore upsertSchema(String clazz, Schema schema, Handler<AsyncResult<JsonObject>> resultHandler);
