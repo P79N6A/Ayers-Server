@@ -1,5 +1,6 @@
 package cn.leancloud.platform.ayers.handler;
 
+import cn.leancloud.platform.ayers.CommonVerticle;
 import cn.leancloud.platform.codec.Base64;
 import cn.leancloud.platform.codec.MessageDigest;
 import cn.leancloud.platform.common.*;
@@ -7,15 +8,26 @@ import cn.leancloud.platform.modules.ACL;
 import cn.leancloud.platform.modules.LeanObject;
 import cn.leancloud.platform.modules.ObjectSpecifics;
 import cn.leancloud.platform.utils.StringUtils;
+import io.vertx.core.Handler;
+import io.vertx.core.AsyncResult;
+import io.vertx.core.Vertx;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.web.RoutingContext;
 
-public class UserHandler {
+public class UserHandler extends CommonHandler {
   public static final String PARAM_USERNAME = "username";
   public static final String PARAM_PASSWORD = "password";
   public static final String PARAM_EMAIL = "email";
   public static final String PARAM_MOBILEPHONE = "mobilePhoneNumber";
   public static final String PARAM_SMSCODE = "smsCode";
   public static final String PARAM_SESSION_TOKEN = "session_token";
+  public static final String PARAM_AUTH_DATA = "authData";
+  public static final String PARAM_AUTH_ANONYMOUS = "anonymous";
+
+  public UserHandler(Vertx vertx, RoutingContext context) {
+    super(vertx, context);
+  }
 
   public static String hashPassword(String password, String salt) {
     String newPassword = MessageDigest.compute(MessageDigest.ALGORITHM_SHA256, salt+ password);
@@ -29,88 +41,110 @@ public class UserHandler {
     return ACL.publicRWInstance().toJson();
   }
 
-  public static CommonResult fillSigninParam(JsonObject param) {
-    //signin by username and password
-    //signin by session_token
-    //signin by mobilePhoneNumber and password
-    //signin by mobilePhoneNumber and smsCode
-    //signin by email and password
+  /**
+   * support signin with:
+   *   1. username + password
+   *   2. mobilePhoneNumber + password
+   *   3. mobilePhoneNumber + smscode
+   *   4. email + password
+   *   5. session_token
+   *   6. authdata(anonymous or thirdparty)
+   * @param param
+   * @return
+   */
+  public static CommonResult parseSigninParam(JsonObject param) {
     CommonResult result = new CommonResult();
     if (null == param) {
       result.setSuccess(false);
-      result.setMessage("parameter is empty.");
+      result.setMessage("parameter is null.");
     } else {
-      JsonObject data = new JsonObject();
-      result.setObject(data);
-
       String username = param.getString(PARAM_USERNAME);
       String password = param.getString(PARAM_PASSWORD);
       String email = param.getString(PARAM_EMAIL);
       String mobile = param.getString(PARAM_MOBILEPHONE);
       String smsCode = param.getString(PARAM_SMSCODE);
       String sessionToken = param.getString(PARAM_SESSION_TOKEN);
+      JsonObject authData = param.getJsonObject(PARAM_AUTH_DATA);
+
       boolean emailPassSelected = !StringUtils.isEmpty(email) && !StringUtils.isEmpty(password);
       boolean usernamePassSelected = !StringUtils.isEmpty(username) && !StringUtils.isEmpty(password);
       boolean mobilePassSelected = !StringUtils.isEmpty(mobile) && !StringUtils.isEmpty(password);
       boolean mobileSmscodeSelected = !StringUtils.isEmpty(mobile) && !StringUtils.isEmpty(smsCode);
       boolean sessionTokenSelected = !StringUtils.isEmpty(sessionToken);
-      if (!emailPassSelected && !mobilePassSelected && !usernamePassSelected && !mobileSmscodeSelected && !sessionTokenSelected) {
+      boolean thirdPartyLogin = authData != null && authData.size() > 0;
+
+      if (!emailPassSelected && !mobilePassSelected && !usernamePassSelected && !mobileSmscodeSelected
+              && !sessionTokenSelected && !thirdPartyLogin) {
         result.setSuccess(false);
         result.setMessage(ErrorCodes.INVALID_PARAMETER.getMessage());
-      } else if (usernamePassSelected) {
-        data.put(PARAM_USERNAME, username);
-        data.put(PARAM_PASSWORD, password);
-      } else if (mobilePassSelected) {
-        data.put(PARAM_MOBILEPHONE, mobile);
-        data.put(PARAM_PASSWORD, password);
-      } else if (mobileSmscodeSelected) {
-        // TODO： check smsCode is valid.
-        data.put(PARAM_MOBILEPHONE, mobile);
-      } else if (emailPassSelected) {
-        data.put(PARAM_EMAIL, email);
-        data.put(PARAM_PASSWORD, password);
       } else {
-        data.put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, sessionToken);
+        JsonObject signJson = new JsonObject();
+        if (usernamePassSelected) {
+          signJson.put(PARAM_USERNAME, username);
+          signJson.put(PARAM_PASSWORD, password);
+        } else if (mobilePassSelected) {
+          signJson.put(PARAM_MOBILEPHONE, mobile);
+          signJson.put(PARAM_PASSWORD, password);
+        } else if (mobileSmscodeSelected) {
+          // TODO： check smsCode is valid.
+          signJson.put(PARAM_MOBILEPHONE, mobile);
+        } else if (emailPassSelected) {
+          signJson.put(PARAM_EMAIL, email);
+          signJson.put(PARAM_PASSWORD, password);
+        } else if (thirdPartyLogin) {
+          signJson.put(PARAM_AUTH_DATA, authData);
+        } else {
+          signJson.put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, sessionToken);
+        }
+        result.setObject(signJson);
       }
     }
     return result;
   }
 
-  public static CommonResult fillSignupParam(JsonObject param) {
-    // support two paths to signup or login:
-    // 1. username + password
-    // 2. mobilephone + smscode
-    // 3. mobilephone + password
-
+  /**
+   * support signup with:
+   *   1. username + password
+   *   2. mobilePhoneNumber + password
+   *   3. mobilePhoneNumber + smscode
+   *   4. authdata(anonymous or thirdparty)
+   * @param param
+   * @return
+   */
+  public static CommonResult parseSignupParam(JsonObject param) {
     CommonResult result = new CommonResult();
     if (null == param) {
       result.setSuccess(false);
-      result.setMessage(ErrorCodes.INVALID_PARAMETER.getMessage());
+      result.setMessage("parameter is null.");
     } else {
-      JsonObject data = new JsonObject(param.getMap());
-      result.setObject(data);
-
       String username = param.getString(PARAM_USERNAME);
       String password = param.getString(PARAM_PASSWORD);
       String email = param.getString(PARAM_EMAIL);
       String mobile = param.getString(PARAM_MOBILEPHONE);
       String smsCode = param.getString(PARAM_SMSCODE);
+      JsonObject authData = param.getJsonObject(PARAM_AUTH_DATA);
+
       boolean usernamePassSelected = !StringUtils.isEmpty(username) && !StringUtils.isEmpty(password);
       boolean mobileSmscodeSelected = !StringUtils.isEmpty(mobile) && !StringUtils.isEmpty(smsCode);
       boolean mobilePassSelected = !StringUtils.isEmpty(mobile) && !StringUtils.isEmpty(password);
-      if (!usernamePassSelected && !mobileSmscodeSelected && !mobilePassSelected) {
+      boolean thirdPartyLogin = authData != null && authData.size() > 0;
+
+      if (!usernamePassSelected && !mobileSmscodeSelected && !mobilePassSelected && !thirdPartyLogin) {
         result.setSuccess(false);
         result.setMessage(ErrorCodes.INVALID_PARAMETER.getMessage());
-      } else if (!StringUtils.isEmpty(email) && !ObjectSpecifics.validEmail(email)) {
+      } else if (StringUtils.notEmpty(email) && !ObjectSpecifics.validEmail(email)) {
         result.setSuccess(false);
         result.setMessage(ErrorCodes.INVALID_EMAIL.getMessage());
       } else {
+        JsonObject data = new JsonObject(param.getMap());
+        result.setObject(data);
+
         if (usernamePassSelected || mobilePassSelected) {
           String salt = StringUtils.getRandomString(Constraints.SALT_LENGTH);
           String hashPassword = hashPassword(password, salt);
           data.put(PARAM_PASSWORD, hashPassword);
           data.put(LeanObject.BUILTIN_ATTR_SALT, salt);
-        } else {
+        } else if (mobileSmscodeSelected) {
           // TODO： check smsCode is valid.
           data.remove(PARAM_SMSCODE);
         }
@@ -122,4 +156,40 @@ public class UserHandler {
     }
     return result;
   }
+
+  public void signup(JsonObject param, Handler<AsyncResult<JsonObject>> handler) {
+    JsonObject authData = param.getJsonObject(PARAM_AUTH_DATA);
+    String operation = CommonVerticle.OP_USER_SIGNUP;
+    JsonObject query = null;
+    if (null != authData && authData.size() > 0) {
+      operation = CommonVerticle.OP_USER_AUTH_LOGIN;
+      query = new JsonObject().put(PARAM_AUTH_DATA, authData);
+    }
+    sendDataOperationWithOption(Constraints.USER_CLASS, null, operation, query, param, true, handler);
+  }
+
+  public void signin(JsonObject param, Handler<AsyncResult<JsonObject>> handler) {
+    JsonObject authData = param.getJsonObject(PARAM_AUTH_DATA);
+    String operation = CommonVerticle.OP_USER_SIGNIN;
+    JsonObject query = null;
+    if (null != authData && authData.size() > 0) {
+      operation = CommonVerticle.OP_USER_AUTH_LOGIN;
+      query = new JsonObject().put(PARAM_AUTH_DATA, authData);
+    }
+    sendDataOperationWithOption(Constraints.USER_CLASS, null, operation, query, param, true, handler);
+  }
+
+  public void validateSessionToken(String objectId, String sessionToken, Handler<AsyncResult<JsonObject>> handler) {
+    JsonObject body = new JsonObject().put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, sessionToken);
+    sendDataOperation(Constraints.USER_CLASS, objectId, HttpMethod.GET.toString(), body, null, handler);
+  }
+
+  public void updateSessionToken(String objectId, String sessionToken, String newSessionToken, Handler<AsyncResult<JsonObject>> handler) {
+    // find and update.
+    JsonObject query = new JsonObject().put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, sessionToken).put(LeanObject.ATTR_NAME_OBJECTID, objectId);
+    JsonObject update = new JsonObject().put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, newSessionToken);
+    sendDataOperationWithOption(Constraints.USER_CLASS, objectId, HttpMethod.PUT.toString(), query, update, true, handler);
+  }
+
+
 }

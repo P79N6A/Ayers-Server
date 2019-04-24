@@ -10,7 +10,7 @@ public class SessionValidator implements CustomValidator {
     // check session_token
     String sessionToken = context.request().getParam("session_token");
     if (StringUtils.isEmpty(sessionToken)) {
-      sessionToken = context.request().getHeader(RequestParse.HEADER_SESSION_TOKEN);
+      sessionToken = context.request().getHeader(RequestParse.HEADER_AVOS_SESSION_TOKEN);
       if (StringUtils.isEmpty(sessionToken)) {
         throw new ValidationException("not found session token.");
       }

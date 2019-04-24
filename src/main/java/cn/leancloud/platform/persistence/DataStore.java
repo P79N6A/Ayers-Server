@@ -21,40 +21,45 @@ public interface DataStore {
       return skip;
     }
 
-    public void setSkip(int skip) {
+    public QueryOption setSkip(int skip) {
       this.skip = skip;
+      return this;
     }
 
     public int getLimit() {
       return limit;
     }
 
-    public void setLimit(int limit) {
+    public QueryOption setLimit(int limit) {
       this.limit = limit;
+      return this;
     }
 
     public JsonObject getSort() {
       return sort;
     }
 
-    public void setSort(JsonObject sort) {
+    public QueryOption setSort(JsonObject sort) {
       this.sort = sort;
+      return this;
     }
 
     public JsonObject getFields() {
       return fields;
     }
 
-    public void setFields(JsonObject fields) {
+    public QueryOption setFields(JsonObject fields) {
       this.fields = fields;
+      return this;
     }
 
     public List<String> getIncludes() {
       return includes;
     }
 
-    public void setIncludes(List<String> includes) {
+    public QueryOption setIncludes(List<String> includes) {
       this.includes = includes;
+      return this;
     }
 
     public String toString() {

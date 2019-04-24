@@ -21,17 +21,17 @@ public class ApplicationAuthenticator implements CustomValidator {
     if (context.request().method() == HttpMethod.OPTIONS) {
       return;
     }
-    String appId = RequestParse.getAppId(context);
-    String appKey = RequestParse.getAppKey(context);
-    String masterKey = RequestParse.getAppMasterKey(context);
-    String requestSign = RequestParse.getAppSign(context);
-    if (StringUtils.isEmpty(masterKey) && !StringUtils.isEmpty(appKey) && appKey.endsWith(RequestParse.MASTERKEY_SUFFIX)) {
-      masterKey = appKey.substring(0, appKey.length() - RequestParse.MASTERKEY_SUFFIX.length());
+    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(context);
+    if (null == headers) {
+      throw new ValidationException("application authentication data not found in request header.");
     }
-    logger.debug("request. appId=" + appId + ", appKey=" + appKey + ", masterkey=" + masterKey + ", sign=" + requestSign);
-    if (StringUtils.isEmpty(appId) || (StringUtils.isEmpty(appKey) && StringUtils.isEmpty(masterKey) && StringUtils.isEmpty(requestSign))) {
-      logger.warn("invalid request. appId=" + appId + ", appKey=" + appKey + ", masterkey=" + masterKey + ", sign=" + requestSign);
-      throw new ValidationException("appKey authentication failed.");
+    String appId = headers.getAppId();
+    String appKey = headers.getAppKey();
+    boolean useMasterKey = headers.isUseMasterKey();
+    String requestSign = headers.getRequestSign();
+    if (StringUtils.isEmpty(appId) || (StringUtils.isEmpty(appKey) && StringUtils.isEmpty(requestSign))) {
+      logger.warn("request. appId=" + appId + ", appKey=" + appKey + ", useMasterKey=" + useMasterKey + ", sign=" + requestSign);
+      throw new ValidationException("invalid application authentication.");
     }
   }
 }

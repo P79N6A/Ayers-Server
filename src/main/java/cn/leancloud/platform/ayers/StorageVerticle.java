@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static cn.leancloud.platform.utils.JsonFactory.obj;
 import static cn.leancloud.platform.utils.JsonFactory.toJsonArray;
 
 public class StorageVerticle extends CommonVerticle {
@@ -46,23 +47,50 @@ public class StorageVerticle extends CommonVerticle {
     }
     logger.debug("received message: " + message.body().toString());
 
+    String operation = message.headers().get(INTERNAL_MSG_HEADER_OP).toUpperCase();
+
     JsonObject body = message.body();
     String clazz = body.getString(INTERNAL_MSG_ATTR_CLASS, "");
     String objectId = body.getString(INTERNAL_MSG_ATTR_OBJECT_ID);
     JsonObject param = body.getJsonObject(INTERNAL_MSG_ATTR_PARAM, new JsonObject());
-    boolean fetchWhenSave = body.getBoolean(INTERNAL_MSG_ATTR_FETCHWHENSAVE, false);
-
-    String operation = message.headers().get(INTERNAL_MSG_HEADER_OP);
+    final JsonObject query = body.getJsonObject(INTERNAL_MSG_ATTR_QUERY, new JsonObject());
+    boolean fetchWhenSave = body.getBoolean(INTERNAL_MSG_ATTR_RETURNNEWDOC, false);
 
     final DataStore dataStore = dataStoreFactory.getStore();
-
     Instant now = Instant.now();
 
     switch (operation) {
+      case OP_USER_AUTH_LOGIN:
+        logger.debug("thirdparty signup/signin. query=" + query + ", param=" + param);
+        if (query.size() < 1) {
+          message.fail(ErrorCodes.INVALID_PARAMETER.getCode(), "query parameter is empty.");
+        } else {
+          dataStore.findOneAndUpdateWithOptions(clazz, query, param,
+                  new DataStore.QueryOption().setLimit(1), new DataStore.UpdateOption().setUpsert(true).setReturnNewDocument(true),
+                  res -> {
+                    if (res.failed()) {
+                      dataStore.close();
+                      message.fail(ErrorCodes.DATABASE_ERROR.getCode(), res.cause().getMessage());
+                    } else {
+                      // res.result() doesn't include user object, need to fetch again.
+                      dataStore.findOne(clazz, query, null, res2 -> {
+                        dataStore.close();
+                        if (res2.failed()) {
+                          message.fail(ErrorCodes.DATABASE_ERROR.getCode(), res2.cause().getMessage());
+                        } else {
+                          message.reply(res2.result());
+                        }
+                      });
+                    }
+                  });
+        }
+        break;
       case OP_USER_SIGNIN:
         String password = param.getString(UserHandler.PARAM_PASSWORD);
-        param.remove(UserHandler.PARAM_PASSWORD);
-        logger.debug("query= " + param.toString());
+        if (StringUtils.notEmpty(password)) {
+          param.remove(UserHandler.PARAM_PASSWORD);
+        }
+        logger.debug("user signin. query= " + param.toString());
         dataStore.findOne(clazz, param, null, user -> {
           dataStore.close();
           if (user.failed()) {
@@ -88,48 +116,55 @@ public class StorageVerticle extends CommonVerticle {
           }
         });
         break;
-      case OP_OBJECT_UPSERT:
-        boolean isCreateOp = false;
-        if (StringUtils.isEmpty(objectId)) {
-          isCreateOp = true;
-          param.put(LeanObject.ATTR_NAME_CREATED_TS, now);
-        }
+      case OP_USER_SIGNUP:
+      case "POST":
+        param.put(LeanObject.ATTR_NAME_CREATED_TS, now);
+        param.put(LeanObject.ATTR_NAME_UPDATED_TS, now);
+        logger.debug("insert doc=== " + param.toString());
+        DataStore.InsertOption insertOption = new DataStore.InsertOption();
+        insertOption.setReturnNewDocument(fetchWhenSave);
+        dataStore.insertWithOptions(clazz, param, insertOption, res -> {
+          dataStore.close();
+          if (res.failed()) {
+            reportDatabaseError(message, res.cause());
+          } else {
+            JsonObject result = res.result();
+            if (!fetchWhenSave) {
+              result.put("createdAt", now.toString());
+            }
+            logger.debug("storage verticle response: " + result);
+            message.reply(result);
+          }
+        });
+        break;
+      case "PUT":
         param.put(LeanObject.ATTR_NAME_UPDATED_TS, now);
 
-        if (isCreateOp) {
-          logger.debug("doc=== " + param.toString());
-          DataStore.InsertOption insertOption = new DataStore.InsertOption();
-          insertOption.setReturnNewDocument(fetchWhenSave);
-          dataStore.insertWithOptions(clazz, param, insertOption, res -> {
-            dataStore.close();
-            if (res.failed()) {
-              reportDatabaseError(message, res.cause());
-            } else {
-              JsonObject result = res.result();
-              if (!fetchWhenSave) {
-                result.put("createdAt", now.toString());
-              }
-              logger.debug("storage verticle response: " + result);
-              message.reply(result);
-            }
-          });
+        logger.debug("doc=== " + param.toString());
+        if (StringUtils.notEmpty(objectId)) {
+          query.put(LeanObject.ATTR_NAME_OBJECTID, objectId);
+        }
+        logger.debug("query= " + query);
+        if (query.size() < 1) {
+          reportUserError(message, ErrorCodes.INVALID_PARAMETER.getCode(), "query is empty, and updating all objects is forbidden.");
         } else {
-          logger.debug("doc=== " + param.toString());
-          JsonObject query = new JsonObject().put(LeanObject.ATTR_NAME_OBJECTID, objectId);
-          logger.debug("query= " + query.toString());
           DataStore.UpdateOption option = new DataStore.UpdateOption();
           option.setUpsert(false);
           option.setReturnNewDocument(fetchWhenSave);
           if (fetchWhenSave) {
             DataStore.QueryOption queryOption = new DataStore.QueryOption();
+            logger.debug("try to call findOneAndUpdateWithOptions.");
             dataStore.findOneAndUpdateWithOptions(clazz, query, param, queryOption, option, res -> {
               dataStore.close();
               if (res.failed()) {
+                logger.warn("failed to call findOneAndUpdateWithOptions. cause:" + res.cause());
                 reportDatabaseError(message, res.cause());
               } else {
                 if (null != res.result()) {
+                  logger.debug("succeed to call findOneAndUpdateWithOptions. result=" + res.result());
                   message.reply(res.result());
                 } else {
+                  logger.debug("object not found.");
                   reportUserError(message, 404, "object not found");
                 }
               }
@@ -139,7 +174,7 @@ public class StorageVerticle extends CommonVerticle {
               dataStore.close();
               if (res1.failed()) {
                 reportDatabaseError(message, res1.cause());
-              } else {
+              } else if (StringUtils.notEmpty(objectId)) {
                 if (res1.result() > 0) {
                   JsonObject result = new JsonObject().put("objectId", objectId);
                   result.put("updatedAt", now.toString());
@@ -147,12 +182,14 @@ public class StorageVerticle extends CommonVerticle {
                 } else {
                   reportUserError(message, 404, "object not found");
                 }
+              } else {
+                message.reply(new JsonObject().put("updated_count", res1.result()));
               }
             });
           }
         }
         break;
-      case OP_OBJECT_DELETE:
+      case "DELETE":
         if (!StringUtils.isEmpty(objectId)) {
           param.put(LeanObject.ATTR_NAME_OBJECTID, objectId);
         }
@@ -165,7 +202,7 @@ public class StorageVerticle extends CommonVerticle {
           }
         });
         break;
-      case OP_OBJECT_QUERY:
+      case "GET":
         String where = param.getString(QUERY_KEY_WHERE, "{}");
         String order = param.getString(QUERY_KEY_ORDER);
         int limit = Integer.valueOf(param.getString(QUERY_KEY_LIMIT, "100"));

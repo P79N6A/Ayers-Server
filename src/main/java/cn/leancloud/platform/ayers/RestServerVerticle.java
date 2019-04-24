@@ -1,5 +1,8 @@
 package cn.leancloud.platform.ayers;
 
+import cn.leancloud.platform.ayers.handler.FileHandler;
+import cn.leancloud.platform.ayers.handler.ObjectModifyHandler;
+import cn.leancloud.platform.ayers.handler.ObjectQueryHandler;
 import cn.leancloud.platform.ayers.handler.UserHandler;
 import cn.leancloud.platform.cache.SimpleRedisClient;
 import cn.leancloud.platform.common.*;
@@ -28,7 +31,6 @@ import io.vertx.ext.web.api.validation.HTTPRequestValidationHandler;
 import io.vertx.ext.web.api.validation.ValidationException;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CorsHandler;
-import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,8 +43,6 @@ import java.util.stream.Collectors;
  */
 public class RestServerVerticle extends CommonVerticle {
   private static final Logger logger = LoggerFactory.getLogger(RestServerVerticle.class);
-  public static final String PARAM_FILE_UPLOAD_URL = "upload_url";
-  public static final String PARAM_FILE_TOKEN = "token";
 
   private SimpleRedisClient redisClient = new SimpleRedisClient();
   private HttpServer httpServer;
@@ -70,18 +70,26 @@ public class RestServerVerticle extends CommonVerticle {
   }
 
   private void validateUser(RoutingContext context) {
-    JsonObject request = parseRequestBody(context);
-    if (!request.containsKey(UserHandler.PARAM_SESSION_TOKEN)) {
-      String sessionToken = RequestParse.getSessionToken(context);
-      request.put(UserHandler.PARAM_SESSION_TOKEN, sessionToken);
+    String sessionToken = RequestParse.getSessionToken(context);
+    if (StringUtils.isEmpty(sessionToken)) {
+      JsonObject request = parseRequestBody(context);
+      if (null != request) {
+        sessionToken = request.getString(UserHandler.PARAM_SESSION_TOKEN);
+      }
     }
-    CommonResult commonResult = UserHandler.fillSigninParam(request);
-    if (commonResult.isFailed()) {
-      badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("error", "session_token is required."));
+    if (StringUtils.isEmpty(sessionToken)) {
+      badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("error", "session token is required."));
     } else {
-      JsonObject body = commonResult.getObject();
-      sendDataOperationEx(context, Constraints.USER_CLASS, null, OP_OBJECT_UPSERT, body,
-              jsonObject -> jsonObject.put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, body.getString(LeanObject.BUILTIN_ATTR_SESSION_TOKEN)));
+      UserHandler handler = new UserHandler(vertx, context);
+      handler.validateSessionToken(null, sessionToken, res -> {
+        if (res.failed()) {
+          internalServerError(context, ErrorCodes.DATABASE_ERROR.toJson());
+        } else if (null == res.result() || res.result().size() < 1) {
+          notFound(context, new JsonObject());
+        } else {
+          ok(context, res.result());
+        }
+      });
     }
   }
 
@@ -91,29 +99,16 @@ public class RestServerVerticle extends CommonVerticle {
     if (StringUtils.isEmpty(sessionToken)) {
       badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("error", "session_token is required."));
     } else {
-      JsonObject findCondition = new JsonObject().put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, sessionToken);
-      queryUserWithHandler(context, Constraints.USER_CLASS, objectId, OP_OBJECT_QUERY,
-              new JsonObject().put(QUERY_KEY_WHERE, findCondition.toString()),
-              res -> {
+      String newSessionToken = StringUtils.getRandomString(Constraints.SESSION_TOKEN_LENGTH);
+      UserHandler handler = new UserHandler(vertx, context);
+      handler.updateSessionToken(objectId, sessionToken, newSessionToken, res -> {
         if (res.failed()) {
           internalServerError(context, ErrorCodes.DATABASE_ERROR.toJson());
-        } else if (null == res.result().body()) {
+        } else if (null == res.result()) {
           notFound(context, ErrorCodes.USER_NOT_FOUND.toJson());
         } else {
-          JsonObject resultJson = (JsonObject) res.result().body();
-          String userId = resultJson.getString(LeanObject.ATTR_NAME_OBJECTID);
-          String newSessionToken = StringUtils.getRandomString(Constraints.SESSION_TOKEN_LENGTH);
-          if (!objectId.equals(userId)) {
-            notFound(context, ErrorCodes.USER_NOT_FOUND.toJson());
-          } else {
-            JsonObject newUser = new JsonObject().put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, newSessionToken);
-            sendDataOperationEx(context, Constraints.USER_CLASS, objectId, OP_OBJECT_UPSERT, newUser,
-                    response -> {
-              if (null != response) {
-                response.put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, newSessionToken);
-              }
-            });
-          }
+          JsonObject resultJson = res.result();
+          ok(context, resultJson);
         }
       });
     }
@@ -135,9 +130,7 @@ public class RestServerVerticle extends CommonVerticle {
   }
 
   private void createFileToken(RoutingContext context) {
-    Configure configure = Configure.getInstance();
     JsonObject body = parseRequestBody(context);
-    String bucketName = configure.fileBucket();
     String fileKey = body.getString("key");
     String name = body.getString("name");
     if (StringUtils.isEmpty(fileKey) || StringUtils.isEmpty(name)) {
@@ -145,35 +138,13 @@ public class RestServerVerticle extends CommonVerticle {
       return;
     }
 
-    String mimeType = Constraints.DEFAULT_MIME_TYPE;
-    String[] nameParts = name.split("\\.");
-    if (nameParts.length > 1) {
-      mimeType = MimeUtils.guessMimeTypeFromExtension(nameParts[nameParts.length - 1]);
-    }
-
-    Auth auth = Auth.create(configure.fileProviderAccessKey(), configure.fileProviderSecretKey());
-    final String token = auth.uploadToken(bucketName, fileKey);
-    body.remove("__type");
-    body.put(LeanObject.BUILTIN_ATTR_FILE_URL, configure.fileDefaultHost() + fileKey)
-            .put(LeanObject.BUILTIN_ATTR_FILE_MIMETYPE, mimeType)
-            .put(LeanObject.BUILTIN_ATTR_FILE_PROVIDER,configure.fileProvideName())
-            .put(LeanObject.BUILTIN_ATTR_FILE_BUCKET, bucketName);
-
-    HttpMethod httpMethod = context.request().method();
-    String operation = "";
-    if (HttpMethod.GET.equals(httpMethod)) {
-      operation = OP_OBJECT_QUERY;
-    } else if (HttpMethod.DELETE.equals(httpMethod)) {
-      operation = OP_OBJECT_DELETE;
-    } else if (HttpMethod.POST.equals(httpMethod) || HttpMethod.PUT.equals(httpMethod)) {
-      operation = OP_OBJECT_UPSERT;
-    }
-
-    sendDataOperationEx(context, Constraints.FILE_CLASS, null, operation, body, file -> {
-      file.mergeIn(body);
-      file.put(PARAM_FILE_TOKEN, token);
-      file.put(PARAM_FILE_UPLOAD_URL, configure.fileUploadHost());
-      // TODO: add appId/objectId/token to cache.
+    FileHandler fileHandler = new FileHandler(vertx, context);
+    fileHandler.createFileToken(context.request().method(), name, fileKey, body, res -> {
+      if (res.failed()) {
+        internalServerError(context, ErrorCodes.INTERNAL_ERROR.toJson());
+      } else {
+        ok(context, res.result());
+      }
     });
   }
 
@@ -181,14 +152,11 @@ public class RestServerVerticle extends CommonVerticle {
   // "token":"w6ZYeC-arS2yNzZ9"}'
   private void fileUploadCallback(RoutingContext context) {
     JsonObject body = parseRequestBody(context);
-    boolean result = body.getBoolean("result");
-    if (result) {
-      // TODO: remove appId/objectId/token from cache.
+
+    FileHandler fileHandler = new FileHandler(vertx, context);
+    fileHandler.uploadCallback(body, res -> {
       ok(context, new JsonObject());
-    } else {
-      // TODO: remove appId/objectId/token from cache, delete File document.
-      ok(context, new JsonObject());
-    }
+    });
   }
 
   private void crudSingleFile(RoutingContext context) {
@@ -210,27 +178,46 @@ public class RestServerVerticle extends CommonVerticle {
         return;
       }
     }
+
     crudCommonData(Constraints.ROLE_CLASS, context);
   }
 
   private void userSignup(RoutingContext context) {
-    CommonResult commonResult = UserHandler.fillSignupParam(parseRequestBody(context));
+    JsonObject requestBody = parseRequestBody(context);
+    CommonResult commonResult = UserHandler.parseSignupParam(requestBody);
     if (commonResult.isFailed()) {
       badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("message", commonResult.getMessage()));
     } else {
       JsonObject body = commonResult.getObject();
-      sendDataOperationEx(context, Constraints.USER_CLASS, null, OP_OBJECT_UPSERT, body,
-              jsonObject -> jsonObject.put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, body.getString(LeanObject.BUILTIN_ATTR_SESSION_TOKEN)));
+      UserHandler handler = new UserHandler(vertx, context);
+      handler.signup(body, res -> {
+        if (res.failed()) {
+          internalServerError(context, ErrorCodes.INTERNAL_ERROR.toJson());
+        } else {
+          // TODO: add sessionToken - userObject to cache.
+          ok(context, res.result());
+        }
+      });
     }
   }
 
   private void userSignin(RoutingContext context) {
-    CommonResult commonResult = UserHandler.fillSigninParam(parseRequestBody(context));
+    CommonResult commonResult = UserHandler.parseSigninParam(parseRequestBody(context));
     if (commonResult.isFailed()) {
       badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("message", commonResult.getMessage()));
     } else {
       JsonObject body = commonResult.getObject();
-      sendDataOperation(context, Constraints.USER_CLASS, null, OP_USER_SIGNIN, body);
+      UserHandler handler = new UserHandler(vertx, context);
+      handler.signin(body, res -> {
+        if (res.failed()) {
+          ;
+        } else if (null == res.result()) {
+          notFound(context, ErrorCodes.PASSWORD_WRONG.toJson());
+        } else {
+          // TODO: add sessionToken - userObject to cache.
+          ok(context, res.result());
+        }
+      });
     }
   }
 
@@ -239,45 +226,54 @@ public class RestServerVerticle extends CommonVerticle {
     JsonObject body = parseRequestBody(context);
     HttpMethod httpMethod = context.request().method();
     String fetchWhenSave = context.request().getParam("fetchWhenSave");
-    String operation = "";
-    if (HttpMethod.GET.equals(httpMethod)) {
-      operation = OP_OBJECT_QUERY;
-    } else if (HttpMethod.DELETE.equals(httpMethod)) {
-      operation = OP_OBJECT_DELETE;
-    } else if (HttpMethod.POST.equals(httpMethod) || HttpMethod.PUT.equals(httpMethod)) {
-      operation = OP_OBJECT_UPSERT;
-    }
+    boolean returnNewObject = "true".equalsIgnoreCase(fetchWhenSave);
 
     logger.debug("curl object. clazz=" + clazz + ", objectId=" + objectId + ", method=" + httpMethod
             + ", param=" + body + ", fetchWhenSave=" + fetchWhenSave);
 
-    sendDataOperationWithOption(context, clazz, objectId, operation, body, "true".equalsIgnoreCase(fetchWhenSave), handler);
-  }
-
-  private static BatchRequest parseBatchRequest(Object req) {
-    if (null == req || !(req instanceof JsonObject)) {
-      return null;
+    Handler<AsyncResult<JsonObject>> replayHandler = reply -> {
+      if (reply.failed()) {
+        if (reply.cause() instanceof ReplyException) {
+          int failureCode = ((ReplyException) reply.cause()).failureCode();
+          JsonObject responseJson = new JsonObject().put("code", failureCode).put("error", reply.cause().getMessage());
+          if (failureCode == ErrorCodes.DATABASE_ERROR.getCode() || failureCode == ErrorCodes.INTERNAL_ERROR.getCode()) {
+            internalServerError(context, responseJson);
+          } else {
+            badRequest(context, responseJson);
+          }
+        } else {
+          internalServerError(context, ErrorCodes.DATABASE_ERROR.toJson());
+        }
+      } else {
+        JsonObject result = reply.result();
+        if (null != handler) {
+          handler.handle(result);
+        }
+        logger.debug("rest server response: " + result);
+        if (HttpMethod.POST == httpMethod && StringUtils.isEmpty(objectId)) {
+          //Status: 201 Created
+          //Location: https://heqfq0sw.api.lncld.net/1.1/classes/Post/<objectId>
+          JsonObject location = new JsonObject().put("Location", Configure.getInstance().getBaseHost() + "/"
+                  + context.request().path() + result.getString(LeanObject.ATTR_NAME_OBJECTID));
+          created(context, location, result);
+        } else {
+          ok(context, result);
+        }
+      }
+    };
+    if (HttpMethod.GET.equals(httpMethod)) {
+      ObjectQueryHandler queryHandler = new ObjectQueryHandler(vertx, context);
+      queryHandler.query(clazz, objectId, body, replayHandler);
+    } else {
+      ObjectModifyHandler modifyHandler = new ObjectModifyHandler(vertx, context);
+      if (HttpMethod.POST.equals(httpMethod)) {
+        modifyHandler.create(clazz, body, returnNewObject, replayHandler);
+      } else if (HttpMethod.PUT.equals(httpMethod)) {
+        modifyHandler.update(clazz, objectId, null, body, returnNewObject, replayHandler);
+      } else {
+        modifyHandler.delete(clazz, objectId, null, replayHandler);
+      }
     }
-    JsonObject reqJson = (JsonObject)req;
-    String method = reqJson.getString("method");
-    String path = reqJson.getString("path");
-    JsonObject param = reqJson.getJsonObject("body");
-    if (StringUtils.isEmpty(method) || StringUtils.isEmpty(path) || !ObjectSpecifics.validRequestPath(path)) {
-      return null;
-    }
-    String[] pathParts = path.split("/");
-    String clazz = (pathParts.length >= 4)? pathParts[3] : "";
-    String objectId = (pathParts.length >= 5)? pathParts[4] : "";
-    if (!StringUtils.isEmpty(clazz) && !ObjectSpecifics.validClassName(clazz)) {
-      return null;
-    }
-    if (null == param && !method.equalsIgnoreCase("delete")) {
-      return null;
-    }
-    if ((method.equalsIgnoreCase("put") || method.equalsIgnoreCase("delete")) && StringUtils.isEmpty(objectId)) {
-      return null;
-    }
-    return new BatchRequest(method, path, clazz, objectId, param);
   }
 
   private void batchWrite(RoutingContext context) {
@@ -289,49 +285,8 @@ public class RestServerVerticle extends CommonVerticle {
       return;
     }
 
-    List<Future> results = requests.stream().map( req -> {
-      final Future<JsonObject> tmp = Future.future();
-      BatchRequest batchRequest = parseBatchRequest(req);
-      if (null == batchRequest) {
-        tmp.complete(new JsonObject().put("error", ErrorCodes.INVALID_PARAMETER.toJson()));
-      } else {
-        String method = batchRequest.getMethod();
-        JsonObject request = new JsonObject();
-        if (!StringUtils.isEmpty(batchRequest.getClazz())) {
-          request.put(INTERNAL_MSG_ATTR_CLASS, batchRequest.getClazz());
-        }
-        if (!StringUtils.isEmpty(batchRequest.getObjectId())) {
-          request.put(INTERNAL_MSG_ATTR_OBJECT_ID, batchRequest.getObjectId());
-        }
-        if (null != batchRequest.getBody()) {
-          request.put(INTERNAL_MSG_ATTR_PARAM, batchRequest.getBody());
-        }
-        String operation = OP_OBJECT_QUERY;
-        if ("delete".equalsIgnoreCase(method)) {
-          operation = OP_OBJECT_DELETE;
-        } else if ("post".equalsIgnoreCase(method) || "put".equalsIgnoreCase(method)) {
-          operation = OP_OBJECT_UPSERT;
-        }
-        DeliveryOptions options = new DeliveryOptions().addHeader(INTERNAL_MSG_HEADER_OP, operation);
-        vertx.eventBus().send(Configure.MAILADDRESS_DEMOCLES_QUEUE, request, options, response -> {
-          if (response.failed()) {
-            tmp.complete(new JsonObject().put("error",
-                    new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("error", response.cause().getMessage())));
-          } else {
-            vertx.eventBus().send(Configure.MAILADDRESS_DATASTORE_QUEUE, request, options, res -> {
-              if (res.failed()) {
-                tmp.complete(new JsonObject().put("error", new JsonObject().put("code", ErrorCodes.DATABASE_ERROR.getCode()).put("error", res.cause().getMessage())));
-              } else {
-                tmp.complete(new JsonObject().put("success", (JsonObject) res.result().body()));
-              }
-            });
-          }
-        });
-      }
-      return tmp;
-    }).collect(Collectors.toList());
-
-    CompositeFuture.all(results).setHandler( res -> {
+    ObjectModifyHandler handler = new ObjectModifyHandler(vertx, context);
+    handler.batchSave(requests, res -> {
       logger.debug("batchWrite all requests finished.");
       int futuresCount = res.result().size();
       JsonArray resultObjects = new JsonArray();
@@ -346,95 +301,74 @@ public class RestServerVerticle extends CommonVerticle {
     crudCommonDataEx(clazz, context, null);
   }
 
-  private void directlySendEvent(RoutingContext context, JsonObject request, String objectId, String operation,
-                                 DeliveryOptions options, final Handler<JsonObject> handler) {
-    vertx.eventBus().send(Configure.MAILADDRESS_DATASTORE_QUEUE, request, options, reply -> {
-      if (reply.failed()) {
-        if (reply.cause() instanceof ReplyException) {
-          int failureCode = ((ReplyException) reply.cause()).failureCode();
-          JsonObject responseJson = new JsonObject().put("code", failureCode).put("error", reply.cause().getMessage());
-          if (failureCode == ErrorCodes.DATABASE_ERROR.getCode() || failureCode == ErrorCodes.INTERNAL_ERROR.getCode()) {
-            internalServerError(context, responseJson);
-          } else {
-            badRequest(context, responseJson);
-          }
-        } else {
-          internalServerError(context, ErrorCodes.DATABASE_ERROR.toJson());
-        }
-      } else {
-        JsonObject result = (JsonObject) reply.result().body();
-        if (null != handler) {
-          handler.handle(result);
-        }
-        logger.debug("rest server response: " + result);
-        if (OP_OBJECT_UPSERT.equalsIgnoreCase(operation) && StringUtils.isEmpty(objectId)) {
-          //Status: 201 Created
-          //Location: https://heqfq0sw.api.lncld.net/1.1/classes/Post/<objectId>
-          JsonObject location = new JsonObject().put("Location", Configure.getInstance().getBaseHost() + "/"
-                  + context.request().path() + result.getString(LeanObject.ATTR_NAME_OBJECTID));
-          created(context, location, result);
-        } else {
-          ok(context, result);
-        }
-      }
-    });
-  }
+//  private void directlySendEvent(RoutingContext context, JsonObject request, String objectId, String operation,
+//                                 DeliveryOptions options, final Handler<JsonObject> handler) {
+//    vertx.eventBus().send(Configure.MAILADDRESS_DATASTORE_QUEUE, request, options, reply -> {
+//      if (reply.failed()) {
+//        if (reply.cause() instanceof ReplyException) {
+//          int failureCode = ((ReplyException) reply.cause()).failureCode();
+//          JsonObject responseJson = new JsonObject().put("code", failureCode).put("error", reply.cause().getMessage());
+//          if (failureCode == ErrorCodes.DATABASE_ERROR.getCode() || failureCode == ErrorCodes.INTERNAL_ERROR.getCode()) {
+//            internalServerError(context, responseJson);
+//          } else {
+//            badRequest(context, responseJson);
+//          }
+//        } else {
+//          internalServerError(context, ErrorCodes.DATABASE_ERROR.toJson());
+//        }
+//      } else {
+//        JsonObject result = (JsonObject) reply.result().body();
+//        if (null != handler) {
+//          handler.handle(result);
+//        }
+//        logger.debug("rest server response: " + result);
+//        if (HttpMethod.POST.toString().equalsIgnoreCase(operation) && StringUtils.isEmpty(objectId)) {
+//          //Status: 201 Created
+//          //Location: https://heqfq0sw.api.lncld.net/1.1/classes/Post/<objectId>
+//          JsonObject location = new JsonObject().put("Location", Configure.getInstance().getBaseHost() + "/"
+//                  + context.request().path() + result.getString(LeanObject.ATTR_NAME_OBJECTID));
+//          created(context, location, result);
+//        } else {
+//          ok(context, result);
+//        }
+//      }
+//    });
+//  }
 
-  private void sendDataOperationWithOption(RoutingContext context, String clazz, String objectId, String operation,
-                                           JsonObject param, boolean fetchWhenSave, final Handler<JsonObject> handler) {
-    JsonObject request = new JsonObject();
-    request.put(INTERNAL_MSG_ATTR_FETCHWHENSAVE, fetchWhenSave);
-    if (!StringUtils.isEmpty(clazz)) {
-      request.put(INTERNAL_MSG_ATTR_CLASS, clazz);
-    }
-    if (!StringUtils.isEmpty(objectId)) {
-      request.put(INTERNAL_MSG_ATTR_OBJECT_ID, objectId);
-    }
-    if (null != param) {
-      request.put(INTERNAL_MSG_ATTR_PARAM, param);
-    }
-    DeliveryOptions options = new DeliveryOptions().addHeader(INTERNAL_MSG_HEADER_OP, operation);
-    if (operation.equals(OP_OBJECT_UPSERT)) {
-      vertx.eventBus().send(Configure.MAILADDRESS_DEMOCLES_QUEUE, request, options, response -> {
-        if (response.failed()) {
-          int failureCode = ((ReplyException) response.cause()).failureCode();
-          JsonObject responseJson = new JsonObject().put("code", failureCode).put("error", response.cause().getMessage());
-          badRequest(context, responseJson);
-          return;
-        } else {
-          directlySendEvent(context, request, objectId, operation, options, handler);
-        }
-      });
-    } else {
-      directlySendEvent(context, request, objectId, operation, options, handler);
-    }
-  }
+//  private void sendDataOperationWithOption(RoutingContext context, String clazz, String objectId, String operation,
+//                                           JsonObject param, boolean fetchWhenSave, final Handler<JsonObject> handler) {
+//    JsonObject request = new JsonObject();
+//    request.put(INTERNAL_MSG_ATTR_RETURNNEWDOC, fetchWhenSave);
+//    if (!StringUtils.isEmpty(clazz)) {
+//      request.put(INTERNAL_MSG_ATTR_CLASS, clazz);
+//    }
+//    if (!StringUtils.isEmpty(objectId)) {
+//      request.put(INTERNAL_MSG_ATTR_OBJECT_ID, objectId);
+//    }
+//    if (null != param) {
+//      request.put(INTERNAL_MSG_ATTR_PARAM, param);
+//    }
+//    DeliveryOptions options = new DeliveryOptions().addHeader(INTERNAL_MSG_HEADER_OP, operation);
+//    if (operation.equals(HttpMethod.POST.toString()) || operation.equals(HttpMethod.PUT.toString())) {
+//      vertx.eventBus().send(Configure.MAILADDRESS_DEMOCLES_QUEUE, request, options, response -> {
+//        if (response.failed()) {
+//          int failureCode = ((ReplyException) response.cause()).failureCode();
+//          JsonObject responseJson = new JsonObject().put("code", failureCode).put("error", response.cause().getMessage());
+//          badRequest(context, responseJson);
+//          return;
+//        } else {
+//          directlySendEvent(context, request, objectId, operation, options, handler);
+//        }
+//      });
+//    } else {
+//      directlySendEvent(context, request, objectId, operation, options, handler);
+//    }
+//  }
 
-  private void sendDataOperationEx(RoutingContext context, String clazz, String objectId, String operation,
-                                   JsonObject param, final Handler<JsonObject> handler) {
-    sendDataOperationWithOption(context, clazz, objectId, operation, param, false, handler);
-  }
-
-  // only for user refresh session token.
-  private <T> void queryUserWithHandler(RoutingContext context, String clazz, String objectId, String operation,
-                                        JsonObject param, Handler<AsyncResult<Message<T>>> replyHandler) {
-    JsonObject request = new JsonObject();
-    if (!StringUtils.isEmpty(clazz)) {
-      request.put(INTERNAL_MSG_ATTR_CLASS, clazz);
-    }
-    if (!StringUtils.isEmpty(objectId)) {
-      request.put(INTERNAL_MSG_ATTR_OBJECT_ID, objectId);
-    }
-    if (null != param) {
-      request.put(INTERNAL_MSG_ATTR_PARAM, param);
-    }
-    DeliveryOptions options = new DeliveryOptions().addHeader(INTERNAL_MSG_HEADER_OP, operation);
-    vertx.eventBus().send(Configure.MAILADDRESS_DATASTORE_QUEUE, request, options, replyHandler);
-  }
-
-  private void sendDataOperation(RoutingContext context, String clazz, String objectId, String operation, JsonObject param) {
-    sendDataOperationEx(context, clazz, objectId, operation, param, null);
-  }
+//  private void sendDataOperationEx(RoutingContext context, String clazz, String objectId, String operation,
+//                                   JsonObject param, final Handler<JsonObject> handler) {
+//    sendDataOperationWithOption(context, clazz, objectId, operation, param, false, handler);
+//  }
 
   private void healthcheck(RoutingContext context) {
     logger.debug("response for healthcheck.");
@@ -467,12 +401,10 @@ public class RestServerVerticle extends CommonVerticle {
                     .put("Contacts", "support@leancloud.rocks")));
     router.get("/ping").handler(this::healthcheck);
 
-//    SessionStore sessionStore = LocalSessionStore.create(vertx, "ayers.sessionmap");
     router.route("/1.1/*").handler(appKeyValidationHandler).handler(BodyHandler.create())
             .handler(CorsHandler.create("*")
                     .allowedMethod(HttpMethod.GET).allowedMethod(HttpMethod.POST).allowedMethod(HttpMethod.PUT)
                     .allowedMethod(HttpMethod.DELETE).allowedMethod(HttpMethod.OPTIONS).allowedMethod(HttpMethod.HEAD)
-//                    .allowCredentials(true)
                     .allowedHeader("Access-Control-Request-Method").allowedHeader("Access-Control-Allow-Credentials")
                     .allowedHeader("Access-Control-Allow-Origin").allowedHeader("Access-Control-Allow-Headers")
                     .allowedHeader("Content-Type").allowedHeader("Origin").allowedHeader("Accept")

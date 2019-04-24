@@ -7,6 +7,7 @@ import cn.leancloud.platform.modules.LeanObject;
 import cn.leancloud.platform.modules.Schema;
 import cn.leancloud.platform.persistence.DataStore;
 import cn.leancloud.platform.persistence.BulkOperation;
+import com.qiniu.util.Json;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 import io.vertx.core.json.JsonArray;
@@ -115,6 +116,9 @@ public class MongoDBDataStore implements DataStore {
       }
 
       this.mongoClient.updateCollectionWithOptions(clazz, condition, encodedObject, mongoOptions, event ->{
+        if (event.succeeded()) {
+          logger.debug(Json.encode(event.result()));
+        }
         if (null != resultHandler) {
           resultHandler.handle(event.map(MongoClientUpdateResult::getDocModified));
         }
