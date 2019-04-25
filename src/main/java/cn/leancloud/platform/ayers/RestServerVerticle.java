@@ -31,6 +31,7 @@ import io.vertx.ext.web.api.validation.HTTPRequestValidationHandler;
 import io.vertx.ext.web.api.validation.ValidationException;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CorsHandler;
+import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -226,7 +227,7 @@ public class RestServerVerticle extends CommonVerticle {
     JsonObject body = parseRequestBody(context);
     HttpMethod httpMethod = context.request().method();
     String fetchWhenSave = context.request().getParam("fetchWhenSave");
-    boolean returnNewObject = "true".equalsIgnoreCase(fetchWhenSave);
+    boolean returnNewObject = Boolean.valueOf(fetchWhenSave);
 
     logger.debug("curl object. clazz=" + clazz + ", objectId=" + objectId + ", method=" + httpMethod
             + ", param=" + body + ", fetchWhenSave=" + fetchWhenSave);
@@ -270,8 +271,11 @@ public class RestServerVerticle extends CommonVerticle {
         modifyHandler.create(clazz, body, returnNewObject, replayHandler);
       } else if (HttpMethod.PUT.equals(httpMethod)) {
         modifyHandler.update(clazz, objectId, null, body, returnNewObject, replayHandler);
-      } else {
+      } else if (HttpMethod.DELETE.equals(httpMethod)){
         modifyHandler.delete(clazz, objectId, null, replayHandler);
+      } else {
+        logger.warn("not support http method: " + httpMethod);
+        forbidden(context, new JsonObject().put("error", "not support HTTP Method - " + httpMethod));
       }
     }
   }
@@ -393,15 +397,15 @@ public class RestServerVerticle extends CommonVerticle {
         // Something went wrong during validation!
         String validationErrorMessage = routingContext.failure().getMessage();
         logger.warn("invalid request. cause: " + validationErrorMessage);
-      } else {
-        // Unknown 400 failure happened
       }
+      routingContext.next();
     });
-//    router.errorHandler(HttpStatus.SC_INTERNAL_SERVER_ERROR, routingContext -> {
-//      if (routingContext.failed()) {
-//        logger.warn("internal error. cause: " + routingContext.failure().getMessage());
-//      }
-//    });
+    router.errorHandler(HttpStatus.SC_INTERNAL_SERVER_ERROR, routingContext -> {
+      if (routingContext.failed()) {
+        logger.warn("internal error. cause: " + routingContext.failure().getMessage());
+      }
+      routingContext.next();
+    });
 
     int portNumber = Configure.getInstance().listenPort();
     httpServer.requestHandler(router).listen(portNumber, ar -> {

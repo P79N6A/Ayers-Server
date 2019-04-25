@@ -60,7 +60,7 @@ public class DemoclesVerticle extends CommonVerticle {
   public void onMessage(Message<JsonObject> message) {
     JsonObject body = message.body();
     String clazz = body.getString(INTERNAL_MSG_ATTR_CLASS, "");
-    JsonObject param = body.getJsonObject(INTERNAL_MSG_ATTR_PARAM);
+    JsonObject param = body.getJsonObject(INTERNAL_MSG_ATTR_UPDATE_PARAM);
     if (null == param || StringUtils.isEmpty(clazz)) {
       logger.warn("clazz or param json is empty, ignore schema check...");
       message.reply("ok");

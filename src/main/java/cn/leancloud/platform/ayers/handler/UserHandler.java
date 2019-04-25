@@ -1,6 +1,7 @@
 package cn.leancloud.platform.ayers.handler;
 
 import cn.leancloud.platform.ayers.CommonVerticle;
+import cn.leancloud.platform.ayers.RequestParse;
 import cn.leancloud.platform.codec.Base64;
 import cn.leancloud.platform.codec.MessageDigest;
 import cn.leancloud.platform.common.*;
@@ -159,10 +160,10 @@ public class UserHandler extends CommonHandler {
 
   public void signup(JsonObject param, Handler<AsyncResult<JsonObject>> handler) {
     JsonObject authData = param.getJsonObject(PARAM_AUTH_DATA);
-    String operation = CommonVerticle.OP_USER_SIGNUP;
+    String operation = RequestParse.OP_USER_SIGNUP;
     JsonObject query = null;
     if (null != authData && authData.size() > 0) {
-      operation = CommonVerticle.OP_USER_AUTH_LOGIN;
+      operation = RequestParse.OP_USER_AUTH_LOGIN; // change operation type
       query = new JsonObject().put(PARAM_AUTH_DATA, authData);
     }
     sendDataOperationWithOption(Constraints.USER_CLASS, null, operation, query, param, true, handler);
@@ -170,10 +171,10 @@ public class UserHandler extends CommonHandler {
 
   public void signin(JsonObject param, Handler<AsyncResult<JsonObject>> handler) {
     JsonObject authData = param.getJsonObject(PARAM_AUTH_DATA);
-    String operation = CommonVerticle.OP_USER_SIGNIN;
+    String operation = RequestParse.OP_USER_SIGNIN;
     JsonObject query = null;
     if (null != authData && authData.size() > 0) {
-      operation = CommonVerticle.OP_USER_AUTH_LOGIN;
+      operation = RequestParse.OP_USER_AUTH_LOGIN; // change operation type
       query = new JsonObject().put(PARAM_AUTH_DATA, authData);
     }
     sendDataOperationWithOption(Constraints.USER_CLASS, null, operation, query, param, true, handler);

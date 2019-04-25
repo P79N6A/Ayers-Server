@@ -24,24 +24,13 @@ public class CommonVerticle extends AbstractVerticle {
   protected static final String REQUEST_PARAM_OBJECTID = "objectId";
   protected static final String REQUEST_PARAM_CLAZZ = "clazz";
 
-  protected static final String QUERY_KEY_COUNT = "count";
-  protected static final String QUERY_KEY_WHERE = "where";
-  protected static final String QUERY_KEY_LIMIT = "limit";
-  protected static final String QUERY_KEY_SKIP = "skip";
-  protected static final String QUERY_KEY_ORDER = "order";
-  protected static final String QUERY_KEY_INCLUDE = "include";
-  protected static final String QUERY_KEY_KEYS = "keys";
-
   public static final String INTERNAL_MSG_ATTR_CLASS = "class";
   public static final String INTERNAL_MSG_ATTR_OBJECT_ID = "objectId";
-  public static final String INTERNAL_MSG_ATTR_PARAM = "param";
+  public static final String INTERNAL_MSG_ATTR_UPDATE_PARAM = "param";
   public static final String INTERNAL_MSG_ATTR_QUERY = "query";
   public static final String INTERNAL_MSG_HEADER_OP = "operation";
   public static final String INTERNAL_MSG_ATTR_RETURNNEWDOC = "returnNewDoc";
 
-  public static final String OP_USER_SIGNIN = "LOGIN";
-  public static final String OP_USER_SIGNUP = "SIGNUP";
-  public static final String OP_USER_AUTH_LOGIN = "AUTH_LOGIN";
 
   protected Supplier<JsonObject> dummyJsonGenerator = new Supplier<JsonObject>() {
     @Override

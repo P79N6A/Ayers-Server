@@ -1,5 +1,6 @@
 package cn.leancloud.platform.ayers;
 
+import cn.leancloud.platform.ayers.handler.ObjectQueryHandler;
 import cn.leancloud.platform.ayers.handler.UserHandler;
 import cn.leancloud.platform.common.*;
 import cn.leancloud.platform.modules.LeanObject;
@@ -8,15 +9,13 @@ import cn.leancloud.platform.persistence.DataStoreFactory;
 import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.Message;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static cn.leancloud.platform.utils.JsonFactory.obj;
@@ -25,6 +24,7 @@ import static cn.leancloud.platform.utils.JsonFactory.toJsonArray;
 public class StorageVerticle extends CommonVerticle {
   private static final Logger logger = LoggerFactory.getLogger(StorageVerticle.class);
   private static final int COUNT_FLAG = 1;
+
   private DataStoreFactory dataStoreFactory = null;
 
   private void prepareDatabase() {
@@ -52,7 +52,7 @@ public class StorageVerticle extends CommonVerticle {
     JsonObject body = message.body();
     String clazz = body.getString(INTERNAL_MSG_ATTR_CLASS, "");
     String objectId = body.getString(INTERNAL_MSG_ATTR_OBJECT_ID);
-    JsonObject param = body.getJsonObject(INTERNAL_MSG_ATTR_PARAM, new JsonObject());
+    JsonObject updateParam = body.getJsonObject(INTERNAL_MSG_ATTR_UPDATE_PARAM, new JsonObject());
     final JsonObject query = body.getJsonObject(INTERNAL_MSG_ATTR_QUERY, new JsonObject());
     boolean fetchWhenSave = body.getBoolean(INTERNAL_MSG_ATTR_RETURNNEWDOC, false);
 
@@ -60,12 +60,14 @@ public class StorageVerticle extends CommonVerticle {
     Instant now = Instant.now();
 
     switch (operation) {
-      case OP_USER_AUTH_LOGIN:
-        logger.debug("thirdparty signup/signin. query=" + query + ", param=" + param);
+      case RequestParse.OP_USER_AUTH_LOGIN:
+        logger.debug("thirdparty signup/signin. query=" + query + ", param=" + updateParam);
         if (query.size() < 1) {
           message.fail(ErrorCodes.INVALID_PARAMETER.getCode(), "query parameter is empty.");
         } else {
-          dataStore.findOneAndUpdateWithOptions(clazz, query, param,
+          updateParam.put(LeanObject.ATTR_NAME_UPDATED_TS, now);
+
+          dataStore.findOneAndUpdateWithOptions(clazz, query, updateParam,
                   new DataStore.QueryOption().setLimit(1), new DataStore.UpdateOption().setUpsert(true).setReturnNewDocument(true),
                   res -> {
                     if (res.failed()) {
@@ -85,13 +87,13 @@ public class StorageVerticle extends CommonVerticle {
                   });
         }
         break;
-      case OP_USER_SIGNIN:
-        String password = param.getString(UserHandler.PARAM_PASSWORD);
+      case RequestParse.OP_USER_SIGNIN:
+        String password = updateParam.getString(UserHandler.PARAM_PASSWORD);
         if (StringUtils.notEmpty(password)) {
-          param.remove(UserHandler.PARAM_PASSWORD);
+          updateParam.remove(UserHandler.PARAM_PASSWORD);
         }
-        logger.debug("user signin. query= " + param.toString());
-        dataStore.findOne(clazz, param, null, user -> {
+        logger.debug("user signin. query= " + updateParam.toString());
+        dataStore.findOne(clazz, updateParam, null, user -> {
           dataStore.close();
           if (user.failed()) {
             reportDatabaseError(message, user.cause());
@@ -116,14 +118,14 @@ public class StorageVerticle extends CommonVerticle {
           }
         });
         break;
-      case OP_USER_SIGNUP:
-      case "POST":
-        param.put(LeanObject.ATTR_NAME_CREATED_TS, now);
-        param.put(LeanObject.ATTR_NAME_UPDATED_TS, now);
-        logger.debug("insert doc=== " + param.toString());
+      case RequestParse.OP_USER_SIGNUP:
+      case RequestParse.HTTP_POST:
+        updateParam.put(LeanObject.ATTR_NAME_CREATED_TS, now);
+        updateParam.put(LeanObject.ATTR_NAME_UPDATED_TS, now);
+        logger.debug("insert doc=== " + updateParam.toString());
         DataStore.InsertOption insertOption = new DataStore.InsertOption();
         insertOption.setReturnNewDocument(fetchWhenSave);
-        dataStore.insertWithOptions(clazz, param, insertOption, res -> {
+        dataStore.insertWithOptions(clazz, updateParam, insertOption, res -> {
           dataStore.close();
           if (res.failed()) {
             reportDatabaseError(message, res.cause());
@@ -137,10 +139,10 @@ public class StorageVerticle extends CommonVerticle {
           }
         });
         break;
-      case "PUT":
-        param.put(LeanObject.ATTR_NAME_UPDATED_TS, now);
+      case RequestParse.HTTP_PUT:
+        updateParam.put(LeanObject.ATTR_NAME_UPDATED_TS, now);
 
-        logger.debug("doc=== " + param.toString());
+        logger.debug("doc=== " + updateParam.toString());
         if (StringUtils.notEmpty(objectId)) {
           query.put(LeanObject.ATTR_NAME_OBJECTID, objectId);
         }
@@ -154,7 +156,7 @@ public class StorageVerticle extends CommonVerticle {
           if (fetchWhenSave) {
             DataStore.QueryOption queryOption = new DataStore.QueryOption();
             logger.debug("try to call findOneAndUpdateWithOptions.");
-            dataStore.findOneAndUpdateWithOptions(clazz, query, param, queryOption, option, res -> {
+            dataStore.findOneAndUpdateWithOptions(clazz, query, updateParam, queryOption, option, res -> {
               dataStore.close();
               if (res.failed()) {
                 logger.warn("failed to call findOneAndUpdateWithOptions. cause:" + res.cause());
@@ -170,7 +172,7 @@ public class StorageVerticle extends CommonVerticle {
               }
             });
           } else {
-            dataStore.updateWithOptions(clazz, query, param, option, res1 -> {
+            dataStore.updateWithOptions(clazz, query, updateParam, option, res1 -> {
               dataStore.close();
               if (res1.failed()) {
                 reportDatabaseError(message, res1.cause());
@@ -189,11 +191,11 @@ public class StorageVerticle extends CommonVerticle {
           }
         }
         break;
-      case "DELETE":
+      case RequestParse.HTTP_DELETE:
         if (!StringUtils.isEmpty(objectId)) {
-          param.put(LeanObject.ATTR_NAME_OBJECTID, objectId);
+          updateParam.put(LeanObject.ATTR_NAME_OBJECTID, objectId);
         }
-        dataStore.removeWithOptions(clazz, param, null, res -> {
+        dataStore.removeWithOptions(clazz, updateParam, null, res -> {
           dataStore.close();
           if (res.failed()) {
             reportDatabaseError(message, res.cause());
@@ -202,16 +204,13 @@ public class StorageVerticle extends CommonVerticle {
           }
         });
         break;
-      case "GET":
-        String where = param.getString(QUERY_KEY_WHERE, "{}");
-        String order = param.getString(QUERY_KEY_ORDER);
-        int limit = Integer.valueOf(param.getString(QUERY_KEY_LIMIT, "100"));
-        int skip = Integer.valueOf(param.getString(QUERY_KEY_SKIP, "0"));
-        int count = Integer.valueOf(param.getString(QUERY_KEY_COUNT, "0"));
-        String include = param.getString(QUERY_KEY_INCLUDE);
-        String keys = param.getString(QUERY_KEY_KEYS);
-
-        JsonObject condition = new JsonObject(where);
+      case RequestParse.HTTP_GET:
+        int limit = query.getInteger(ObjectQueryHandler.QUERY_KEY_LIMIT, 100);
+        int skip = query.getInteger(ObjectQueryHandler.QUERY_KEY_SKIP, 0);
+        int count = query.getInteger(ObjectQueryHandler.QUERY_KEY_COUNT, 0);
+        JsonObject condition = query.getJsonObject(ObjectQueryHandler.QUERY_KEY_WHERE);
+        JsonObject sortJson = query.getJsonObject(ObjectQueryHandler.QUERY_KEY_ORDER);
+        JsonObject fieldJson = query.getJsonObject(ObjectQueryHandler.QUERY_KEY_KEYS);
         if (!StringUtils.isEmpty(objectId)) {
           condition.put(LeanObject.ATTR_NAME_OBJECTID, objectId);
         }
@@ -230,19 +229,8 @@ public class StorageVerticle extends CommonVerticle {
           DataStore.QueryOption options = new DataStore.QueryOption();
           options.setLimit(limit);
           options.setSkip(skip);
-          JsonObject sortJson = BsonTransformer.parseSortParam(order);
-          if (null != sortJson) {
-            options.setSort(sortJson);
-          }
-          JsonObject fieldJson = BsonTransformer.parseProjectParam(keys);
-          if (null != fieldJson) {
-            options.setFields(fieldJson);
-          }
-          if (!StringUtils.isEmpty(include)) {
-            List<String> includeArray = Arrays.asList(include.split(",")).stream().filter(StringUtils::notEmpty)
-                    .collect(Collectors.toList());
-            options.setIncludes(includeArray);
-          }
+          options.setSort(sortJson);
+          options.setFields(fieldJson);
           logger.debug("find clazz=" + clazz + ", condition=" + condition.toString() + ", options=" + options);
           dataStore.findWithOptions(clazz, condition, options, res->{
             dataStore.close();

@@ -15,7 +15,6 @@ public interface DataStore {
     private int limit = -1;
     private JsonObject sort = null;
     private JsonObject fields = null;
-    private List<String> includes = null;
 
     public int getSkip() {
       return skip;
@@ -50,15 +49,6 @@ public interface DataStore {
 
     public QueryOption setFields(JsonObject fields) {
       this.fields = fields;
-      return this;
-    }
-
-    public List<String> getIncludes() {
-      return includes;
-    }
-
-    public QueryOption setIncludes(List<String> includes) {
-      this.includes = includes;
       return this;
     }
 

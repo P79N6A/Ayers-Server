@@ -1,6 +1,7 @@
 package cn.leancloud.platform.ayers.handler;
 
 import cn.leancloud.platform.ayers.CommonVerticle;
+import cn.leancloud.platform.ayers.RequestParse;
 import cn.leancloud.platform.common.BatchRequest;
 import cn.leancloud.platform.common.Configure;
 import cn.leancloud.platform.common.ErrorCodes;
@@ -12,6 +13,7 @@ import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -42,19 +44,21 @@ public class ObjectModifyHandler extends CommonHandler {
     String method = reqJson.getString("method");
     String path = reqJson.getString("path");
     JsonObject param = reqJson.getJsonObject("body");
-    if (StringUtils.isEmpty(method) || StringUtils.isEmpty(path) || !ObjectSpecifics.validRequestPath(path)) {
+    Pair<String, String> pair = parseClazzAndObjectId(path);
+    String clazz = pair.getLeft();
+    String objectId = pair.getRight();
+    if (StringUtils.isEmpty(method) || isUpdatableOperation(method) || StringUtils.isEmpty(path)
+            || !ObjectSpecifics.validRequestPath(path)) {
       return null;
     }
-    String[] pathParts = path.split("/");
-    String clazz = (pathParts.length >= 4)? pathParts[3] : "";
-    String objectId = (pathParts.length >= 5)? pathParts[4] : "";
     if (!StringUtils.isEmpty(clazz) && !ObjectSpecifics.validClassName(clazz)) {
       return null;
     }
-    if (null == param && !method.equalsIgnoreCase("delete")) {
+    if (null == param && !method.equalsIgnoreCase(RequestParse.HTTP_DELETE)) {
       return null;
     }
-    if ((method.equalsIgnoreCase("put") || method.equalsIgnoreCase("delete")) && StringUtils.isEmpty(objectId)) {
+    if ((method.equalsIgnoreCase(RequestParse.HTTP_PUT)
+            || method.equalsIgnoreCase(RequestParse.HTTP_DELETE)) && StringUtils.isEmpty(objectId)) {
       return null;
     }
     return new BatchRequest(method, path, clazz, objectId, param);
@@ -76,7 +80,7 @@ public class ObjectModifyHandler extends CommonHandler {
           request.put(CommonVerticle.INTERNAL_MSG_ATTR_OBJECT_ID, batchRequest.getObjectId());
         }
         if (null != batchRequest.getBody()) {
-          request.put(CommonVerticle.INTERNAL_MSG_ATTR_PARAM, batchRequest.getBody());
+          request.put(CommonVerticle.INTERNAL_MSG_ATTR_UPDATE_PARAM, batchRequest.getBody());
         }
         DeliveryOptions options = new DeliveryOptions().addHeader(CommonVerticle.INTERNAL_MSG_HEADER_OP, method);
         vertx.eventBus().send(Configure.MAILADDRESS_DEMOCLES_QUEUE, request, options, response -> {

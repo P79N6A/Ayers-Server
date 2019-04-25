@@ -79,10 +79,10 @@ public class MainVerticle extends CommonVerticle {
       vertx.deployVerticle(new RestServerVerticle(), httpVerticleDeployment);
       return httpVerticleDeployment;
     }).compose(id1 -> {
-      logger.info("try to deploy "+ configure.datastoreVerticleCount() + " democles verticles.");
+      logger.info("try to deploy democles verticles.");
       Future<String> democlesVerticleDeployment = Future.future();
       vertx.deployVerticle(DemoclesVerticle.class,
-              new DeploymentOptions().setInstances(configure.datastoreVerticleCount()),
+              new DeploymentOptions().setInstances(1),
               democlesVerticleDeployment);
       return democlesVerticleDeployment;
     }).compose(id2 -> {

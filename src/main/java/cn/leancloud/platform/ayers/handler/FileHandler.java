@@ -21,6 +21,13 @@ public class FileHandler extends CommonHandler {
   }
 
   public void createFileToken(HttpMethod httpMethod, String name, String key, JsonObject body, Handler<AsyncResult<JsonObject>> handler) {
+    if (!assertNotNull(name, handler))
+      return;
+    if (!assertNotNull(key, handler))
+      return;
+    if (!assertNotNull(body, handler))
+      return;
+
     String mimeType = Constraints.DEFAULT_MIME_TYPE;
     String[] nameParts = name.split("\\.");
     if (nameParts.length > 1) {
@@ -44,6 +51,8 @@ public class FileHandler extends CommonHandler {
   }
 
   public void uploadCallback(JsonObject body, Handler<AsyncResult<JsonObject>> handler) {
+    if (!assertNotNull(body, handler))
+      return;
     boolean result = body.getBoolean("result");
     if (result) {
       // TODO: remove appId/objectId/token from cache.

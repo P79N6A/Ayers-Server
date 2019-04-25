@@ -1,6 +1,7 @@
 package cn.leancloud.platform.ayers;
 
 import cn.leancloud.platform.utils.StringUtils;
+import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,6 +9,8 @@ import org.slf4j.LoggerFactory;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class RequestParse {
   private static final Logger logger = LoggerFactory.getLogger(RequestParse.class);
@@ -46,6 +49,14 @@ public class RequestParse {
 
 //  public static final String ALLOWED_HEADERS_STRING = String.join(",", ALLOWED_HEADERS);
   public static final Set<String> ALLOWED_HEADERS_SET = new HashSet<>(Arrays.asList(ALLOWED_HEADERS));
+
+  public static final String HTTP_POST = "POST";
+  public static final String HTTP_PUT = "PUT";
+  public static final String HTTP_GET = "GET";
+  public static final String HTTP_DELETE = "DELETE";
+  public static final String OP_USER_SIGNIN = "LOGIN";
+  public static final String OP_USER_SIGNUP = "SIGNUP";
+  public static final String OP_USER_AUTH_LOGIN = "AUTH_LOGIN";
 
   public static class RequestHeaders {
     private String appId;

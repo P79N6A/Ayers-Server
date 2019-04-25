@@ -12,7 +12,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class BsonTransformer {
-  private static final String[] ALWAYS_PROJECT_KEYS = {"_id", "createdAt", "updatedAt", "ACL"};
   public static final String CLASS_ATTR_MONGO_ID = "_id";
 
   public static final String REST_OP_REMOVE_RELATION = "removerelation";
@@ -284,34 +283,5 @@ public class BsonTransformer {
     }).collect(JsonFactory.toJsonObject());
 
     return jsonResult;
-  }
-
-  public static JsonObject parseSortParam(String order) {
-    if (StringUtils.isEmpty(order)) {
-      return null;
-    }
-    JsonObject sortJson = new JsonObject();
-    Arrays.stream(order.split(",")).filter(StringUtils::notEmpty).forEach( a -> {
-      if (a.startsWith("+")) {
-        sortJson.put(a.substring(1), 1);
-      } else if (a.startsWith("-")) {
-        sortJson.put(a.substring(1), -1);
-      } else {
-        sortJson.put(a, 1);
-      }
-    });
-    return sortJson;
-  }
-
-  public static JsonObject parseProjectParam(String keys) {
-    if (StringUtils.isEmpty(keys)) {
-      return null;
-    }
-    JsonObject fieldJson = new JsonObject();
-    Stream.concat(Arrays.stream(keys.split(",")), Arrays.stream(ALWAYS_PROJECT_KEYS))
-            .filter(StringUtils::notEmpty)
-            .collect(Collectors.toSet())
-            .forEach(k -> fieldJson.put(k, 1));
-    return fieldJson;
   }
 }
