@@ -18,8 +18,7 @@ public class CommonWebClient {
   private CircuitBreaker circuitBreaker = null;
   private WebClient webClient = null;
   public CommonWebClient(Vertx vertx, String name) {
-    this(vertx, name, new WebClientOptions().setConnectTimeout(5000).setUserAgent("Ayers Server"),
-            new CircuitBreakerOptions().setMaxFailures(10).setMaxRetries(1).setTimeout(1000).setResetTimeout(60000));
+    this(vertx, name, new WebClientOptions().setConnectTimeout(5000).setUserAgent("Ayers Server"));
   }
 
   public CommonWebClient(Vertx vertx, String name, WebClientOptions options) {

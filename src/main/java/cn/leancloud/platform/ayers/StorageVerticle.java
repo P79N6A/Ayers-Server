@@ -249,6 +249,37 @@ public class StorageVerticle extends CommonVerticle {
           });
         }
         break;
+      case RequestParse.OP_CREATE_INDEX:
+        DataStore.IndexOption indexOption = new DataStore.IndexOption().setName(objectId);
+        dataStore.createIndexWithOptions(clazz, updateParam, indexOption, ar -> {
+          dataStore.close();
+          if (ar.failed()) {
+            reportDatabaseError(message, ar.cause());
+          } else {
+            message.reply(new JsonObject());
+          }
+        });
+        break;
+      case RequestParse.OP_DELETE_INDEX:
+        dataStore.dropIndex(clazz, objectId, res -> {
+          dataStore.close();
+          if (res.failed()) {
+            reportDatabaseError(message, res.cause());
+          } else {
+            message.reply(new JsonObject());
+          }
+        });
+        break;
+      case RequestParse.OP_LIST_INDEX:
+        dataStore.listIndices(clazz, res -> {
+          dataStore.close();
+          if (res.failed()) {
+            reportDatabaseError(message, res.cause());
+          } else {
+            message.reply(new JsonObject().put("results", res.result()));
+          }
+        });
+        break;
       default:
         message.fail(ErrorCodes.INTERNAL_ERROR.getCode(), "unknown operation.");
         break;

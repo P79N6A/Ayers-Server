@@ -57,9 +57,17 @@ public class RequestParse {
   public static final String HTTP_PUT = "PUT";
   public static final String HTTP_GET = "GET";
   public static final String HTTP_DELETE = "DELETE";
+
   public static final String OP_USER_SIGNIN = "LOGIN";
   public static final String OP_USER_SIGNUP = "SIGNUP";
   public static final String OP_USER_AUTH_LOGIN = "AUTH_LOGIN";
+
+  public static final String OP_CREATE_INDEX = "CREATE_INDEX";
+  public static final String OP_DELETE_INDEX = "DELETE_INDEX";
+  public static final String OP_LIST_INDEX = "LIST_INDEX";
+  public static final String OP_TEST_SCHEMA = "TEST_SCHEMA";
+  public static final String OP_ADD_SCHEMA = "ADD_SCHEMA";
+  public static final String OP_FIND_SCHEMA = "FIND_SCHEMA";
 
   public static class RequestHeaders {
     private String appId;

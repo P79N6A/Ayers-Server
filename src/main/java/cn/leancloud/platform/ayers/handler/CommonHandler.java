@@ -131,6 +131,24 @@ public class CommonHandler {
     sendDataOperationWithOption(clazz, objectId, operation, query, update, false, handler);
   }
 
+  protected void sendSchemaOperation(String clazz, String operation, JsonObject data,
+                                     final Handler<AsyncResult<JsonObject>> handler) {
+    JsonObject request = new JsonObject();
+    if (!StringUtils.isEmpty(clazz)) {
+      request.put(CommonVerticle.INTERNAL_MSG_ATTR_CLASS, clazz);
+    }
+    if (null != data) {
+      request.put(CommonVerticle.INTERNAL_MSG_ATTR_UPDATE_PARAM, data);
+    }
+
+    String upperOperation = operation.toUpperCase();
+    DeliveryOptions options = new DeliveryOptions().addHeader(CommonVerticle.INTERNAL_MSG_HEADER_OP, upperOperation);
+
+    vertx.eventBus().send(Configure.MAILADDRESS_DEMOCLES_QUEUE, request, options, res -> {
+      handler.handle(res.map(v -> (JsonObject) v.body()));
+    });
+  }
+
   protected void sendDataOperationWithOption(String clazz, String objectId, String operation,
                                              JsonObject query, JsonObject update, boolean returnNewDocument,
                                              final Handler<AsyncResult<JsonObject>> handler) {

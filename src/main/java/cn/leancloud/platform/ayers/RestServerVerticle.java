@@ -1,20 +1,17 @@
 package cn.leancloud.platform.ayers;
 
+import cn.leancloud.platform.auth.ApplicationAuthenticator;
+import cn.leancloud.platform.auth.SessionValidator;
 import cn.leancloud.platform.ayers.handler.*;
 import cn.leancloud.platform.cache.SimpleRedisClient;
 import cn.leancloud.platform.common.*;
 import cn.leancloud.platform.modules.LeanObject;
 import cn.leancloud.platform.modules.ObjectSpecifics;
-import cn.leancloud.platform.utils.MimeUtils;
 import cn.leancloud.platform.utils.StringUtils;
-import com.qiniu.util.Auth;
 import io.vertx.core.AsyncResult;
-import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 
 import io.vertx.core.Handler;
-import io.vertx.core.eventbus.DeliveryOptions;
-import io.vertx.core.eventbus.Message;
 import io.vertx.core.eventbus.ReplyException;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
@@ -28,13 +25,10 @@ import io.vertx.ext.web.api.validation.HTTPRequestValidationHandler;
 import io.vertx.ext.web.api.validation.ValidationException;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CorsHandler;
-import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
-import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Hello world!
@@ -390,6 +384,14 @@ public class RestServerVerticle extends CommonVerticle {
     router.post("/1.1/batch").handler(this::batchWrite);
     router.post("/1.1/batch/save").handler(this::batchWrite);
 
+    router.post("/1.1/schema/:clazz/_test").handler(this::testSchema);
+    router.post("/1.1/schema/:clazz").handler(this::addSchemaIfAbsent);
+    router.get("/1.1/schema/:clazz").handler(this::listSchema);
+
+    router.post("/1.1/indices/:clazz").handler(this::createIndex);
+    router.get("/1.1/indices/:clazz").handler(this::listIndex);
+    router.delete("/1.1/indices/:clazz/:indexName").handler(this::deleteIndex);
+
     router.post("/1.1/requestSmsCode").handler(this::requestSmsCode);
 
     router.errorHandler(400, routingContext -> {
@@ -417,6 +419,92 @@ public class RestServerVerticle extends CommonVerticle {
       }
     });
     return future;
+  }
+
+  private void testSchema(RoutingContext context) {
+    String clazz = parseRequestClassname(context);
+    JsonObject body = parseRequestBody(context);
+    if (null == body || body.size() < 1) {
+      badRequest(context, new JsonObject().put("error", "request body is required."));
+    } else {
+      SchemaHandler handler = new SchemaHandler(vertx, context);
+      handler.test(clazz, body, res -> {
+        if (res.failed()) {
+          internalServerError(context, new JsonObject().put("error", res.cause().getMessage()));
+        } else {
+          ok(context, res.result());
+        }
+      });
+    }
+  }
+
+  private void addSchemaIfAbsent(RoutingContext context) {
+    String clazz = parseRequestClassname(context);
+    JsonObject body = parseRequestBody(context);
+    if (null == body || body.size() < 1) {
+      badRequest(context, new JsonObject().put("error", "request body is required."));
+    } else {
+      SchemaHandler handler = new SchemaHandler(vertx, context);
+      handler.addIfAbsent(clazz, body, res -> {
+        if (res.failed()) {
+          internalServerError(context, new JsonObject().put("error", res.cause().getMessage()));
+        } else {
+          ok(context, res.result());
+        }
+      });
+    }
+  }
+
+  private void listSchema(RoutingContext context) {
+    String clazz = parseRequestClassname(context);
+    SchemaHandler handler = new SchemaHandler(vertx, context);
+    handler.find(clazz, res -> {
+      if (res.failed()) {
+        internalServerError(context, new JsonObject().put("error", res.cause().getMessage()));
+      } else {
+        ok(context, res.result());
+      }
+    });
+  }
+
+  private void createIndex(RoutingContext context) {
+    String clazz = parseRequestClassname(context);
+    JsonObject body = parseRequestBody(context);
+    if (null == body || body.size() < 1) {
+      badRequest(context, new JsonObject().put("error", "request body is required."));
+    } else {
+      IndexHandler handler = new IndexHandler(vertx, context);
+      handler.create(clazz, body, res -> {
+        if (res.failed()) {
+          internalServerError(context, new JsonObject().put("error", res.cause().getMessage()));
+        } else {
+          ok(context, res.result());
+        }
+      });
+    }
+  }
+  private void listIndex(RoutingContext context) {
+    String clazz = parseRequestClassname(context);
+    IndexHandler handler = new IndexHandler(vertx, context);
+    handler.list(clazz, res -> {
+      if (res.failed()) {
+        internalServerError(context, new JsonObject().put("error", res.cause().getMessage()));
+      } else {
+        ok(context, res.result());
+      }
+    });
+  }
+  private void deleteIndex(RoutingContext context) {
+    String clazz = parseRequestClassname(context);
+    String indexName = parseRequestIndexName(context);
+    IndexHandler handler = new IndexHandler(vertx, context);
+    handler.delete(clazz, indexName, res -> {
+      if (res.failed()) {
+        internalServerError(context, new JsonObject().put("error", res.cause().getMessage()));
+      } else {
+        ok(context, res.result());
+      }
+    });
   }
 
   private void requestSmsCode(RoutingContext context) {

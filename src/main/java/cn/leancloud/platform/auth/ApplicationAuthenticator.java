@@ -1,5 +1,6 @@
-package cn.leancloud.platform.ayers;
+package cn.leancloud.platform.auth;
 
+import cn.leancloud.platform.ayers.RequestParse;
 import cn.leancloud.platform.codec.MessageDigest;
 import cn.leancloud.platform.utils.StringUtils;
 

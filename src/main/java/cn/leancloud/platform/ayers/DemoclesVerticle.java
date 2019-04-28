@@ -61,35 +61,84 @@ public class DemoclesVerticle extends CommonVerticle {
     JsonObject body = message.body();
     String clazz = body.getString(INTERNAL_MSG_ATTR_CLASS, "");
     JsonObject param = body.getJsonObject(INTERNAL_MSG_ATTR_UPDATE_PARAM);
+
+    String operation = message.headers().get(INTERNAL_MSG_HEADER_OP).toUpperCase();
+
+    ClassMetaData cachedData;
     if (null == param || StringUtils.isEmpty(clazz)) {
       logger.warn("clazz or param json is empty, ignore schema check...");
       message.reply("ok");
     } else {
-      try {
-        LeanObject object = new LeanObject(param);
-        Schema inputSchema = object.guessSchema();
-        ClassMetaData cachedData = (ClassMetaData)this.classMetaCache.get(clazz);
-        if (null != cachedData) {
-          Schema cachedSchema = new Schema(cachedData.getSchema());
-          Schema.CompatResult compatResult = inputSchema.compatiableWith(cachedSchema);
-          logger.debug("compatiable test. input=" + inputSchema + ", rule=" + cachedSchema + ", result=" + compatResult);
-          if (compatResult == Schema.CompatResult.NOT_MATCHED) {
-            message.fail(INVALID_PARAMETER.getCode(), "data consistency violated.");
+      LeanObject object = null != param? new LeanObject(param) : null;
+      Schema inputSchema;
+
+      switch (operation) {
+        case RequestParse.OP_ADD_SCHEMA:
+          inputSchema = object.guessSchema();
+          cachedData = (ClassMetaData)this.classMetaCache.get(clazz);
+          if (null == cachedData || null == cachedData.getSchema()) {
+            saveSchema(clazz, inputSchema, null == cachedData? null : cachedData.getIndices());
+            message.reply(new JsonObject().put("result", true));
           } else {
-            if (compatResult == Schema.CompatResult.OVER_MATCHED) {
-              saveSchema(clazz, inputSchema, cachedData.getIndices());
-            }
-            message.reply("ok");
+            message.reply(new JsonObject().put("result", false));
           }
-        } else {
-          // first encounter, pass.
-          logger.info("no cached schema, maybe it's new clazz.");
-          saveSchema(clazz, inputSchema, new JsonArray());
-          message.reply("ok");
-        }
-      } catch (ConsistencyViolationException ex) {
-        logger.warn("failed to parse object schema. cause: " + ex.getMessage());
-        message.fail(INVALID_PARAMETER.getCode(), ex.getMessage());
+          break;
+        case RequestParse.OP_TEST_SCHEMA:
+          try {
+            inputSchema = object.guessSchema();
+            cachedData = (ClassMetaData)this.classMetaCache.get(clazz);
+            if (null != cachedData) {
+              Schema cachedSchema = new Schema(cachedData.getSchema());
+              Schema.CompatResult compatResult = inputSchema.compatiableWith(cachedSchema);
+              if (compatResult == Schema.CompatResult.NOT_MATCHED) {
+                message.reply(new JsonObject().put("result", false));
+              } else {
+                message.reply(new JsonObject().put("result", true));
+              }
+            } else {
+              // anything is matched if first occurring.
+              message.reply(new JsonObject().put("result", true));
+            }
+          } catch (ConsistencyViolationException ex) {
+            message.reply(new JsonObject().put("result", false));
+          }
+          break;
+        case RequestParse.OP_FIND_SCHEMA:
+          cachedData = (ClassMetaData) this.classMetaCache.get(clazz);
+          if (null == cachedData) {
+            message.reply(new JsonObject());
+          } else {
+            message.reply(cachedData.getSchema());
+          }
+          break;
+        default:
+          // object CRUD.
+          try {
+            inputSchema = object.guessSchema();
+            cachedData = (ClassMetaData)this.classMetaCache.get(clazz);
+            if (null != cachedData) {
+              Schema cachedSchema = new Schema(cachedData.getSchema());
+              Schema.CompatResult compatResult = inputSchema.compatiableWith(cachedSchema);
+              logger.debug("compatiable test. input=" + inputSchema + ", rule=" + cachedSchema + ", result=" + compatResult);
+              if (compatResult == Schema.CompatResult.NOT_MATCHED) {
+                message.fail(INVALID_PARAMETER.getCode(), "data consistency violated.");
+              } else {
+                if (compatResult == Schema.CompatResult.OVER_MATCHED) {
+                  saveSchema(clazz, inputSchema, cachedData.getIndices());
+                }
+                message.reply("ok");
+              }
+            } else {
+              // first encounter, pass.
+              logger.info("no cached schema, maybe it's new clazz.");
+              saveSchema(clazz, inputSchema, new JsonArray());
+              message.reply("ok");
+            }
+          } catch (ConsistencyViolationException ex) {
+            logger.warn("failed to parse object schema. cause: " + ex.getMessage());
+            message.fail(INVALID_PARAMETER.getCode(), ex.getMessage());
+          }
+          break;
       }
     }
   }
