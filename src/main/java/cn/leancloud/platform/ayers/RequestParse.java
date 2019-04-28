@@ -15,6 +15,9 @@ import java.util.stream.Stream;
 public class RequestParse {
   private static final Logger logger = LoggerFactory.getLogger(RequestParse.class);
 
+  public static final String HEADER_CONTENT_TYPE = "Content-Type";
+  public static final String CONTENT_TYPE_JSON = "application/json; charset=utf-8";
+
   public static final String HEADER_LC_APPID = "X-LC-Id";
   public static final String HEADER_AVOS_APPID = "X-AVOSCloud-Application-Id";
   public static final String HEADER_ULURU_APPID = "X-Uluru-Application-Id";
@@ -118,6 +121,11 @@ public class RequestParse {
     public RequestHeaders setUseMasterKey(boolean useMasterKey) {
       this.useMasterKey = useMasterKey;
       return this;
+    }
+
+    public JsonObject toHeaders() {
+      return new JsonObject().put(HEADER_LC_APPID, this.appId).put(HEADER_LC_APPKEY, this.appKey)
+              .put(HEADER_LC_REQUEST_SIGN, this.requestSign).put(HEADER_LC_SESSION_TOKEN, this.sessionToken);
     }
   }
 

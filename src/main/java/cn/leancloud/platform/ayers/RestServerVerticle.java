@@ -1,9 +1,6 @@
 package cn.leancloud.platform.ayers;
 
-import cn.leancloud.platform.ayers.handler.FileHandler;
-import cn.leancloud.platform.ayers.handler.ObjectModifyHandler;
-import cn.leancloud.platform.ayers.handler.ObjectQueryHandler;
-import cn.leancloud.platform.ayers.handler.UserHandler;
+import cn.leancloud.platform.ayers.handler.*;
 import cn.leancloud.platform.cache.SimpleRedisClient;
 import cn.leancloud.platform.common.*;
 import cn.leancloud.platform.modules.LeanObject;
@@ -393,6 +390,8 @@ public class RestServerVerticle extends CommonVerticle {
     router.post("/1.1/batch").handler(this::batchWrite);
     router.post("/1.1/batch/save").handler(this::batchWrite);
 
+    router.post("/1.1/requestSmsCode").handler(this::requestSmsCode);
+
     router.errorHandler(400, routingContext -> {
       if (routingContext.failure() instanceof ValidationException) {
         // Something went wrong during validation!
@@ -418,6 +417,18 @@ public class RestServerVerticle extends CommonVerticle {
       }
     });
     return future;
+  }
+
+  private void requestSmsCode(RoutingContext context) {
+    SmsCodeHandler handler = new SmsCodeHandler(vertx, context);
+    handler.requestSmsCode(res -> {
+      if (res.failed()) {
+        logger.warn("requestSmsCode failed. cause: " + res.cause().getMessage());
+        badRequest(context, new JsonObject().put("error", res.cause().getMessage()));
+      } else {
+        ok(context, res.result());
+      }
+    });
   }
 
   @Override

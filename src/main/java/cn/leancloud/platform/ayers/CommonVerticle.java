@@ -19,8 +19,6 @@ import java.util.stream.Collectors;
 public class CommonVerticle extends AbstractVerticle {
   private static final Logger logger = LoggerFactory.getLogger(CommonVerticle.class);
 
-  protected static final String HEADER_CONTENT_TYPE = "Content-Type";
-  protected static final String CONTENT_TYPE_JSON = "application/json; charset=utf-8";
   protected static final String REQUEST_PARAM_OBJECTID = "objectId";
   protected static final String REQUEST_PARAM_CLAZZ = "clazz";
 
@@ -76,7 +74,8 @@ public class CommonVerticle extends AbstractVerticle {
 
   protected void response(RoutingContext context, int status, JsonObject header, String result) {
     String origin = context.request().getHeader("Origin");
-    HttpServerResponse response = context.response().setStatusCode(status).putHeader(HEADER_CONTENT_TYPE, CONTENT_TYPE_JSON)
+    HttpServerResponse response = context.response().setStatusCode(status)
+            .putHeader(RequestParse.HEADER_CONTENT_TYPE, RequestParse.CONTENT_TYPE_JSON)
             .putHeader("Access-Control-Allow-Origin", StringUtils.isEmpty(origin)? "*" : origin);
     if (null != header) {
       header.stream().sequential().forEach(entry -> response.putHeader(entry.getKey(), (String) entry.getValue()));
