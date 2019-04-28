@@ -14,11 +14,14 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 import org.apache.commons.lang3.tuple.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
 public class ObjectModifyHandler extends CommonHandler {
+  private static final Logger logger = LoggerFactory.getLogger(ObjectModifyHandler.class);
   public ObjectModifyHandler(Vertx vertx, RoutingContext context) {
     super(vertx, context);
   }
@@ -47,18 +50,22 @@ public class ObjectModifyHandler extends CommonHandler {
     Pair<String, String> pair = parseClazzAndObjectId(path);
     String clazz = pair.getLeft();
     String objectId = pair.getRight();
-    if (StringUtils.isEmpty(method) || isUpdatableOperation(method) || StringUtils.isEmpty(path)
+    if (StringUtils.isEmpty(method) || !isUpdatableOperation(method) || StringUtils.isEmpty(path)
             || !ObjectSpecifics.validRequestPath(path)) {
+      logger.warn("invalid request. method:" + method + ", path:" + path);
       return null;
     }
-    if (!StringUtils.isEmpty(clazz) && !ObjectSpecifics.validClassName(clazz)) {
+    if (StringUtils.isEmpty(clazz) && !ObjectSpecifics.validClassName(clazz)) {
+      logger.warn("invalid clazz:" + clazz);
       return null;
     }
     if (null == param && !method.equalsIgnoreCase(RequestParse.HTTP_DELETE)) {
+      logger.warn("request body is null for POST and PUT");
       return null;
     }
-    if ((method.equalsIgnoreCase(RequestParse.HTTP_PUT)
-            || method.equalsIgnoreCase(RequestParse.HTTP_DELETE)) && StringUtils.isEmpty(objectId)) {
+    if ((method.equalsIgnoreCase(RequestParse.HTTP_PUT) || method.equalsIgnoreCase(RequestParse.HTTP_DELETE))
+            && StringUtils.isEmpty(objectId)) {
+      logger.warn("objectId is null for Delete and PUT");
       return null;
     }
     return new BatchRequest(method, path, clazz, objectId, param);
@@ -69,6 +76,7 @@ public class ObjectModifyHandler extends CommonHandler {
       final Future<JsonObject> tmp = Future.future();
       BatchRequest batchRequest = parseBatchRequest(req);
       if (null == batchRequest) {
+        logger.warn("failed to parse request:" + req);
         tmp.complete(new JsonObject().put("error", ErrorCodes.INVALID_PARAMETER.toJson()));
       } else {
         String method = batchRequest.getMethod();
@@ -86,12 +94,14 @@ public class ObjectModifyHandler extends CommonHandler {
         vertx.eventBus().send(Configure.MAILADDRESS_DEMOCLES_QUEUE, request, options, response -> {
           if (response.failed()) {
             tmp.complete(new JsonObject().put("error",
-                    new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("error", response.cause().getMessage())));
+                    new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode())
+                            .put("error", response.cause().getMessage())));
           } else {
             vertx.eventBus().send(Configure.MAILADDRESS_DATASTORE_QUEUE, request, options, res -> {
               if (res.failed()) {
                 tmp.complete(new JsonObject().put("error",
-                        new JsonObject().put("code", ErrorCodes.DATABASE_ERROR.getCode()).put("error", res.cause().getMessage())));
+                        new JsonObject().put("code", ErrorCodes.DATABASE_ERROR.getCode())
+                                .put("error", res.cause().getMessage())));
               } else {
                 tmp.complete(new JsonObject().put("success", (JsonObject) res.result().body()));
               }

@@ -37,6 +37,7 @@ public class StorageVerticle extends CommonVerticle {
   }
 
   private void reportUserError(Message<JsonObject> msg, int code, String message) {
+    logger.warn("encounter common erro. code:" + code + ", message:" + message);
     msg.fail(code, message);
   }
 

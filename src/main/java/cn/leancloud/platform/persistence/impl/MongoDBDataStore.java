@@ -12,9 +12,11 @@ import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import io.vertx.core.streams.ReadStream;
 import io.vertx.ext.mongo.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scala.collection.immutable.StreamIterator;
 
 import java.security.InvalidParameterException;
 import java.util.List;
@@ -323,6 +325,10 @@ public class MongoDBDataStore implements DataStore {
   public DataStore removeSchema(String clazz, Handler<AsyncResult<Long>> resultHandler) {
     JsonObject query = new JsonObject().put("class", clazz);
     return this.remove(Constraints.METADATA_CLASS, query, resultHandler);
+  }
+
+  public ReadStream<JsonObject> aggregate(String clazz, JsonArray pipeline) {
+    return this.mongoClient.aggregateWithOptions(clazz, pipeline, new AggregateOptions().setBatchSize(100).setMaxAwaitTime(2000).setMaxTime(5000));
   }
 
   public void close() {

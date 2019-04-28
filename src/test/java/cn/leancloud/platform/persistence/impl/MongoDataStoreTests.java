@@ -7,7 +7,9 @@ import cn.leancloud.platform.utils.JsonFactory;
 import io.vertx.core.*;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import io.vertx.core.streams.ReadStream;
 import junit.framework.TestCase;
+import scala.collection.immutable.StreamIterator;
 
 import java.time.Instant;
 import java.util.Arrays;
@@ -165,6 +167,74 @@ public class MongoDataStoreTests extends TestCase {
     });
     latch.await();
     assertTrue(testSuccessed);
+  }
+
+  public void testInsertWithPointer() throws Exception {
+    LeanObject object = new LeanObject("Article");
+    object.put("title", "LeanCloud");
+    object.put("publishTime", Instant.now());
+    object.put("commentCounts", 199);
+    dataStore.insertWithOptions("Article", object, new DataStore.InsertOption().setReturnNewDocument(true), res -> {
+      if (res.failed()) {
+        System.out.println("failed to insert Article document. cause: " + res.cause());
+        latch.countDown();
+      } else {
+        LeanObject comment1 = new LeanObject("Comment");
+        comment1.put("article", new JsonObject().put("$ref", "Article").put("$id", res.result().getString("objectId")));
+        comment1.put("publishTime", Instant.now());
+        LeanObject comment2 = new LeanObject("Comment");
+        comment2.put("article", new JsonObject().put("$ref", "Article").put("$id", res.result().getString("objectId")));
+        comment2.put("publishTime", Instant.now());
+        dataStore.insertWithOptions("Comment", comment1, new DataStore.InsertOption().setReturnNewDocument(true),
+                res1 -> {
+          if (res1.failed()) {
+            System.out.println("failed to insert first Comment document. cause: " + res1.cause());
+            latch.countDown();
+          } else {
+            dataStore.insertWithOptions("Comment", comment2, new DataStore.InsertOption().setReturnNewDocument(true),
+                    res2 ->{
+              if (res2.failed()) {
+                System.out.println("failed to insert second Comment document. cause: " + res2.cause());
+                latch.countDown();
+              } else {
+                testSuccessed = true;
+                latch.countDown();
+              }
+            });
+          }});
+      }
+    });
+    latch.await();
+    assertTrue(testSuccessed);
+  }
+
+  public void testFindDocumentWithPointer() throws Exception {
+    JsonObject filter = new JsonObject();
+    DataStore.QueryOption option = new DataStore.QueryOption();
+    option.setLimit(100);
+    dataStore.findWithOptions("Comment", filter, option, res -> {
+      if (res.succeeded()) {
+        res.result().forEach(a -> System.out.println(a));
+        testSuccessed = res.result().size() > 1;
+      }
+      latch.countDown();
+    });
+    latch.await();
+  }
+
+  public void testAggregation() throws Exception {
+    MongoDBDataStore mongoDBDataStore = (MongoDBDataStore)dataStore;
+    String articleId = "5cc308ce875e6360c03d000f";
+    JsonObject lookup = new JsonObject().put("$lookup",
+            new JsonObject().put("from", "Article").put("localField", "article").put("foreignField", "_id").put("as", "article"));
+    JsonObject match = new JsonObject().put("$match",
+            new JsonObject().put("$exist", "publishTime"));
+    ReadStream<JsonObject> result = mongoDBDataStore.aggregate("Comment", new JsonArray().add(lookup).add(match));
+    result.handler(res -> {
+      System.out.println(res);
+      latch.countDown();
+    });
+    latch.await();
   }
 
   public void testIndexCRUD() throws Exception {

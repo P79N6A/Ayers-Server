@@ -60,6 +60,7 @@ public class RestServerVerticle extends CommonVerticle {
   private void crudObject(RoutingContext context) {
     String clazz = parseRequestClassname(context);
     if (!ObjectSpecifics.validClassName(clazz)) {
+      logger.warn("invalid class name: " + clazz);
       badRequest(context, ErrorCodes.INVALID_CLASSNAME.toJson());
       return;
     }
@@ -211,7 +212,7 @@ public class RestServerVerticle extends CommonVerticle {
       UserHandler handler = new UserHandler(vertx, context);
       handler.signin(body, res -> {
         if (res.failed()) {
-          ;
+          notFound(context, new JsonObject().put("error", res.cause().getMessage()));
         } else if (null == res.result()) {
           notFound(context, ErrorCodes.PASSWORD_WRONG.toJson());
         } else {
@@ -398,14 +399,13 @@ public class RestServerVerticle extends CommonVerticle {
         String validationErrorMessage = routingContext.failure().getMessage();
         logger.warn("invalid request. cause: " + validationErrorMessage);
       }
-      routingContext.next();
     });
-    router.errorHandler(HttpStatus.SC_INTERNAL_SERVER_ERROR, routingContext -> {
-      if (routingContext.failed()) {
-        logger.warn("internal error. cause: " + routingContext.failure().getMessage());
-      }
-      routingContext.next();
-    });
+//    router.errorHandler(HttpStatus.SC_INTERNAL_SERVER_ERROR, routingContext -> {
+//      if (routingContext.failed()) {
+//        logger.warn("internal error. cause: " + routingContext.failure().getMessage());
+//      }
+//      routingContext.next();
+//    });
 
     int portNumber = Configure.getInstance().listenPort();
     httpServer.requestHandler(router).listen(portNumber, ar -> {
