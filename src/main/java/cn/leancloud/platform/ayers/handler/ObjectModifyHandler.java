@@ -59,11 +59,11 @@ public class ObjectModifyHandler extends CommonHandler {
       logger.warn("invalid clazz:" + clazz);
       return null;
     }
-    if (null == param && !method.equalsIgnoreCase(RequestParse.HTTP_DELETE)) {
+    if (null == param && !method.equalsIgnoreCase(RequestParse.OP_OBJECT_DELETE)) {
       logger.warn("request body is null for POST and PUT");
       return null;
     }
-    if ((method.equalsIgnoreCase(RequestParse.HTTP_PUT) || method.equalsIgnoreCase(RequestParse.HTTP_DELETE))
+    if ((method.equalsIgnoreCase(RequestParse.OP_OBJECT_PUT) || method.equalsIgnoreCase(RequestParse.OP_OBJECT_DELETE))
             && StringUtils.isEmpty(objectId)) {
       logger.warn("objectId is null for Delete and PUT");
       return null;

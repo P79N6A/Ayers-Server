@@ -114,8 +114,8 @@ public class CommonHandler {
   }
 
   protected static boolean isUpdatableOperation(String operation) {
-    if (RequestParse.HTTP_DELETE.equalsIgnoreCase(operation) || RequestParse.HTTP_POST.equalsIgnoreCase(operation)
-            || RequestParse.HTTP_PUT.equalsIgnoreCase(operation)) {
+    if (RequestParse.OP_OBJECT_DELETE.equalsIgnoreCase(operation) || RequestParse.OP_OBJECT_POST.equalsIgnoreCase(operation)
+            || RequestParse.OP_OBJECT_PUT.equalsIgnoreCase(operation)) {
       return true;
     }
     return false;

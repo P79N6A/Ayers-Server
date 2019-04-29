@@ -1,6 +1,7 @@
 package cn.leancloud.platform.ayers.handler;
 
 import cn.leancloud.platform.ayers.RequestParse;
+import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
@@ -15,14 +16,20 @@ public class IndexHandler extends CommonHandler {
     super(vertx, context);
   }
 
-  public void create(String clazz, JsonObject body, Handler<AsyncResult<JsonObject>> handler) {
-    List<String> attrs = body.stream().map(entry -> entry.getKey()).collect(Collectors.toList());
-    String indexName = String.join("-", attrs);
-    sendDataOperation(clazz, indexName, RequestParse.OP_CREATE_INDEX, null, body, handler);
+  public void create(String clazz, JsonObject keys, JsonObject options, Handler<AsyncResult<JsonObject>> handler) {
+    String indexName = null;
+    if (null == options || StringUtils.isEmpty(options.getString(RequestParse.REQUEST_INDEX_OPTION_NAME))) {
+      List<String> attrs = keys.stream().map(entry -> entry.getKey()).sorted().collect(Collectors.toList());
+      indexName = String.join("-", attrs);
+    } else {
+      indexName = options.getString(RequestParse.REQUEST_INDEX_OPTION_NAME);
+      options.remove(RequestParse.REQUEST_INDEX_OPTION_NAME);
+    }
+    sendDataOperation(clazz, indexName, RequestParse.OP_CREATE_INDEX, options, keys, handler);
   }
 
   public void list(String clazz, Handler<AsyncResult<JsonObject>> handler) {
-    ;
+    sendDataOperation(clazz, null, RequestParse.OP_LIST_INDEX, null, null, handler);
   }
 
   public void delete(String clazz, String indexName, Handler<AsyncResult<JsonObject>> handler) {

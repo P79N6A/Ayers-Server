@@ -9,7 +9,6 @@ import cn.leancloud.platform.persistence.DataStoreFactory;
 import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.Future;
 import io.vertx.core.eventbus.Message;
-import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import org.slf4j.Logger;
@@ -46,10 +45,9 @@ public class StorageVerticle extends CommonVerticle {
       message.fail(ErrorCodes.INTERNAL_ERROR.ordinal(), "no operation specified.");
       return;
     }
-    logger.debug("received message: " + message.body().toString());
-
     String operation = message.headers().get(INTERNAL_MSG_HEADER_OP).toUpperCase();
-
+    logger.debug("received message: " + message.body().toString() + ", operation: " + operation);
+    
     JsonObject body = message.body();
     String clazz = body.getString(INTERNAL_MSG_ATTR_CLASS, "");
     String objectId = body.getString(INTERNAL_MSG_ATTR_OBJECT_ID);
@@ -120,7 +118,7 @@ public class StorageVerticle extends CommonVerticle {
         });
         break;
       case RequestParse.OP_USER_SIGNUP:
-      case RequestParse.HTTP_POST:
+      case RequestParse.OP_OBJECT_POST:
         updateParam.put(LeanObject.ATTR_NAME_CREATED_TS, now);
         updateParam.put(LeanObject.ATTR_NAME_UPDATED_TS, now);
         logger.debug("insert doc=== " + updateParam.toString());
@@ -140,7 +138,7 @@ public class StorageVerticle extends CommonVerticle {
           }
         });
         break;
-      case RequestParse.HTTP_PUT:
+      case RequestParse.OP_OBJECT_PUT:
         updateParam.put(LeanObject.ATTR_NAME_UPDATED_TS, now);
 
         logger.debug("doc=== " + updateParam.toString());
@@ -192,7 +190,7 @@ public class StorageVerticle extends CommonVerticle {
           }
         }
         break;
-      case RequestParse.HTTP_DELETE:
+      case RequestParse.OP_OBJECT_DELETE:
         if (!StringUtils.isEmpty(objectId)) {
           updateParam.put(LeanObject.ATTR_NAME_OBJECTID, objectId);
         }
@@ -205,7 +203,7 @@ public class StorageVerticle extends CommonVerticle {
           }
         });
         break;
-      case RequestParse.HTTP_GET:
+      case RequestParse.OP_OBJECT_GET:
         int limit = query.getInteger(ObjectQueryHandler.QUERY_KEY_LIMIT, 100);
         int skip = query.getInteger(ObjectQueryHandler.QUERY_KEY_SKIP, 0);
         int count = query.getInteger(ObjectQueryHandler.QUERY_KEY_COUNT, 0);
@@ -250,7 +248,9 @@ public class StorageVerticle extends CommonVerticle {
         }
         break;
       case RequestParse.OP_CREATE_INDEX:
-        DataStore.IndexOption indexOption = new DataStore.IndexOption().setName(objectId);
+        DataStore.IndexOption indexOption = new DataStore.IndexOption()
+                .setName(objectId).setUnique(query.getBoolean(RequestParse.REQUEST_INDEX_OPTION_UNIQUE))
+                .setSparse(query.getBoolean(RequestParse.REQUEST_INDEX_OPTION_SPARSE));
         dataStore.createIndexWithOptions(clazz, updateParam, indexOption, ar -> {
           dataStore.close();
           if (ar.failed()) {

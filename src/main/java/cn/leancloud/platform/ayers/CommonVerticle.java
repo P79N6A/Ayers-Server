@@ -23,6 +23,8 @@ public class CommonVerticle extends AbstractVerticle {
   protected static final String REQUEST_PARAM_CLAZZ = "clazz";
   protected static final String REQUEST_PARAM_INDEXNAME = "indexName";
 
+
+
   public static final String INTERNAL_MSG_ATTR_CLASS = "class";
   public static final String INTERNAL_MSG_ATTR_OBJECT_ID = "objectId";
   public static final String INTERNAL_MSG_ATTR_UPDATE_PARAM = "param";

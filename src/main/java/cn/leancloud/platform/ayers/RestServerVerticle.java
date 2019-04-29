@@ -473,16 +473,28 @@ public class RestServerVerticle extends CommonVerticle {
     if (null == body || body.size() < 1) {
       badRequest(context, new JsonObject().put("error", "request body is required."));
     } else {
-      IndexHandler handler = new IndexHandler(vertx, context);
-      handler.create(clazz, body, res -> {
-        if (res.failed()) {
-          internalServerError(context, new JsonObject().put("error", res.cause().getMessage()));
-        } else {
-          ok(context, res.result());
-        }
-      });
+      JsonObject keys = body.getJsonObject(RequestParse.REQUEST_INDEX_KEYS);
+      boolean unique = body.getBoolean(RequestParse.REQUEST_INDEX_OPTION_UNIQUE, false);
+      boolean sparse = body.getBoolean(RequestParse.REQUEST_INDEX_OPTION_SPARSE, true);
+      String name = body.getString(RequestParse.REQUEST_INDEX_OPTION_NAME);
+      if (null == keys || keys.size() < 1) {
+        badRequest(context, new JsonObject().put("error", "keys is required."));
+      } else {
+        JsonObject indexOptions = new JsonObject().put(RequestParse.REQUEST_INDEX_OPTION_UNIQUE, unique)
+                .put(RequestParse.REQUEST_INDEX_OPTION_SPARSE, sparse).put(RequestParse.REQUEST_INDEX_OPTION_NAME, name);
+        IndexHandler handler = new IndexHandler(vertx, context);
+        handler.create(clazz, keys, indexOptions, res -> {
+          if (res.failed()) {
+            internalServerError(context, new JsonObject().put("error", res.cause().getMessage()));
+          } else {
+            ok(context, res.result());
+          }
+        });
+
+      }
     }
   }
+
   private void listIndex(RoutingContext context) {
     String clazz = parseRequestClassname(context);
     IndexHandler handler = new IndexHandler(vertx, context);
@@ -494,6 +506,7 @@ public class RestServerVerticle extends CommonVerticle {
       }
     });
   }
+
   private void deleteIndex(RoutingContext context) {
     String clazz = parseRequestClassname(context);
     String indexName = parseRequestIndexName(context);

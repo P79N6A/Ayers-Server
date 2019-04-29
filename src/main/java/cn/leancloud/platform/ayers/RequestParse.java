@@ -53,10 +53,10 @@ public class RequestParse {
 //  public static final String ALLOWED_HEADERS_STRING = String.join(",", ALLOWED_HEADERS);
   public static final Set<String> ALLOWED_HEADERS_SET = new HashSet<>(Arrays.asList(ALLOWED_HEADERS));
 
-  public static final String HTTP_POST = "POST";
-  public static final String HTTP_PUT = "PUT";
-  public static final String HTTP_GET = "GET";
-  public static final String HTTP_DELETE = "DELETE";
+  public static final String OP_OBJECT_POST = "POST";
+  public static final String OP_OBJECT_PUT = "PUT";
+  public static final String OP_OBJECT_GET = "GET";
+  public static final String OP_OBJECT_DELETE = "DELETE";
 
   public static final String OP_USER_SIGNIN = "LOGIN";
   public static final String OP_USER_SIGNUP = "SIGNUP";
@@ -68,6 +68,11 @@ public class RequestParse {
   public static final String OP_TEST_SCHEMA = "TEST_SCHEMA";
   public static final String OP_ADD_SCHEMA = "ADD_SCHEMA";
   public static final String OP_FIND_SCHEMA = "FIND_SCHEMA";
+
+  public static final String REQUEST_INDEX_KEYS = "keys";
+  public static final String REQUEST_INDEX_OPTION_UNIQUE = "unique";
+  public static final String REQUEST_INDEX_OPTION_SPARSE = "sparse";
+  public static final String REQUEST_INDEX_OPTION_NAME = "indexName";
 
   public static class RequestHeaders {
     private String appId;
