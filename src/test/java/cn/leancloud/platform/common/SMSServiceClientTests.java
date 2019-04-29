@@ -25,8 +25,8 @@ public class SMSServiceClientTests extends TestCase {
             .put("X-LC-Key","1zoU0YOSqbCuMWPMc0LVe9lR").put("Content-Type", "application/json");
     JsonObject body = new JsonObject().put("mobilePhoneNumber","18600345198");
     CountDownLatch latch = new CountDownLatch(1);
-    //String defaultHost = "https://api.leancloud.cn";
-    String defaultHost = "https://30paybnn.api.lncld.net";
+    String defaultHost = "api.leancloud.cn";
+    //String defaultHost = "30paybnn.api.lncld.net";
     client.post(defaultHost, 443, "/1.1/requestSmsCode", headers, body, res -> {
       if (res.failed()) {
         System.out.println(res.cause());

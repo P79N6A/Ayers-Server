@@ -12,7 +12,7 @@ import org.slf4j.LoggerFactory;
 
 public class SmsCodeHandler extends CommonHandler {
   private static final Logger logger = LoggerFactory.getLogger(SmsCodeHandler.class);
-  private static final String LC_API_HOST_FORMAT = "https://%s.api.lncld.net";
+  private static final String LC_API_HOST_FORMAT = "%s.api.lncld.net";
   private static final int LC_API_PORT = 443;
   private static final String LC_REQUEST_SMSCODE_PATH = "/1.1/requestSmsCode";
   public SmsCodeHandler(Vertx vertx, RoutingContext context) {

@@ -52,37 +52,23 @@ public class CommonWebClient {
         webClient.head(entry.getKey(), (String) entry.getValue());
       });
     }
-    webClient.post(host, path).ssl(true).followRedirects(true).sendJsonObject(body, response -> {
-      if (response.failed()) {
-        logger.warn("response is failed. cause: " + response.cause());
-      } else {
-        if (HttpStatus.SC_OK == response.result().statusCode()) {
-          JsonObject result = response.result().bodyAsJsonObject();
-          logger.debug("response ok. result: " + result);
+    circuitBreaker.<JsonObject>execute(future -> {
+      logger.debug("send post request to " + host + path + ", para: " + body);
+      webClient.post(port, host, path).ssl(true).followRedirects(true).sendJsonObject(body, response -> {
+        if (response.failed()) {
+          logger.warn("response is failed. cause: " + response.cause());
+          future.fail(response.cause());
         } else {
-          System.out.println(response.result().bodyAsString("UTF-8"));
+          if (HttpStatus.SC_OK == response.result().statusCode()) {
+            JsonObject result = response.result().bodyAsJsonObject();
+            logger.debug("response ok. result: " + result);
+            future.complete(result);
+          } else {
+            System.out.println(response.result().bodyAsString("UTF-8"));
+            future.fail(response.result().bodyAsString());
+          }
         }
-      }
-      handler.handle(response.map(v -> HttpStatus.SC_OK == v.statusCode()?v.bodyAsJsonObject() : new JsonObject()));
-    });
-
-//    circuitBreaker.<JsonObject>execute(future -> {
-//      logger.debug("send post request to " + host + path + ", para: " + body);
-//      webClient.post(host, path).sendJsonObject(body, response -> {
-//        if (response.failed()) {
-//          logger.warn("response is failed. cause: " + response.cause());
-//          future.fail(response.cause());
-//        } else {
-//          if (HttpStatus.SC_OK == response.result().statusCode()) {
-//            JsonObject result = response.result().bodyAsJsonObject();
-//            logger.debug("response ok. result: " + result);
-//            future.complete(result);
-//          } else {
-//            System.out.println(response.result().bodyAsString("UTF-8"));
-//            future.fail(response.result().bodyAsString());
-//          }
-//        }
-//      });
-//    }).setHandler(handler);
+      });
+    }).setHandler(handler);
   }
 }
