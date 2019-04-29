@@ -137,8 +137,20 @@ public class RequestParse {
     }
 
     public JsonObject toHeaders() {
-      return new JsonObject().put(HEADER_LC_APPID, this.appId).put(HEADER_LC_APPKEY, this.appKey)
-              .put(HEADER_LC_REQUEST_SIGN, this.requestSign).put(HEADER_LC_SESSION_TOKEN, this.sessionToken);
+      JsonObject result = new JsonObject();
+      if (StringUtils.notEmpty(this.appId)) {
+        result.put(HEADER_LC_APPID, this.appId);
+      }
+      if (StringUtils.notEmpty(this.appKey)) {
+        result.put(HEADER_LC_APPKEY, this.appKey);
+      }
+      if (StringUtils.notEmpty(this.requestSign)) {
+        result.put(HEADER_LC_REQUEST_SIGN, this.requestSign);
+      }
+      if (StringUtils.notEmpty(this.sessionToken)) {
+        result.put(HEADER_LC_SESSION_TOKEN, this.sessionToken);
+      }
+      return result;
     }
   }
 

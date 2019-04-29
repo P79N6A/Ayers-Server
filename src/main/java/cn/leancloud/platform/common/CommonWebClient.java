@@ -1,12 +1,16 @@
 package cn.leancloud.platform.common;
 
+import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.circuitbreaker.CircuitBreaker;
 import io.vertx.circuitbreaker.CircuitBreakerOptions;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 import io.vertx.core.MultiMap;
 import io.vertx.core.Vertx;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.web.client.HttpRequest;
+import io.vertx.ext.web.client.HttpResponse;
 import io.vertx.ext.web.client.WebClient;
 import io.vertx.ext.web.client.WebClientOptions;
 import org.apache.http.HttpStatus;
@@ -31,44 +35,47 @@ public class CommonWebClient {
   }
 
   public void get(String host, int port, String path, MultiMap headers, String parameter, Handler<AsyncResult<JsonObject>> handler) {
+    HttpRequest httpRequest = webClient.get(port, host, path).ssl(true).followRedirects(true);
     if (null != headers) {
-      headers.entries().stream().forEach(entry -> webClient.head(entry.getKey(), entry.getValue()));
+      headers.entries().stream().forEach(entry -> httpRequest.putHeader(entry.getKey(), entry.getValue()));
     }
     circuitBreaker.<JsonObject>execute(future -> {
-      webClient.get(port, host, path).send(ar -> {
-        if (ar.failed()) {
-          future.fail(ar.cause());
-        } else {
-          future.complete(ar.result().bodyAsJsonObject());
-        }
-      });
+      httpRequest.send(new Handler<AsyncResult<HttpResponse>>() {
+                         @Override
+                         public void handle(AsyncResult<HttpResponse> event) {
+                           if (event.failed()) {
+                             logger.warn(path + " request failed. cause: " + event.cause());
+                             future.fail(event.cause());
+                           } else {
+                             logger.debug(path + " response: " + event.result().bodyAsJsonObject());
+                             future.complete(event.result().bodyAsJsonObject());
+                           }
+                         }
+                       });
     }).setHandler(handler);
   }
 
   public void post(String host, int port, String path, JsonObject headers, JsonObject body, Handler<AsyncResult<JsonObject>> handler) {
+    HttpRequest httpRequest = webClient.post(port, host, path).ssl(true).followRedirects(true);
     if (null != headers) {
       headers.stream().forEach(entry -> {
-        logger.debug("add http header. key:" + entry.getKey() + ", value: " + entry.getValue());
-        webClient.head(entry.getKey(), (String) entry.getValue());
+        logger.debug("add http header. " + entry.getKey() + ", " + entry.getValue());
+        httpRequest.putHeader(entry.getKey(), (String) entry.getValue());
       });
     }
     circuitBreaker.<JsonObject>execute(future -> {
       logger.debug("send post request to " + host + path + ", para: " + body);
-      webClient.post(port, host, path).ssl(true).followRedirects(true).sendJsonObject(body, response -> {
-        if (response.failed()) {
-          logger.warn("response is failed. cause: " + response.cause());
-          future.fail(response.cause());
-        } else {
-          if (HttpStatus.SC_OK == response.result().statusCode()) {
-            JsonObject result = response.result().bodyAsJsonObject();
-            logger.debug("response ok. result: " + result);
-            future.complete(result);
+      httpRequest.sendJsonObject(body, new Handler<AsyncResult<HttpResponse>>() {
+        @Override
+        public void handle(AsyncResult<HttpResponse> event) {
+          if (event.failed()) {
+            logger.warn(path + " request failed. cause: " + event.cause());
+            future.fail(event.cause());
           } else {
-            System.out.println(response.result().bodyAsString("UTF-8"));
-            future.fail(response.result().bodyAsString());
+            logger.debug(path + " response: " + event.result().bodyAsJsonObject());
+            future.complete(event.result().bodyAsJsonObject());
           }
-        }
-      });
+      }});
     }).setHandler(handler);
   }
 }

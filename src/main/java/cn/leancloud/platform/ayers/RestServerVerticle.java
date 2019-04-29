@@ -393,6 +393,7 @@ public class RestServerVerticle extends CommonVerticle {
     router.delete("/1.1/indices/:clazz/:indexName").handler(this::deleteIndex);
 
     router.post("/1.1/requestSmsCode").handler(this::requestSmsCode);
+    router.post("/1.1/verifySmsCode/:smscode").handler(this::verifySmsCode);
 
     router.errorHandler(400, routingContext -> {
       if (routingContext.failure() instanceof ValidationException) {
@@ -525,6 +526,18 @@ public class RestServerVerticle extends CommonVerticle {
     handler.requestSmsCode(res -> {
       if (res.failed()) {
         logger.warn("requestSmsCode failed. cause: " + res.cause().getMessage());
+        badRequest(context, new JsonObject().put("error", res.cause().getMessage()));
+      } else {
+        ok(context, res.result());
+      }
+    });
+  }
+
+  private void verifySmsCode(RoutingContext context) {
+    SmsCodeHandler handler = new SmsCodeHandler(vertx, context);
+    handler.verifySmsCode(res -> {
+      if (res.failed()) {
+        logger.warn("verifySmsCode failed. cause: " + res.cause().getMessage());
         badRequest(context, new JsonObject().put("error", res.cause().getMessage()));
       } else {
         ok(context, res.result());
