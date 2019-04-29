@@ -5,6 +5,7 @@ import cn.leancloud.platform.ayers.RequestParse;
 import cn.leancloud.platform.common.BatchRequest;
 import cn.leancloud.platform.common.Configure;
 import cn.leancloud.platform.common.ErrorCodes;
+import cn.leancloud.platform.common.OperationHookProxy;
 import cn.leancloud.platform.modules.ObjectSpecifics;
 import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.*;
@@ -28,6 +29,17 @@ public class ObjectModifyHandler extends CommonHandler {
 
   public void create(String clazz, JsonObject body, boolean returnNewDoc, Handler<AsyncResult<JsonObject>> handler) {
     sendDataOperationWithOption(clazz, null, HttpMethod.POST.toString(), null, body, returnNewDoc, handler);
+    // disable hook now.
+    // TODO: open me.
+//    OperationHookProxy hookProxy = OperationHookProxy.getInstance(null);
+//    hookProxy.beforeCheckThen(clazz, this.routingContext, response -> {
+//      if (response.failed()) {
+//        handler.handle(response.map(v -> v));
+//      } else {
+//        JsonObject hookedBody = response.result();
+//        sendDataOperationWithOption(clazz, null, HttpMethod.POST.toString(), null, hookedBody, returnNewDoc, handler);
+//      }
+//    });
   }
 
   public void update(String clazz, String objectId, JsonObject query, JsonObject update, boolean returnNewDoc,
