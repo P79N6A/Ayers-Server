@@ -25,7 +25,9 @@ public class SmsCodeHandler extends CommonHandler {
     String appId = headers.getAppId();
     String host = String.format(LC_API_HOST_FORMAT, appId.substring(0, 8).toLowerCase());
     JsonObject body = routingContext.getBodyAsJson();
-    JsonObject headerJson = headers.toHeaders().put(RequestParse.HEADER_CONTENT_TYPE, RequestParse.CONTENT_TYPE_JSON);
+    JsonObject headerJson = headers.toHeaders()
+            .put(RequestParse.HEADER_CONTENT_TYPE, RequestParse.CONTENT_TYPE_JSON)
+            .put("Accept", RequestParse.CONTENT_TYPE_JSON);
 
     logger.debug("process requestSmsCode request. body:" + body);
     client.post(host, LC_API_PORT, LC_REQUEST_SMSCODE_PATH, headerJson, body, handler);

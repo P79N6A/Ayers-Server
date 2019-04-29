@@ -18,11 +18,11 @@ public class CommonWebClient {
   private CircuitBreaker circuitBreaker = null;
   private WebClient webClient = null;
   public CommonWebClient(Vertx vertx, String name) {
-    this(vertx, name, new WebClientOptions().setConnectTimeout(5000).setUserAgent("Ayers Server"));
+    this(vertx, name, new WebClientOptions().setFollowRedirects(true).setSsl(true).setKeepAlive(true).setConnectTimeout(6000).setUserAgent("Ayers Server"));
   }
 
   public CommonWebClient(Vertx vertx, String name, WebClientOptions options) {
-    this(vertx, name, options, new CircuitBreakerOptions().setMaxFailures(10).setMaxRetries(1).setTimeout(1000).setResetTimeout(60000));
+    this(vertx, name, options, new CircuitBreakerOptions().setMaxFailures(100).setMaxRetries(0).setTimeout(1000).setResetTimeout(60000));
   }
 
   public CommonWebClient(Vertx vertx, String name, WebClientOptions options, CircuitBreakerOptions circuitBreakerOptions) {
@@ -52,22 +52,37 @@ public class CommonWebClient {
         webClient.head(entry.getKey(), (String) entry.getValue());
       });
     }
-    circuitBreaker.<JsonObject>execute(future -> {
-      logger.debug("send post request to " + host + path + ", para: " + body);
-      webClient.post(host, path).sendJsonObject(body, response -> {
-        if (response.failed()) {
-          logger.warn("response is failed. cause: " + response.cause());
-          future.fail(response.cause());
+    webClient.post(host, path).ssl(true).followRedirects(true).sendJsonObject(body, response -> {
+      if (response.failed()) {
+        logger.warn("response is failed. cause: " + response.cause());
+      } else {
+        if (HttpStatus.SC_OK == response.result().statusCode()) {
+          JsonObject result = response.result().bodyAsJsonObject();
+          logger.debug("response ok. result: " + result);
         } else {
-          if (HttpStatus.SC_OK == response.result().statusCode()) {
-            JsonObject result = response.result().bodyAsJsonObject();
-            logger.debug("response ok. result: " + result);
-            future.complete(result);
-          } else {
-            future.fail(response.result().bodyAsString());
-          }
+          System.out.println(response.result().bodyAsString("UTF-8"));
         }
-      });
-    }).setHandler(handler);
+      }
+      handler.handle(response.map(v -> HttpStatus.SC_OK == v.statusCode()?v.bodyAsJsonObject() : new JsonObject()));
+    });
+
+//    circuitBreaker.<JsonObject>execute(future -> {
+//      logger.debug("send post request to " + host + path + ", para: " + body);
+//      webClient.post(host, path).sendJsonObject(body, response -> {
+//        if (response.failed()) {
+//          logger.warn("response is failed. cause: " + response.cause());
+//          future.fail(response.cause());
+//        } else {
+//          if (HttpStatus.SC_OK == response.result().statusCode()) {
+//            JsonObject result = response.result().bodyAsJsonObject();
+//            logger.debug("response ok. result: " + result);
+//            future.complete(result);
+//          } else {
+//            System.out.println(response.result().bodyAsString("UTF-8"));
+//            future.fail(response.result().bodyAsString());
+//          }
+//        }
+//      });
+//    }).setHandler(handler);
   }
 }

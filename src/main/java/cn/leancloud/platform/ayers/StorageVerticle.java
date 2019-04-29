@@ -47,7 +47,7 @@ public class StorageVerticle extends CommonVerticle {
     }
     String operation = message.headers().get(INTERNAL_MSG_HEADER_OP).toUpperCase();
     logger.debug("received message: " + message.body().toString() + ", operation: " + operation);
-    
+
     JsonObject body = message.body();
     String clazz = body.getString(INTERNAL_MSG_ATTR_CLASS, "");
     String objectId = body.getString(INTERNAL_MSG_ATTR_OBJECT_ID);
