@@ -84,6 +84,7 @@ public class StorageVerticle extends CommonVerticle {
     String platformIdPath = String.format("authData.%s.%s", platform.get(), idOption.get());
     JsonObject platformQuery = new JsonObject().put(platformIdPath, authMap.getString(idOption.get()));
     if (StringUtils.isEmpty(unionId)) {
+      result.currentPlatform = platform.get();
       result.query = platformQuery;
       return result;
     }
