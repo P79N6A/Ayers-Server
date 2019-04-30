@@ -50,7 +50,6 @@ public class RequestParse {
           HEADER_ULURU_APPID, HEADER_ULURU_APPKEY, HEADER_ULURU_APP_PROD, HEADER_ULURU_CLIENT_VERSION, HEADER_ULURU_SESSION_TOKEN
   };
 
-//  public static final String ALLOWED_HEADERS_STRING = String.join(",", ALLOWED_HEADERS);
   public static final Set<String> ALLOWED_HEADERS_SET = new HashSet<>(Arrays.asList(ALLOWED_HEADERS));
 
   public static final String OP_OBJECT_POST = "POST";
@@ -60,7 +59,7 @@ public class RequestParse {
 
   public static final String OP_USER_SIGNIN = "LOGIN";
   public static final String OP_USER_SIGNUP = "SIGNUP";
-  public static final String OP_USER_AUTH_LOGIN = "AUTH_LOGIN";
+  //public static final String OP_USER_AUTH_LOGIN = "AUTH_LOGIN";
 
   public static final String OP_CREATE_INDEX = "CREATE_INDEX";
   public static final String OP_DELETE_INDEX = "DELETE_INDEX";

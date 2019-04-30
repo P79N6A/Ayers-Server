@@ -130,7 +130,13 @@ public class BsonTransformer {
     o.stream().forEach(entry -> {
       String key = entry.getKey();
       Object value = entry.getValue();
-      if (null == value || !(value instanceof JsonObject)) {
+      if (key.startsWith("$")) {
+        if (value instanceof JsonObject) {
+          ((JsonObject) value).stream().forEach(tmp -> addOperatorEntry(directSetEntries, key, tmp.getKey(), tmp.getValue(), isCreateOp));
+        } else {
+          addOperatorEntry(directSetEntries, key, (String) value, null, isCreateOp);
+        }
+      } else if (null == value || !(value instanceof JsonObject)) {
         addOperatorEntry(directSetEntries, "$set", key, value, isCreateOp);
       } else {
         JsonObject newValue = (JsonObject)value;

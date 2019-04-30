@@ -156,25 +156,13 @@ public class UserHandler extends CommonHandler {
   }
 
   public void signup(JsonObject param, Handler<AsyncResult<JsonObject>> handler) {
-    JsonObject authData = param.getJsonObject(PARAM_AUTH_DATA);
     String operation = RequestParse.OP_USER_SIGNUP;
-    JsonObject query = null;
-    if (null != authData && authData.size() > 0) {
-      operation = RequestParse.OP_USER_AUTH_LOGIN; // change operation type
-      query = new JsonObject().put(PARAM_AUTH_DATA, authData);
-    }
-    sendDataOperationWithOption(Constraints.USER_CLASS, null, operation, query, param, true, handler);
+    sendDataOperationWithOption(Constraints.USER_CLASS, null, operation, null, param, true, handler);
   }
 
   public void signin(JsonObject param, Handler<AsyncResult<JsonObject>> handler) {
-    JsonObject authData = param.getJsonObject(PARAM_AUTH_DATA);
     String operation = RequestParse.OP_USER_SIGNIN;
-    JsonObject query = null;
-    if (null != authData && authData.size() > 0) {
-      operation = RequestParse.OP_USER_AUTH_LOGIN; // change operation type
-      query = new JsonObject().put(PARAM_AUTH_DATA, authData);
-    }
-    sendDataOperationWithOption(Constraints.USER_CLASS, null, operation, query, param, true, handler);
+    sendDataOperationWithOption(Constraints.USER_CLASS, null, operation, null, param, true, handler);
   }
 
   public void validateSessionToken(String objectId, String sessionToken, Handler<AsyncResult<JsonObject>> handler) {

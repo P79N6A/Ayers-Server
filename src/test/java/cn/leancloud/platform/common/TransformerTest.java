@@ -77,6 +77,18 @@ public class TransformerTest extends TestCase {
     assertTrue(newObj.getJsonObject("location").getJsonObject("$nearSphere").getJsonArray("coordinates").size() == 2);
   }
 
+  public void testConvertUpdateParamWithOperators() throws Exception {
+    String param = "{\"updatedAt\":\"2019-04-20\"," +
+            " \"$set\":" +
+            "     {\"authData.weixin\":{\"openid\":\"thisisweixinopenid\",\"access_token\":\"thisisaccesstoken\"}," +
+            "      \"authData._weixin_unionid\":{\"uid\": \"thisisweixinunionid\"}}}";
+    JsonObject paramObj = new JsonObject(param);
+    JsonObject newObj = BsonTransformer.encode2BsonRequest(paramObj, BsonTransformer.REQUEST_OP.UPDATE);
+    System.out.println(newObj.toString());
+    assertTrue(newObj.getJsonObject("$set").size() == 3);
+    assertTrue(newObj.getJsonObject("$set").getJsonObject("authData.weixin").getString("openid").equals("thisisweixinopenid"));
+  }
+
   public void testConvertComplexQuery() throws Exception {
     String query = "{\"createdAt\":\n" +
             "  {\"$gte\":{\"__type\":\"Date\",\"iso\":\"2015-06-29T00:00:00.000Z\"},\n" +

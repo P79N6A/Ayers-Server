@@ -261,6 +261,10 @@ public class RestServerVerticle extends CommonVerticle {
     }
   }
 
+  private void userMobileSignupOrIn(RoutingContext context) {
+    forbidden(context, new JsonObject());
+  }
+
   private void crudCommonDataEx(String clazz, RoutingContext context, Handler<JsonObject> handler) {
     String objectId = parseRequestObjectId(context);
     JsonObject body = parseRequestBody(context);
@@ -404,6 +408,7 @@ public class RestServerVerticle extends CommonVerticle {
 
     router.post("/1.1/users").handler(this::userSignup);
     router.post("/1.1/login").handler(this::userSignin);
+    router.post("/1.1/usersByMobilePhone").handler(this::userMobileSignupOrIn);
 
     router.getWithRegex("\\/1\\.1\\/users\\/(?<objectId>[^\\/]{16,})").handler(this::crudUser);
     router.get("/1.1/users").handler(this::crudUser);

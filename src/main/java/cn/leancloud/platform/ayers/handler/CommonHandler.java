@@ -123,7 +123,7 @@ public class CommonHandler {
 
   protected boolean shouldChangeSchema(String clazz, String operation) {
     return HttpMethod.POST.toString().equals(operation) || HttpMethod.PUT.toString().equals(operation)
-            || RequestParse.OP_USER_SIGNUP.equals(operation) || RequestParse.OP_USER_AUTH_LOGIN.equals(operation);
+            || RequestParse.OP_USER_SIGNUP.equals(operation) || RequestParse.OP_USER_SIGNIN.equals(operation);
   }
 
   protected void sendDataOperation(String clazz, String objectId, String operation,

@@ -64,7 +64,7 @@ public class UserFunctionTests extends WebClientTests {
       if (response.succeeded()) {
         JsonObject resultUser = response.result();
         System.out.println(resultUser);
-        if (resultUser.containsKey("objectId") && resultUser.containsKey("sessionToken") && resultUser.containsKey("createdAt")) {
+        if (resultUser.containsKey("objectId") && resultUser.containsKey("sessionToken") && resultUser.containsKey("updatedAt")) {
           testSuccessed = true;
         }
       }
@@ -128,13 +128,13 @@ public class UserFunctionTests extends WebClientTests {
     String authString = "{" +
             "  \"authData\": {\n" +
             "    \"weixin\": {\n" +
-            "    \"access_token\" : \"access_token\",\n" +
-            "    \"expires_in\" : 7200,\n" +
-            "    \"openid\" : \"openid\",\n" +
-            "    \"refresh_token\" : \"refresh_token\",\n" +
-            "    \"scope\" : \"snsapi_userinfo\",\n" +
-            "    \"unionid\" : \"ox7NLs-e-32ZyHg2URi_F2iPEI2U\"\n" +
-            "    \"main_account\":true, \"platform\":\"weixin\",\n" +
+              "    \"access_token\" : \"access_token\",\n" +
+              "    \"expires_in\" : 7200,\n" +
+              "    \"openid\" : \"openid\",\n" +
+              "    \"refresh_token\" : \"refresh_token\",\n" +
+              "    \"scope\" : \"snsapi_userinfo\",\n" +
+              "    \"unionid\" : \"ox7NLs-e-32ZyHg2URi_F2iPEI2U\",\n" +
+              "    \"main_account\": true, \"platform\":\"weixin\"\n" +
             "    }\n" +
             "  }\n" +
             "}";
@@ -153,8 +153,8 @@ public class UserFunctionTests extends WebClientTests {
                    "    \"openid\" : \"weixin2_openid\",\n" +
                    "    \"refresh_token\" : \"refresh_token\",\n" +
                    "    \"scope\" : \"snsapi_userinfo\",\n" +
-                   "    \"unionid\" : \"ox7NLs-e-32ZyHg2URi_F2iPEI2U\"\n" +
-                   "    \"main_account\":true, \"platform\":\"weixin\",\n" +
+                   "    \"unionid\" : \"ox7NLs-e-32ZyHg2URi_F2iPEI2U\",\n" +
+                   "    \"main_account\":true, \"platform\":\"weixin\"\n" +
                    "    }\n" +
                    "  }\n" +
                    "}";
@@ -179,7 +179,116 @@ public class UserFunctionTests extends WebClientTests {
     assertTrue(testSuccessed);
   }
 
+  public void testComplexUnionIdAuth() throws Exception {
+    String openId = StringUtils.getRandomString(20);
+    String unionId = StringUtils.getRandomString(24);
+    String authString = "{" +
+            "  \"authData\": {\n" +
+            "    \"weixin\": {\n" +
+            "    \"access_token\" : \"access_token\",\n" +
+            "    \"expires_in\" : 7200,\n" +
+            "    \"openid\" : \""+ openId + "\",\n" +
+            "    \"refresh_token\" : \"refresh_token\"\n" +
+            "    }\n" +
+            "  }\n" +
+            "}";
+    JsonObject authRequest = new JsonObject(authString);
+    post("/1.1/users", authRequest, response -> {
+      if (response.succeeded()) {
+        JsonObject resultUser = response.result();
+        System.out.println(resultUser);
+        if (resultUser.containsKey("objectId") && resultUser.containsKey("sessionToken") && resultUser.containsKey("createdAt")) {
+          String firstObjectId = resultUser.getString("objectId");
+          String authString2 = "{" +
+                  "  \"authData\": {\n" +
+                  "    \"weixin\": {\n" +
+                  "    \"access_token\" : \"access_token\",\n" +
+                  "    \"expires_in\" : 7200,\n" +
+                  "    \"openid\" : \""+ openId + "\",\n" +
+                  "    \"refresh_token\" : \"refresh_token\",\n" +
+                  "    \"scope\" : \"snsapi_userinfo\",\n" +
+                  "    \"unionid\" : \"" + unionId + "\",\n" +
+                  "    \"main_account\":true, \"platform\":\"weixin\"\n" +
+                  "    }\n" +
+                  "  }\n" +
+                  "}";
+          post("/1.1/users", new JsonObject(authString2), res -> {
+            if (res.succeeded()) {
+              JsonObject tmpUser = res.result();
+              System.out.println(tmpUser);
+              if (tmpUser.containsKey("objectId") && tmpUser.containsKey("sessionToken")) {
+                testSuccessed = firstObjectId.equals(tmpUser.getString("objectId"));
+              }
+            }
+            latch.countDown();
+          });
+        } else {
+          latch.countDown();
+        }
+      } else {
+        latch.countDown();
+      }
+    });
+    latch.await();
+    assertTrue(testSuccessed);
+  }
 
+  public void testMultiAccountAuth() throws Exception {
+    String openId = StringUtils.getRandomString(20);
+    String unionId = StringUtils.getRandomString(24);
+    String authString = "{" +
+            "  \"authData\": {\n" +
+            "    \"weixin\": {\n" +
+            "    \"access_token\" : \"access_token\",\n" +
+            "    \"expires_in\" : 7200,\n" +
+            "    \"openid\" : \""+ openId + "\",\n" +
+            "    \"refresh_token\" : \"refresh_token\",\n" +
+            "    \"scope\" : \"snsapi_userinfo\",\n" +
+            "    \"unionid\" : \"" + unionId + "\",\n" +
+            "    \"main_account\":true, \"platform\":\"weixin\"\n" +
+            "    }\n" +
+            "  }\n" +
+            "}";
+    JsonObject authRequest = new JsonObject(authString);
+    post("/1.1/users", authRequest, response -> {
+      if (response.succeeded()) {
+        JsonObject resultUser = response.result();
+        System.out.println(resultUser);
+        if (resultUser.containsKey("objectId") && resultUser.containsKey("sessionToken") && resultUser.containsKey("createdAt")) {
+          String firstObjectId = resultUser.getString("objectId");
+          String authString2 = "{" +
+                  "  \"authData\": {\n" +
+                  "    \"weixin2\": {\n" +
+                  "    \"access_token\" : \"access_token\",\n" +
+                  "    \"expires_in\" : 7200,\n" +
+                  "    \"openid\" : \""+ openId + "\",\n" +
+                  "    \"refresh_token\" : \"refresh_token\",\n" +
+                  "    \"scope\" : \"snsapi_userinfo\",\n" +
+                  "    \"unionid\" : \"" + unionId + "\",\n" +
+                  "    \"main_account\":false, \"platform\":\"weixin\"\n" +
+                  "    }\n" +
+                  "  }\n" +
+                  "}";
+          post("/1.1/users", new JsonObject(authString2), res -> {
+            if (res.succeeded()) {
+              JsonObject tmpUser = res.result();
+              System.out.println(tmpUser);
+              if (tmpUser.containsKey("objectId") && tmpUser.containsKey("sessionToken")) {
+                testSuccessed = firstObjectId.equals(tmpUser.getString("objectId"));
+              }
+            }
+            latch.countDown();
+          });
+        } else {
+          latch.countDown();
+        }
+      } else {
+        latch.countDown();
+      }
+    });
+    latch.await();
+    assertTrue(testSuccessed);
+  }
 
   public void testOtherAuth() throws Exception {
     String authString = "{\n" +

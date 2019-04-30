@@ -15,6 +15,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 import static cn.leancloud.platform.utils.JsonFactory.obj;
@@ -40,9 +42,135 @@ public class StorageVerticle extends CommonVerticle {
     msg.fail(code, message);
   }
 
-  private void processAuthLogin(Message<JsonObject> message, JsonObject query, JsonObject updateParam) {
-
+  private static class AuthDataParseResult {
+    boolean isMainAccount = false;
+    String currentPlatform = null;
+    String unionId = null;
+    String unionPlatform = null;
+    JsonObject query = null;
   }
+
+  /**
+   * example for authData:
+   *    {"weixin": {
+   *      "openid": "",
+   *      "access_token": "",
+   *      "expired": "",
+   *      "unionid": "",
+   *      "platform": "",
+   *      "main_account": "",
+   *    }}
+   * @param authData
+   * @return
+   */
+  private AuthDataParseResult parseAuthData(JsonObject authData) {
+    AuthDataParseResult result = new AuthDataParseResult();
+    Optional<String> platform = authData.fieldNames().stream().findFirst();
+    if (!platform.isPresent()) {
+      logger.warn("invalid authData: empty map.");
+      return result;
+    }
+    JsonObject authMap = authData.getJsonObject(platform.get());
+    Optional<String> idOption = authMap.fieldNames().stream()
+            .filter(str -> StringUtils.notEmpty(str) && !"unionid".equalsIgnoreCase(str) && str.toLowerCase().endsWith("id"))
+            .findFirst();
+    boolean isMainAccount = authMap.getBoolean("main_account", false);
+    String unionId = authMap.getString("unionid");
+    String unionPlatform = authMap.getString("platform");
+    if (!idOption.isPresent()) {
+      logger.warn("invalid authData: no id field found.");
+      return result;
+    }
+    String platformIdPath = String.format("authData.%s.%s", platform.get(), idOption.get());
+    JsonObject platformQuery = new JsonObject().put(platformIdPath, authMap.getString(idOption.get()));
+    if (StringUtils.isEmpty(unionId)) {
+      result.query = platformQuery;
+      return result;
+    }
+    if (StringUtils.isEmpty(unionPlatform)) {
+      logger.warn("invalid authData: unionid and unionplatform are required.");
+      return result;
+    }
+    String unionIdPath = String.format("authData._%s_unionid.uid", unionPlatform);
+    JsonObject unionidQuery = new JsonObject().put(unionIdPath, unionId);
+    result.query = new JsonObject().put("$or", new JsonArray(Arrays.asList(unionidQuery, platformQuery)));
+    result.isMainAccount = isMainAccount;
+    result.unionId = unionId;
+    result.unionPlatform = unionPlatform;
+    result.currentPlatform = platform.get();
+    return result;
+  }
+
+  private JsonObject convert2UpdateBson(JsonObject updateParam, AuthDataParseResult parseResult) {
+    JsonObject authData = updateParam.getJsonObject(UserHandler.PARAM_AUTH_DATA);
+    JsonObject result = updateParam.copy();
+    result.remove(UserHandler.PARAM_AUTH_DATA);
+    JsonObject authDataUpdateJson = new JsonObject()
+            .put("authData." + parseResult.currentPlatform, authData.getJsonObject(parseResult.currentPlatform));
+    if (parseResult.isMainAccount) {
+      authDataUpdateJson.put(String.format("autoData._%s_unionid", parseResult.unionPlatform), new JsonObject().put("uid", parseResult.unionId));
+    }
+    result.put("$set", authDataUpdateJson);
+    return result;
+  }
+
+  private void processAuthSignupOrIn(DataStore dataStore, Message<JsonObject> message, String clazz, JsonObject authData, JsonObject updateParam) {
+    logger.debug("thirdparty signup/signin. paramBeforeChange=" + updateParam);
+    AuthDataParseResult authParseResult = parseAuthData(authData);
+    JsonObject query = authParseResult.query;
+    if (null == query) {
+      message.fail(ErrorCodes.INVALID_PARAMETER.getCode(), ErrorCodes.INVALID_PARAMETER.getMessage());
+      return;
+    }
+    JsonObject findUpdateParam = convert2UpdateBson(updateParam, authParseResult);
+    Instant now = Instant.now();
+    findUpdateParam.put(LeanObject.ATTR_NAME_UPDATED_TS, now);
+
+    logger.debug("findAndUpdate within thirdparty signup/signin. query=" + query + ", paramAtferChanged=" + findUpdateParam);
+    dataStore.findOneAndUpdateWithOptions(clazz, query, findUpdateParam,
+            new DataStore.QueryOption().setLimit(2), new DataStore.UpdateOption().setUpsert(false).setReturnNewDocument(true),
+            res -> {
+              if (res.failed()) {
+                dataStore.close();
+                message.fail(ErrorCodes.DATABASE_ERROR.getCode(), res.cause().getMessage());
+              } else {
+                if (null == res.result()) {
+                  logger.debug("not found target user. create a new one.");
+                  updateParam.put(LeanObject.ATTR_NAME_CREATED_TS, now);
+                  updateParam.put(LeanObject.ATTR_NAME_UPDATED_TS, now);
+                  if (authParseResult.isMainAccount) {
+                    updateParam.getJsonObject(UserHandler.PARAM_AUTH_DATA)
+                            .put(String.format("_%s_unionid", authParseResult.unionPlatform),
+                                    new JsonObject().put("uid", authParseResult.unionId));
+                  }
+                  dataStore.insertWithOptions(clazz, updateParam, new DataStore.InsertOption().setReturnNewDocument(true), res1 -> {
+                    dataStore.close();
+                    if (res1.failed()) {
+                      logger.warn("failed to create new user. cause: " + res1.cause().getMessage());
+                      message.fail(ErrorCodes.DATABASE_ERROR.getCode(), res1.cause().getMessage());
+                    } else {
+                      logger.debug("result user: " + res1.result());
+                      message.reply(res1.result());
+                    }
+                  });
+                } else {
+                  dataStore.close();
+                  message.reply(res.result());
+//                  dataStore.findOne(clazz, query, null, res2 -> {
+//                    dataStore.close();
+//                    if (res2.failed()) {
+//                      logger.warn("failed to fetch user. cause: " + res2.cause().getMessage());
+//                      message.fail(ErrorCodes.DATABASE_ERROR.getCode(), res2.cause().getMessage());
+//                    } else {
+//                      logger.debug("result user: " + res2.result());
+//                      message.reply(res2.result());
+//                    }
+//                  });
+                }
+              }
+            });
+  }
+
   public void onMessage(Message<JsonObject> message) {
     if (!message.headers().contains(INTERNAL_MSG_HEADER_OP)) {
       message.fail(ErrorCodes.INTERNAL_ERROR.ordinal(), "no operation specified.");
@@ -57,74 +185,58 @@ public class StorageVerticle extends CommonVerticle {
     JsonObject updateParam = body.getJsonObject(INTERNAL_MSG_ATTR_UPDATE_PARAM, new JsonObject());
     final JsonObject query = body.getJsonObject(INTERNAL_MSG_ATTR_QUERY, new JsonObject());
     boolean fetchWhenSave = body.getBoolean(INTERNAL_MSG_ATTR_RETURNNEWDOC, false);
+    JsonObject authData = null;
 
     final DataStore dataStore = dataStoreFactory.getStore();
     Instant now = Instant.now();
 
     switch (operation) {
-      case RequestParse.OP_USER_AUTH_LOGIN:
-        logger.debug("thirdparty signup/signin. query=" + query + ", param=" + updateParam);
-        if (query.size() < 1) {
-          message.fail(ErrorCodes.INVALID_PARAMETER.getCode(), "query parameter is empty.");
-        } else {
-          updateParam.put(LeanObject.ATTR_NAME_UPDATED_TS, now);
-
-          dataStore.findOneAndUpdateWithOptions(clazz, query, updateParam,
-                  new DataStore.QueryOption().setLimit(1), new DataStore.UpdateOption().setUpsert(true).setReturnNewDocument(true),
-                  res -> {
-                    if (res.failed()) {
-                      dataStore.close();
-                      message.fail(ErrorCodes.DATABASE_ERROR.getCode(), res.cause().getMessage());
-                    } else {
-                      // res.result() doesn't include user object, need to fetch again.
-                      dataStore.findOne(clazz, query, null, res2 -> {
-                        dataStore.close();
-                        if (res2.failed()) {
-                          message.fail(ErrorCodes.DATABASE_ERROR.getCode(), res2.cause().getMessage());
-                        } else {
-                          message.reply(res2.result());
-                        }
-                      });
-                    }
-                  });
-        }
-        break;
       case RequestParse.OP_USER_SIGNIN:
-        String password = updateParam.getString(UserHandler.PARAM_PASSWORD);
-        if (StringUtils.notEmpty(password)) {
-          updateParam.remove(UserHandler.PARAM_PASSWORD);
-        }
-        logger.debug("user signin. query= " + updateParam.toString());
-        dataStore.findOne(clazz, updateParam, null, user -> {
-          dataStore.close();
-          if (user.failed()) {
-            reportDatabaseError(message, user.cause());
-          } else if (null == user.result()) {
-            reportUserError(message, ErrorCodes.OBJECT_NOT_FOUND.ordinal(), "username is not existed.");
-          } else {
-            JsonObject mongoUser = user.result();
-            String salt = mongoUser.getString(LeanObject.BUILTIN_ATTR_SALT);
-            String mongoPassword = mongoUser.getString(LeanObject.BUILTIN_ATTR_PASSWORD);
-            mongoUser.remove(LeanObject.BUILTIN_ATTR_SALT);
-            mongoUser.remove(LeanObject.BUILTIN_ATTR_PASSWORD);
-            if (StringUtils.isEmpty(password)) {
-              message.reply(mongoUser);
+        authData = updateParam.getJsonObject(UserHandler.PARAM_AUTH_DATA);
+        if (null != authData && authData.size() > 0) {
+          processAuthSignupOrIn(dataStore, message, clazz, authData, updateParam);
+        } else {
+          String password = updateParam.getString(UserHandler.PARAM_PASSWORD);
+          if (StringUtils.notEmpty(password)) {
+            updateParam.remove(UserHandler.PARAM_PASSWORD);
+          }
+          logger.debug("user signin. query= " + updateParam.toString());
+          dataStore.findOne(clazz, updateParam, null, user -> {
+            dataStore.close();
+            if (user.failed()) {
+              reportDatabaseError(message, user.cause());
+            } else if (null == user.result()) {
+              reportUserError(message, ErrorCodes.OBJECT_NOT_FOUND.ordinal(), "username is not existed.");
             } else {
-              String hashPassword = UserHandler.hashPassword(password, salt);
-              if (hashPassword.equals(mongoPassword)) {
+              JsonObject mongoUser = user.result();
+              String salt = mongoUser.getString(LeanObject.BUILTIN_ATTR_SALT);
+              String mongoPassword = mongoUser.getString(LeanObject.BUILTIN_ATTR_PASSWORD);
+              mongoUser.remove(LeanObject.BUILTIN_ATTR_SALT);
+              mongoUser.remove(LeanObject.BUILTIN_ATTR_PASSWORD);
+              if (StringUtils.isEmpty(password)) {
                 message.reply(mongoUser);
               } else {
-                reportUserError(message, ErrorCodes.PASSWORD_WRONG.getCode(), ErrorCodes.PASSWORD_WRONG.getMessage());
+                String hashPassword = UserHandler.hashPassword(password, salt);
+                if (hashPassword.equals(mongoPassword)) {
+                  message.reply(mongoUser);
+                } else {
+                  reportUserError(message, ErrorCodes.PASSWORD_WRONG.getCode(), ErrorCodes.PASSWORD_WRONG.getMessage());
+                }
               }
             }
-          }
-        });
+          });
+        }
         break;
       case RequestParse.OP_USER_SIGNUP:
+        authData = updateParam.getJsonObject(UserHandler.PARAM_AUTH_DATA);
+        if (null != authData && authData.size() > 0) {
+          processAuthSignupOrIn(dataStore, message, clazz, authData, updateParam);
+          break;
+        }
       case RequestParse.OP_OBJECT_POST:
         updateParam.put(LeanObject.ATTR_NAME_CREATED_TS, now);
         updateParam.put(LeanObject.ATTR_NAME_UPDATED_TS, now);
-        logger.debug("insert doc=== " + updateParam.toString());
+        logger.debug("insert object === " + updateParam.toString());
         DataStore.InsertOption insertOption = new DataStore.InsertOption();
         insertOption.setReturnNewDocument(fetchWhenSave);
         dataStore.insertWithOptions(clazz, updateParam, insertOption, res -> {
