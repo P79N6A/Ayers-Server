@@ -87,8 +87,8 @@ public class UserHandler extends CommonHandler {
           signJson.put(PARAM_MOBILEPHONE, mobile);
           signJson.put(PARAM_PASSWORD, password);
         } else if (mobileSmscodeSelected) {
-          // TODO： check smsCode is valid.
           signJson.put(PARAM_MOBILEPHONE, mobile);
+          signJson.put(PARAM_SMSCODE, smsCode);
         } else if (emailPassSelected) {
           signJson.put(PARAM_EMAIL, email);
           signJson.put(PARAM_PASSWORD, password);
@@ -145,9 +145,6 @@ public class UserHandler extends CommonHandler {
           String hashPassword = hashPassword(password, salt);
           data.put(PARAM_PASSWORD, hashPassword);
           data.put(LeanObject.BUILTIN_ATTR_SALT, salt);
-        } else if (mobileSmscodeSelected) {
-          // TODO： check smsCode is valid.
-          data.remove(PARAM_SMSCODE);
         }
         data.put(LeanObject.BUILTIN_ATTR_ACL, getUserDefaultACL());
         data.put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, StringUtils.getRandomString(Constraints.SESSION_TOKEN_LENGTH));

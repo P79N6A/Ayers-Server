@@ -40,6 +40,9 @@ public class StorageVerticle extends CommonVerticle {
     msg.fail(code, message);
   }
 
+  private void processAuthLogin(Message<JsonObject> message, JsonObject query, JsonObject updateParam) {
+
+  }
   public void onMessage(Message<JsonObject> message) {
     if (!message.headers().contains(INTERNAL_MSG_HEADER_OP)) {
       message.fail(ErrorCodes.INTERNAL_ERROR.ordinal(), "no operation specified.");

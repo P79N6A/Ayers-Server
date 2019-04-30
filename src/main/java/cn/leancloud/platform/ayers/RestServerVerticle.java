@@ -182,15 +182,38 @@ public class RestServerVerticle extends CommonVerticle {
       badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("message", commonResult.getMessage()));
     } else {
       JsonObject body = commonResult.getObject();
-      UserHandler handler = new UserHandler(vertx, context);
-      handler.signup(body, res -> {
-        if (res.failed()) {
-          internalServerError(context, ErrorCodes.INTERNAL_ERROR.toJson());
-        } else {
-          // TODO: add sessionToken - userObject to cache.
-          ok(context, res.result());
-        }
-      });
+      String mobilePhone = body.getString(UserHandler.PARAM_MOBILEPHONE);
+      String smsCode = body.getString(UserHandler.PARAM_SMSCODE);
+      if (StringUtils.notEmpty(mobilePhone) && StringUtils.notEmpty(smsCode)) {
+        SmsCodeHandler smsHandler = new SmsCodeHandler(vertx, context);
+        smsHandler.verifySmsCode(new JsonObject().put(UserHandler.PARAM_MOBILEPHONE, mobilePhone), smsCode, res -> {
+          if (res.failed()) {
+            badRequest(context, ErrorCodes.INVALID_SMS_CODE.toJson());
+          } else {
+            body.remove(UserHandler.PARAM_SMSCODE);
+            UserHandler handler = new UserHandler(vertx, context);
+            handler.signup(body, res2 -> {
+              if (res2.failed()) {
+                internalServerError(context, ErrorCodes.INTERNAL_ERROR.toJson());
+              } else {
+                // TODO: add sessionToken - userObject to cache.
+                ok(context, res2.result());
+              }
+            });
+          }
+        });
+      } else {
+        UserHandler handler = new UserHandler(vertx, context);
+        handler.signup(body, res -> {
+          if (res.failed()) {
+            internalServerError(context, ErrorCodes.INTERNAL_ERROR.toJson());
+          } else {
+            // TODO: add sessionToken - userObject to cache.
+            ok(context, res.result());
+          }
+        });
+
+      }
     }
   }
 
@@ -200,17 +223,41 @@ public class RestServerVerticle extends CommonVerticle {
       badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("message", commonResult.getMessage()));
     } else {
       JsonObject body = commonResult.getObject();
-      UserHandler handler = new UserHandler(vertx, context);
-      handler.signin(body, res -> {
-        if (res.failed()) {
-          notFound(context, new JsonObject().put("error", res.cause().getMessage()));
-        } else if (null == res.result()) {
-          notFound(context, ErrorCodes.PASSWORD_WRONG.toJson());
-        } else {
-          // TODO: add sessionToken - userObject to cache.
-          ok(context, res.result());
-        }
-      });
+      String mobilePhone = body.getString(UserHandler.PARAM_MOBILEPHONE);
+      String smsCode = body.getString(UserHandler.PARAM_SMSCODE);
+      if (StringUtils.notEmpty(mobilePhone) && StringUtils.notEmpty(smsCode)) {
+        SmsCodeHandler smsHandler = new SmsCodeHandler(vertx, context);
+        smsHandler.verifySmsCode(new JsonObject().put(UserHandler.PARAM_MOBILEPHONE, mobilePhone), smsCode, response -> {
+          if (response.failed()) {
+            badRequest(context, ErrorCodes.INVALID_SMS_CODE.toJson());
+          } else {
+            body.remove(UserHandler.PARAM_SMSCODE);
+            UserHandler handler = new UserHandler(vertx, context);
+            handler.signin(body, res -> {
+              if (res.failed()) {
+                notFound(context, new JsonObject().put("error", res.cause().getMessage()));
+              } else if (null == res.result()) {
+                notFound(context, ErrorCodes.PASSWORD_WRONG.toJson());
+              } else {
+                // TODO: add sessionToken - userObject to cache.
+                ok(context, res.result());
+              }
+            });
+          }
+        });
+      } else {
+        UserHandler handler = new UserHandler(vertx, context);
+        handler.signin(body, res -> {
+          if (res.failed()) {
+            notFound(context, new JsonObject().put("error", res.cause().getMessage()));
+          } else if (null == res.result()) {
+            notFound(context, ErrorCodes.PASSWORD_WRONG.toJson());
+          } else {
+            // TODO: add sessionToken - userObject to cache.
+            ok(context, res.result());
+          }
+        });
+      }
     }
   }
 

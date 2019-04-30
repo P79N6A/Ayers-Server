@@ -37,7 +37,7 @@ public enum ErrorCodes {
 
   TOO_MANY_SMS(601, ""),
   FAILED_TO_SEND_SMS(602, ""),
-  INVALID_SMS_CODE(603, ""),
+  INVALID_SMS_CODE(603, "smsCode is invalid."),
   INVALID_SMS_TOKEN(608, ""),
   QUERY_KEY_NOT_EXIST(700, "");
 

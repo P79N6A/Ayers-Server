@@ -5,4 +5,5 @@ package cn.leancloud.platform.cache;
 // L2. redis cache supported by redis cluster(sentinel)
 //
 public class UnifiedCache {
+
 }

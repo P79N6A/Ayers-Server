@@ -47,8 +47,12 @@ public class CommonWebClient {
                              logger.warn(path + " request failed. cause: " + event.cause());
                              future.fail(event.cause());
                            } else {
-                             logger.debug(path + " response: " + event.result().bodyAsJsonObject());
-                             future.complete(event.result().bodyAsJsonObject());
+                             if (HttpStatus.SC_OK != event.result().statusCode()) {
+                               future.fail(event.result().bodyAsString());
+                             } else {
+                               logger.debug(path + " response: " + event.result().bodyAsJsonObject());
+                               future.complete(event.result().bodyAsJsonObject());
+                             }
                            }
                          }
                        });
@@ -72,8 +76,12 @@ public class CommonWebClient {
             logger.warn(path + " request failed. cause: " + event.cause());
             future.fail(event.cause());
           } else {
-            logger.debug(path + " response: " + event.result().bodyAsJsonObject());
-            future.complete(event.result().bodyAsJsonObject());
+            if (HttpStatus.SC_OK != event.result().statusCode()) {
+              future.fail(event.result().bodyAsString());
+            } else {
+              logger.debug(path + " response: " + event.result().bodyAsJsonObject());
+              future.complete(event.result().bodyAsJsonObject());
+            }
           }
       }});
     }).setHandler(handler);
