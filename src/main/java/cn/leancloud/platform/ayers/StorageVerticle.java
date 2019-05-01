@@ -157,16 +157,6 @@ public class StorageVerticle extends CommonVerticle {
                 } else {
                   dataStore.close();
                   message.reply(res.result());
-//                  dataStore.findOne(clazz, query, null, res2 -> {
-//                    dataStore.close();
-//                    if (res2.failed()) {
-//                      logger.warn("failed to fetch user. cause: " + res2.cause().getMessage());
-//                      message.fail(ErrorCodes.DATABASE_ERROR.getCode(), res2.cause().getMessage());
-//                    } else {
-//                      logger.debug("result user: " + res2.result());
-//                      message.reply(res2.result());
-//                    }
-//                  });
                 }
               }
             });

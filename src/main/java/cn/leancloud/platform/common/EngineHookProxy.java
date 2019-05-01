@@ -51,7 +51,8 @@ public class EngineHookProxy extends CommonWebClient {
   }
 
   public void call(String clazz, HookType type, JsonObject param, JsonObject headers, RoutingContext context, Handler<AsyncResult<JsonObject>> handler) {
-    logger.debug("EngineHookProxy#call");
+    // TODO: rememeber to process ignoreHook flag, avoid dead-loop.
+
     EngineMetaStore engineMetaStore = EngineMetaStore.getInstance();
     String funcPath = engineMetaStore.getHookFunctionPath(clazz, type);
     if (StringUtils.isEmpty(funcPath)) {

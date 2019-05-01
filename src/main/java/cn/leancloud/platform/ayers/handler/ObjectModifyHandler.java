@@ -11,7 +11,9 @@ import cn.leancloud.platform.modules.ObjectSpecifics;
 import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.*;
 import io.vertx.core.eventbus.DeliveryOptions;
+import io.vertx.core.eventbus.ReplyException;
 import io.vertx.core.http.HttpMethod;
+import io.vertx.core.impl.NoStackTraceThrowable;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
@@ -40,19 +42,44 @@ public class ObjectModifyHandler extends CommonHandler {
         handler.handle(res);
       } else {
         JsonObject hookedBody = res.result();
-        logger.debug("get lean enginne hook result: " + hookedBody);
-        sendDataOperationWithOption(clazz, null, HttpMethod.POST.toString(), null, hookedBody,
-                returnNewDoc, response -> {
-          if (response.failed()) {
-            handler.handle(response);
-          } else {
-            // maybe we need calculate request-sign again.
-            this.hookProxy.call(clazz, HookType.AfterSave, new JsonObject().put("object", response.result()), headers, routingContext, any -> {
-              // ignore after hook result.
-              handler.handle(response);
-            });
-          }
-        });
+        if (null == hookedBody) {
+          handler.handle(new AsyncResult<JsonObject>() {
+            @Override
+            public JsonObject result() {
+              return null;
+            }
+
+            @Override
+            public Throwable cause() {
+              return new IllegalAccessException("operation failed by BeforeSave Hook.");
+            }
+
+            @Override
+            public boolean succeeded() {
+              return false;
+            }
+
+            @Override
+            public boolean failed() {
+              return true;
+            }
+          });
+        } else {
+          hookedBody.remove("__before");
+          logger.debug("get lean enginne hook result: " + hookedBody);
+          sendDataOperationWithOption(clazz, null, RequestParse.OP_OBJECT_POST, null, hookedBody,
+                  returnNewDoc, response -> {
+                    if (response.failed()) {
+                      handler.handle(response);
+                    } else {
+                      // maybe we need calculate request-sign again.
+                      this.hookProxy.call(clazz, HookType.AfterSave, new JsonObject().put("object", response.result()), headers, routingContext, any -> {
+                        // ignore after hook result.
+                        handler.handle(response);
+                      });
+                    }
+                  });
+        }
       }
     });
   }
@@ -66,17 +93,42 @@ public class ObjectModifyHandler extends CommonHandler {
         handler.handle(res);
       } else {
         JsonObject hookedBody = res.result();
-        logger.debug("get lean enginne hook result: " + hookedBody);
-        sendDataOperationWithOption(clazz, objectId, HttpMethod.PUT.toString(), query, hookedBody, returnNewDoc, responnse -> {
-          if (responnse.failed()) {
-            handler.handle(responnse);
-          } else {
-            this.hookProxy.call(clazz, HookType.AfterUpdate, new JsonObject().put("object", responnse.result()), headers, routingContext, any -> {
-              // ignore after hook result.
+        if (null == hookedBody) {
+          handler.handle(new AsyncResult<JsonObject>() {
+            @Override
+            public JsonObject result() {
+              return null;
+            }
+
+            @Override
+            public Throwable cause() {
+              return new IllegalAccessException("operation failed by BeforeUpdate Hook.");
+            }
+
+            @Override
+            public boolean succeeded() {
+              return false;
+            }
+
+            @Override
+            public boolean failed() {
+              return true;
+            }
+          });
+        } else {
+          hookedBody.remove("__before");
+          logger.debug("get lean enginne hook result: " + hookedBody);
+          sendDataOperationWithOption(clazz, objectId, RequestParse.OP_OBJECT_PUT, query, hookedBody, returnNewDoc, responnse -> {
+            if (responnse.failed()) {
               handler.handle(responnse);
-            });
-          }
-        });
+            } else {
+              this.hookProxy.call(clazz, HookType.AfterUpdate, new JsonObject().put("object", responnse.result()), headers, routingContext, any -> {
+                // ignore after hook result.
+                handler.handle(responnse);
+              });
+            }
+          });
+        }
       }
     });
   }
@@ -91,7 +143,7 @@ public class ObjectModifyHandler extends CommonHandler {
       } else {
         JsonObject hookedBody = res.result();
         logger.debug("get lean enginne hook result: " + hookedBody);
-        sendDataOperation(clazz, objectId, HttpMethod.DELETE.toString(), query, null, response ->{
+        sendDataOperation(clazz, objectId, RequestParse.OP_OBJECT_DELETE, query, null, response ->{
           handler.handle(response);
           if (response.succeeded()) {
             this.hookProxy.call(clazz, HookType.AfterDetele, deleteParam, headers, routingContext, any -> {
@@ -135,6 +187,25 @@ public class ObjectModifyHandler extends CommonHandler {
     return new BatchRequest(method, path, clazz, objectId, param);
   }
 
+  private void processBatchResult(AsyncResult<JsonObject> response, Future<JsonObject> tmp) {
+    if (response.failed()) {
+      if (response.cause() instanceof ReplyException) {
+        int failureCode = ((ReplyException) response.cause()).failureCode();
+        JsonObject responseJson = new JsonObject().put("code", failureCode).put("error", response.cause().getMessage());
+        tmp.complete(new JsonObject().put("error", responseJson));
+      } if (response.cause() instanceof NoStackTraceThrowable) {
+        // failed by leanengine hook func.
+        tmp.complete(new JsonObject().put("error", new JsonObject(response.cause().getMessage())));
+      } else {
+        tmp.complete(new JsonObject().put("error",
+                new JsonObject().put("code", ErrorCodes.INTERNAL_ERROR.getCode())
+                        .put("error", response.cause().getMessage())));
+      }
+    } else {
+      tmp.complete(new JsonObject().put("success", response.result()));
+    }
+  }
+
   public void batchSave(JsonArray requests, Handler<AsyncResult<CompositeFuture>> handler) {
     List<Future> results = requests.stream().map(req -> {
       final Future<JsonObject> tmp = Future.future();
@@ -144,37 +215,16 @@ public class ObjectModifyHandler extends CommonHandler {
         tmp.complete(new JsonObject().put("error", ErrorCodes.INVALID_PARAMETER.toJson()));
       } else {
         String method = batchRequest.getMethod();
-        // fixme: why not invoke create/update/delete method directly???
-
-        JsonObject request = new JsonObject();
-        if (!StringUtils.isEmpty(batchRequest.getClazz())) {
-          request.put(CommonVerticle.INTERNAL_MSG_ATTR_CLASS, batchRequest.getClazz());
+        String clazz = batchRequest.getClazz();
+        String objectId = batchRequest.getObjectId();
+        JsonObject body = batchRequest.getBody();
+        if (RequestParse.OP_OBJECT_POST.equalsIgnoreCase(method)) {
+          create(clazz, body, false, response -> processBatchResult(response, tmp));
+        } else if (RequestParse.OP_OBJECT_PUT.equalsIgnoreCase(method)) {
+          update(clazz, objectId, null, body, false, response -> processBatchResult(response, tmp));
+        } else if (RequestParse.OP_OBJECT_DELETE.equalsIgnoreCase(method)) {
+          delete(clazz, objectId, body, response -> processBatchResult(response, tmp));
         }
-        if (!StringUtils.isEmpty(batchRequest.getObjectId())) {
-          request.put(CommonVerticle.INTERNAL_MSG_ATTR_OBJECT_ID, batchRequest.getObjectId());
-        }
-        if (null != batchRequest.getBody()) {
-          request.put(CommonVerticle.INTERNAL_MSG_ATTR_UPDATE_PARAM, batchRequest.getBody());
-        }
-
-        DeliveryOptions options = new DeliveryOptions().addHeader(CommonVerticle.INTERNAL_MSG_HEADER_OP, method);
-        vertx.eventBus().send(Configure.MAILADDRESS_DEMOCLES_QUEUE, request, options, response -> {
-          if (response.failed()) {
-            tmp.complete(new JsonObject().put("error",
-                    new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode())
-                            .put("error", response.cause().getMessage())));
-          } else {
-            vertx.eventBus().send(Configure.MAILADDRESS_DATASTORE_QUEUE, request, options, res -> {
-              if (res.failed()) {
-                tmp.complete(new JsonObject().put("error",
-                        new JsonObject().put("code", ErrorCodes.DATABASE_ERROR.getCode())
-                                .put("error", res.cause().getMessage())));
-              } else {
-                tmp.complete(new JsonObject().put("success", (JsonObject) res.result().body()));
-              }
-            });
-          }
-        });
       }
       return tmp;
     }).collect(Collectors.toList());
