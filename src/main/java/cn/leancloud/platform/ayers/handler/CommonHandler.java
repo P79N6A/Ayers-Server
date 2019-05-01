@@ -149,6 +149,14 @@ public class CommonHandler {
     });
   }
 
+  protected JsonObject copyRequestHeaders(RoutingContext context) {
+    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(context);
+    JsonObject headerJson = headers.toHeaders()
+            .put(RequestParse.HEADER_CONTENT_TYPE, RequestParse.CONTENT_TYPE_JSON)
+            .put("Accept", RequestParse.CONTENT_TYPE_JSON);
+    return headerJson;
+  }
+
   protected void sendDataOperationWithOption(String clazz, String objectId, String operation,
                                              JsonObject query, JsonObject update, boolean returnNewDocument,
                                              final Handler<AsyncResult<JsonObject>> handler) {

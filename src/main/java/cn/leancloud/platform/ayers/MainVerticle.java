@@ -3,6 +3,7 @@ package cn.leancloud.platform.ayers;
 import cn.leancloud.platform.cache.InMemoryLRUCache;
 import cn.leancloud.platform.common.Configure;
 import cn.leancloud.platform.common.Constraints;
+import cn.leancloud.platform.engine.EngineMetaStore;
 import cn.leancloud.platform.persistence.DataStoreFactory;
 import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Future;
@@ -17,6 +18,9 @@ public class MainVerticle extends CommonVerticle {
   @Override
   public void start(Future<Void> startFuture) throws Exception {
     final Configure configure = Configure.getInstance();
+
+    EngineMetaStore.getInstance().initialize();
+
     Future<JsonObject> configFuture = Future.future();
     configure.initialize(vertx, configFuture);
     configFuture.compose(response -> {

@@ -17,10 +17,12 @@ import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.function.Function;
+
 public class CommonWebClient {
   private static final Logger logger = LoggerFactory.getLogger(CommonWebClient.class);
-  private CircuitBreaker circuitBreaker = null;
-  private WebClient webClient = null;
+  protected CircuitBreaker circuitBreaker = null;
+  protected WebClient webClient = null;
   public CommonWebClient(Vertx vertx, String name) {
     this(vertx, name, new WebClientOptions().setFollowRedirects(true).setSsl(true).setKeepAlive(true).setConnectTimeout(6000).setUserAgent("Ayers Server"));
   }
@@ -34,13 +36,53 @@ public class CommonWebClient {
     circuitBreaker = CircuitBreaker.create("circuit-breaker-" + name, vertx, circuitBreakerOptions);
   }
 
+//  public <T> void setFallback(Function<Throwable, T> fallback) {
+//    this.circuitBreaker.fallback(fallback);
+//  }
+
+  public void getWithFallback(String host, int port, String path, MultiMap headers, String parameter,
+                              Handler<AsyncResult<JsonObject>> handler, Function<Throwable, JsonObject> fallback) {
+    boolean useSSL = (443 == port);
+    HttpRequest httpRequest = webClient.get(port, host, path).ssl(useSSL).followRedirects(true);
+    if (null != headers) {
+      headers.entries().stream().forEach(entry -> httpRequest.putHeader(entry.getKey(), entry.getValue()));
+    }
+    circuitBreaker.executeWithFallback(future -> {
+      Buffer buffer = Buffer.buffer();
+      if (StringUtils.notEmpty(parameter)) {
+        buffer.appendString(parameter);
+      }
+      httpRequest.sendBuffer(buffer, new Handler<AsyncResult<HttpResponse>>() {
+        @Override
+        public void handle(AsyncResult<HttpResponse> event) {
+          if (event.failed()) {
+            logger.warn(path + " request failed. cause: " + event.cause());
+            future.fail(event.cause());
+          } else {
+            if (HttpStatus.SC_OK != event.result().statusCode()) {
+              future.fail(event.result().bodyAsString());
+            } else {
+              logger.debug(path + " response: " + event.result().bodyAsJsonObject());
+              future.complete(event.result().bodyAsJsonObject());
+            }
+          }
+        }
+      });
+    }, fallback).setHandler(handler);
+  }
+
   public void get(String host, int port, String path, MultiMap headers, String parameter, Handler<AsyncResult<JsonObject>> handler) {
-    HttpRequest httpRequest = webClient.get(port, host, path).ssl(true).followRedirects(true);
+    boolean useSSL = (443 == port);
+    HttpRequest httpRequest = webClient.get(port, host, path).ssl(useSSL).followRedirects(true);
     if (null != headers) {
       headers.entries().stream().forEach(entry -> httpRequest.putHeader(entry.getKey(), entry.getValue()));
     }
     circuitBreaker.<JsonObject>execute(future -> {
-      httpRequest.send(new Handler<AsyncResult<HttpResponse>>() {
+      Buffer buffer = Buffer.buffer();
+      if (StringUtils.notEmpty(parameter)) {
+        buffer.appendString(parameter);
+      }
+      httpRequest.sendBuffer(buffer, new Handler<AsyncResult<HttpResponse>>() {
                          @Override
                          public void handle(AsyncResult<HttpResponse> event) {
                            if (event.failed()) {
@@ -59,8 +101,39 @@ public class CommonWebClient {
     }).setHandler(handler);
   }
 
+  public void postWithFallback(String host, int port, String path, JsonObject headers, JsonObject body,
+                               Handler<AsyncResult<JsonObject>> handler, Function<Throwable, JsonObject> fallback) {
+    boolean useSSL = (443 == port);
+    HttpRequest httpRequest = webClient.post(port, host, path).ssl(useSSL).followRedirects(true);
+    if (null != headers) {
+      headers.stream().forEach(entry -> {
+        logger.debug("add http header. " + entry.getKey() + ", " + entry.getValue());
+        httpRequest.putHeader(entry.getKey(), (String) entry.getValue());
+      });
+    }
+    circuitBreaker.executeWithFallback(future -> {
+      logger.debug("send post request to " + host + path + ", para: " + body);
+      httpRequest.sendJsonObject(body, new Handler<AsyncResult<HttpResponse>>() {
+        @Override
+        public void handle(AsyncResult<HttpResponse> event) {
+          if (event.failed()) {
+            logger.warn(path + " request failed. cause: " + event.cause());
+            future.fail(event.cause());
+          } else {
+            if (HttpStatus.SC_OK != event.result().statusCode()) {
+              future.fail(event.result().bodyAsString());
+            } else {
+              logger.debug(path + " response: " + event.result().bodyAsJsonObject());
+              future.complete(event.result().bodyAsJsonObject());
+            }
+          }
+        }});
+      }, fallback).setHandler(handler);
+  }
+
   public void post(String host, int port, String path, JsonObject headers, JsonObject body, Handler<AsyncResult<JsonObject>> handler) {
-    HttpRequest httpRequest = webClient.post(port, host, path).ssl(true).followRedirects(true);
+    boolean useSSL = (443 == port);
+    HttpRequest httpRequest = webClient.post(port, host, path).ssl(useSSL).followRedirects(true);
     if (null != headers) {
       headers.stream().forEach(entry -> {
         logger.debug("add http header. " + entry.getKey() + ", " + entry.getValue());

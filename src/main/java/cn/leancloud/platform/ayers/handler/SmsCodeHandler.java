@@ -22,13 +22,8 @@ public class SmsCodeHandler extends CommonHandler {
 
   public void requestSmsCode(Handler<AsyncResult<JsonObject>> handler) {
     SMSServiceClient client = SMSServiceClient.getClient(vertx);
-    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(routingContext);
-//    String appId = headers.getAppId();  //とりあえず、固定てきなホストを使用
-//    String host = String.format(LC_API_HOST_FORMAT, appId.substring(0, 8).toLowerCase());
     JsonObject body = routingContext.getBodyAsJson();
-    JsonObject headerJson = headers.toHeaders()
-            .put(RequestParse.HEADER_CONTENT_TYPE, RequestParse.CONTENT_TYPE_JSON)
-            .put("Accept", RequestParse.CONTENT_TYPE_JSON);
+    JsonObject headerJson = copyRequestHeaders(routingContext);
 
     logger.debug("process requestSmsCode request. body:" + body);
     client.post(LC_API_HOST, LC_API_PORT, routingContext.request().path(), headerJson, body, handler);
@@ -36,23 +31,17 @@ public class SmsCodeHandler extends CommonHandler {
 
   public void verifySmsCode(JsonObject body, String smsCode, Handler<AsyncResult<JsonObject>> handler) {
     SMSServiceClient client = SMSServiceClient.getClient(vertx);
-    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(routingContext);
-    JsonObject headerJson = headers.toHeaders()
-            .put(RequestParse.HEADER_CONTENT_TYPE, RequestParse.CONTENT_TYPE_JSON)
-            .put("Accept", RequestParse.CONTENT_TYPE_JSON);
+    JsonObject headerJson = copyRequestHeaders(routingContext);
     String requestPath = String.format(LC_REQUEST_VERIFYSMSCODE_FORMAT, smsCode);
     client.post(LC_API_HOST, LC_API_PORT, requestPath, headerJson, body, handler);
   }
 
   public void verifySmsCode(Handler<AsyncResult<JsonObject>> handler) {
     SMSServiceClient client = SMSServiceClient.getClient(vertx);
-    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(routingContext);
 //    String appId = headers.getAppId();
 //    String host = String.format(LC_API_HOST_FORMAT, appId.substring(0, 8).toLowerCase());
     JsonObject body = routingContext.getBodyAsJson();
-    JsonObject headerJson = headers.toHeaders()
-            .put(RequestParse.HEADER_CONTENT_TYPE, RequestParse.CONTENT_TYPE_JSON)
-            .put("Accept", RequestParse.CONTENT_TYPE_JSON);
+    JsonObject headerJson = copyRequestHeaders(routingContext);
 
     logger.debug("process verifySmsCode request. body:" + body);
     client.post(LC_API_HOST, LC_API_PORT, routingContext.request().path(), headerJson, body, handler);

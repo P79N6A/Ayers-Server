@@ -4,8 +4,9 @@ import cn.leancloud.platform.ayers.CommonVerticle;
 import cn.leancloud.platform.ayers.RequestParse;
 import cn.leancloud.platform.common.BatchRequest;
 import cn.leancloud.platform.common.Configure;
+import cn.leancloud.platform.common.EngineHookProxy;
 import cn.leancloud.platform.common.ErrorCodes;
-import cn.leancloud.platform.common.OperationHookProxy;
+import cn.leancloud.platform.engine.HookType;
 import cn.leancloud.platform.modules.ObjectSpecifics;
 import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.*;
@@ -23,32 +24,58 @@ import java.util.stream.Collectors;
 
 public class ObjectModifyHandler extends CommonHandler {
   private static final Logger logger = LoggerFactory.getLogger(ObjectModifyHandler.class);
+
+  private EngineHookProxy hookProxy;
   public ObjectModifyHandler(Vertx vertx, RoutingContext context) {
     super(vertx, context);
+    this.hookProxy = EngineHookProxy.getInstance(vertx);
   }
 
   public void create(String clazz, JsonObject body, boolean returnNewDoc, Handler<AsyncResult<JsonObject>> handler) {
-    sendDataOperationWithOption(clazz, null, HttpMethod.POST.toString(), null, body, returnNewDoc, handler);
-    // disable hook now.
-    // TODO: open me.
-//    OperationHookProxy hookProxy = OperationHookProxy.getInstance(null);
-//    hookProxy.beforeCheckThen(clazz, this.routingContext, response -> {
-//      if (response.failed()) {
-//        handler.handle(response.map(v -> v));
-//      } else {
-//        JsonObject hookedBody = response.result();
-//        sendDataOperationWithOption(clazz, null, HttpMethod.POST.toString(), null, hookedBody, returnNewDoc, handler);
-//      }
-//    });
+    //sendDataOperationWithOption(clazz, null, HttpMethod.POST.toString(), null, body, returnNewDoc, handler);
+
+    logger.debug("ObjectModifyHandler#create");
+    JsonObject headers = copyRequestHeaders(routingContext);
+    logger.debug("ObjectModifyHandler#create2");
+    this.hookProxy.call(clazz, HookType.BeforeSave, body, headers, routingContext, res -> {
+      if (res.failed()) {
+        logger.warn("lean engine hook failed. cause: " + res.cause());
+        handler.handle(res);
+      } else {
+        JsonObject hookedBody = res.result();
+        logger.debug("get lean enginne hook result: " + hookedBody);
+        sendDataOperationWithOption(clazz, null, HttpMethod.POST.toString(), null, hookedBody, returnNewDoc, handler);
+      }
+    });
   }
 
   public void update(String clazz, String objectId, JsonObject query, JsonObject update, boolean returnNewDoc,
                      Handler<AsyncResult<JsonObject>> handler) {
-    sendDataOperationWithOption(clazz, objectId, HttpMethod.PUT.toString(), query, update, returnNewDoc, handler);
+    JsonObject headers = copyRequestHeaders(routingContext);
+    this.hookProxy.call(clazz, HookType.BeforeUpdate, update, headers, routingContext, res -> {
+      if (res.failed()) {
+        logger.warn("lean engine hook failed. cause: " + res.cause());
+        handler.handle(res);
+      } else {
+        JsonObject hookedBody = res.result();
+        logger.debug("get lean enginne hook result: " + hookedBody);
+        sendDataOperationWithOption(clazz, objectId, HttpMethod.PUT.toString(), query, hookedBody, returnNewDoc, handler);
+      }
+    });
   }
 
   public void delete(String clazz, String objectId, JsonObject query, Handler<AsyncResult<JsonObject>> handler) {
-    sendDataOperation(clazz, objectId, HttpMethod.DELETE.toString(), query, null, handler);
+    JsonObject headers = copyRequestHeaders(routingContext);
+    this.hookProxy.call(clazz, HookType.BeforeDelete, query, headers, routingContext, res -> {
+      if (res.failed()) {
+        logger.warn("lean engine hook failed. cause: " + res.cause());
+        handler.handle(res);
+      } else {
+        JsonObject hookedBody = res.result();
+        logger.debug("get lean enginne hook result: " + hookedBody);
+        sendDataOperation(clazz, objectId, HttpMethod.DELETE.toString(), query, null, handler);
+      }
+    });
   }
 
   private static BatchRequest parseBatchRequest(Object req) {
