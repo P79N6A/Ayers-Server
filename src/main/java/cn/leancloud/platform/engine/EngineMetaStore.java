@@ -25,8 +25,8 @@ public class EngineMetaStore {
    * Notice: should be invoked at main loop.
    */
   public void initialize() {
-    logger.debug("add hook func: __before_save_for_Review");
-    hookFuntions.put("__before_save_for_Review", 1);
+//    logger.debug("add hook func: __before_save_for_Review");
+//    hookFuntions.put("__before_save_for_Review", 1);
   }
 
   /**
