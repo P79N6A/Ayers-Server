@@ -17,6 +17,7 @@ import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 
+import io.vertx.core.impl.NoStackTraceThrowable;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
@@ -285,6 +286,9 @@ public class RestServerVerticle extends CommonVerticle {
           } else {
             badRequest(context, responseJson);
           }
+        } if (reply.cause() instanceof NoStackTraceThrowable) {
+          // failed by leanengine hook func.
+          badRequest(context, new JsonObject(reply.cause().getMessage()));
         } else {
           internalServerError(context, ErrorCodes.DATABASE_ERROR.toJson());
         }

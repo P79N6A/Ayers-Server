@@ -33,18 +33,26 @@ public class ObjectModifyHandler extends CommonHandler {
 
   public void create(String clazz, JsonObject body, boolean returnNewDoc, Handler<AsyncResult<JsonObject>> handler) {
     //sendDataOperationWithOption(clazz, null, HttpMethod.POST.toString(), null, body, returnNewDoc, handler);
-
-    logger.debug("ObjectModifyHandler#create");
     JsonObject headers = copyRequestHeaders(routingContext);
-    logger.debug("ObjectModifyHandler#create2");
-    this.hookProxy.call(clazz, HookType.BeforeSave, body, headers, routingContext, res -> {
+    this.hookProxy.call(clazz, HookType.BeforeSave, new JsonObject().put("object", body), headers, routingContext, res -> {
       if (res.failed()) {
         logger.warn("lean engine hook failed. cause: " + res.cause());
         handler.handle(res);
       } else {
         JsonObject hookedBody = res.result();
         logger.debug("get lean enginne hook result: " + hookedBody);
-        sendDataOperationWithOption(clazz, null, HttpMethod.POST.toString(), null, hookedBody, returnNewDoc, handler);
+        sendDataOperationWithOption(clazz, null, HttpMethod.POST.toString(), null, hookedBody,
+                returnNewDoc, response -> {
+          if (response.failed()) {
+            handler.handle(response);
+          } else {
+            // maybe we need calculate request-sign again.
+            this.hookProxy.call(clazz, HookType.AfterSave, new JsonObject().put("object", response.result()), headers, routingContext, any -> {
+              // ignore after hook result.
+              handler.handle(response);
+            });
+          }
+        });
       }
     });
   }
@@ -52,28 +60,45 @@ public class ObjectModifyHandler extends CommonHandler {
   public void update(String clazz, String objectId, JsonObject query, JsonObject update, boolean returnNewDoc,
                      Handler<AsyncResult<JsonObject>> handler) {
     JsonObject headers = copyRequestHeaders(routingContext);
-    this.hookProxy.call(clazz, HookType.BeforeUpdate, update, headers, routingContext, res -> {
+    this.hookProxy.call(clazz, HookType.BeforeUpdate, new JsonObject().put("object", update), headers, routingContext, res -> {
       if (res.failed()) {
         logger.warn("lean engine hook failed. cause: " + res.cause());
         handler.handle(res);
       } else {
         JsonObject hookedBody = res.result();
         logger.debug("get lean enginne hook result: " + hookedBody);
-        sendDataOperationWithOption(clazz, objectId, HttpMethod.PUT.toString(), query, hookedBody, returnNewDoc, handler);
+        sendDataOperationWithOption(clazz, objectId, HttpMethod.PUT.toString(), query, hookedBody, returnNewDoc, responnse -> {
+          if (responnse.failed()) {
+            handler.handle(responnse);
+          } else {
+            this.hookProxy.call(clazz, HookType.AfterUpdate, new JsonObject().put("object", responnse.result()), headers, routingContext, any -> {
+              // ignore after hook result.
+              handler.handle(responnse);
+            });
+          }
+        });
       }
     });
   }
 
   public void delete(String clazz, String objectId, JsonObject query, Handler<AsyncResult<JsonObject>> handler) {
     JsonObject headers = copyRequestHeaders(routingContext);
-    this.hookProxy.call(clazz, HookType.BeforeDelete, query, headers, routingContext, res -> {
+    JsonObject deleteParam = new JsonObject().put("object", query);
+    this.hookProxy.call(clazz, HookType.BeforeDelete, deleteParam, headers, routingContext, res -> {
       if (res.failed()) {
         logger.warn("lean engine hook failed. cause: " + res.cause());
         handler.handle(res);
       } else {
         JsonObject hookedBody = res.result();
         logger.debug("get lean enginne hook result: " + hookedBody);
-        sendDataOperation(clazz, objectId, HttpMethod.DELETE.toString(), query, null, handler);
+        sendDataOperation(clazz, objectId, HttpMethod.DELETE.toString(), query, null, response ->{
+          handler.handle(response);
+          if (response.succeeded()) {
+            this.hookProxy.call(clazz, HookType.AfterDetele, deleteParam, headers, routingContext, any -> {
+              // ignore it.
+            });
+          }
+        });
       }
     });
   }
@@ -119,6 +144,8 @@ public class ObjectModifyHandler extends CommonHandler {
         tmp.complete(new JsonObject().put("error", ErrorCodes.INVALID_PARAMETER.toJson()));
       } else {
         String method = batchRequest.getMethod();
+        // fixme: why not invoke create/update/delete method directly???
+
         JsonObject request = new JsonObject();
         if (!StringUtils.isEmpty(batchRequest.getClazz())) {
           request.put(CommonVerticle.INTERNAL_MSG_ATTR_CLASS, batchRequest.getClazz());
@@ -129,6 +156,7 @@ public class ObjectModifyHandler extends CommonHandler {
         if (null != batchRequest.getBody()) {
           request.put(CommonVerticle.INTERNAL_MSG_ATTR_UPDATE_PARAM, batchRequest.getBody());
         }
+
         DeliveryOptions options = new DeliveryOptions().addHeader(CommonVerticle.INTERNAL_MSG_HEADER_OP, method);
         vertx.eventBus().send(Configure.MAILADDRESS_DEMOCLES_QUEUE, request, options, response -> {
           if (response.failed()) {

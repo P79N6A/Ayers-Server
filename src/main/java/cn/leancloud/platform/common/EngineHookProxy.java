@@ -58,7 +58,7 @@ public class EngineHookProxy extends CommonWebClient {
       logger.debug("not found hook function for class:" + clazz + ", type:" + type.getName());
       handler.handle(wrapAsyncResult(param));
     } else {
-      logger.debug("try to call hook function for class:" + clazz + ", type:" + type.getName());
+      logger.debug("try to call hook function for class:" + clazz + ", type:" + type.getName() + "，param:" + param);
       String leanengineHost = engineMetaStore.getEngineHost();
       int leanenginePort = engineMetaStore.getEnginePort();
       postWithFallback(leanengineHost, leanenginePort, funcPath, headers, param,
