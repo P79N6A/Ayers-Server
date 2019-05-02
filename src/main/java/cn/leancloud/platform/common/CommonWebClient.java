@@ -17,6 +17,7 @@ import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.ConnectException;
 import java.util.function.Function;
 
 public class CommonWebClient {
@@ -117,8 +118,13 @@ public class CommonWebClient {
         @Override
         public void handle(AsyncResult<HttpResponse> event) {
           if (event.failed()) {
-            logger.warn(path + " request failed. cause: " + event.cause());
-            future.fail(event.cause());
+            if (event.cause() != null && event.cause() instanceof ConnectException) {
+              logger.warn(path + " request failed. cause: " + event.cause());
+              future.complete(fallback.apply(event.cause()));
+            } else {
+              logger.debug(path + " request failed. cause: " + event.cause());
+              future.fail(event.cause());
+            }
           } else {
             if (HttpStatus.SC_OK != event.result().statusCode()) {
               future.fail(event.result().bodyAsString());
