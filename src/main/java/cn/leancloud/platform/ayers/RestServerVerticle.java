@@ -263,7 +263,46 @@ public class RestServerVerticle extends CommonVerticle {
   }
 
   private void userMobileSignupOrIn(RoutingContext context) {
-    forbidden(context, new JsonObject());
+    JsonObject requestBody = parseRequestBody(context);
+    CommonResult commonResult = UserHandler.parseSignupParam(requestBody);
+    if (commonResult.isFailed()) {
+      badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("message", commonResult.getMessage()));
+      return;
+    }
+    JsonObject body = commonResult.getObject();
+    String mobilePhone = body.getString(UserHandler.PARAM_MOBILEPHONE);
+    String smsCode = body.getString(UserHandler.PARAM_SMSCODE);
+    if (StringUtils.isEmpty(mobilePhone) || StringUtils.isEmpty(smsCode)) {
+      badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("message", "mobilePhoneNumber and SMSCode are required."));
+      return;
+    }
+    SmsCodeHandler smsHandler = new SmsCodeHandler(vertx, context);
+    smsHandler.verifySmsCode(new JsonObject().put(UserHandler.PARAM_MOBILEPHONE, mobilePhone), smsCode, response -> {
+      if (response.failed()) {
+        badRequest(context, ErrorCodes.INVALID_SMS_CODE.toJson());
+      } else {
+        body.remove(UserHandler.PARAM_SMSCODE);
+        UserHandler handler = new UserHandler(vertx, context);
+        handler.signin(body, res -> {
+          if (res.failed()) {
+            notFound(context, new JsonObject().put("error", res.cause().getMessage()));
+          } else if (null == res.result()) {
+            // not found, then call signup.
+            handler.signup(body, res2 -> {
+              if (res2.failed()) {
+                internalServerError(context, new JsonObject().put("error", res2.cause().getMessage()));
+              } else {
+                // TODO: add sessionToken - userObject to cache.
+                ok(context, res2.result());
+              }
+            });
+          } else {
+            // TODO: add sessionToken - userObject to cache.
+            ok(context, res.result());
+          }
+        });
+      }
+    });
   }
 
   private void crudCommonDataEx(String clazz, RoutingContext context, Handler<JsonObject> handler) {
