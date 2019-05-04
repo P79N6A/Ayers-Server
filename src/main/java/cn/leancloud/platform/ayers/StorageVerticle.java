@@ -15,11 +15,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
-import java.util.Arrays;
-import java.util.Optional;
 import java.util.stream.Stream;
 
-import static cn.leancloud.platform.utils.JsonFactory.obj;
+import static cn.leancloud.platform.modules.User.parseAuthData;
+import static cn.leancloud.platform.modules.User.AuthDataParseResult;
 import static cn.leancloud.platform.utils.JsonFactory.toJsonArray;
 
 public class StorageVerticle extends CommonVerticle {
@@ -40,66 +39,6 @@ public class StorageVerticle extends CommonVerticle {
   private void reportUserError(Message<JsonObject> msg, int code, String message) {
     logger.warn("encounter common erro. code:" + code + ", message:" + message);
     msg.fail(code, message);
-  }
-
-  private static class AuthDataParseResult {
-    boolean isMainAccount = false;
-    String currentPlatform = null;
-    String unionId = null;
-    String unionPlatform = null;
-    JsonObject query = null;
-  }
-
-  /**
-   * example for authData:
-   *    {"weixin": {
-   *      "openid": "",
-   *      "access_token": "",
-   *      "expired": "",
-   *      "unionid": "",
-   *      "platform": "",
-   *      "main_account": "",
-   *    }}
-   * @param authData
-   * @return
-   */
-  private AuthDataParseResult parseAuthData(JsonObject authData) {
-    AuthDataParseResult result = new AuthDataParseResult();
-    Optional<String> platform = authData.fieldNames().stream().findFirst();
-    if (!platform.isPresent()) {
-      logger.warn("invalid authData: empty map.");
-      return result;
-    }
-    JsonObject authMap = authData.getJsonObject(platform.get());
-    Optional<String> idOption = authMap.fieldNames().stream()
-            .filter(str -> StringUtils.notEmpty(str) && !"unionid".equalsIgnoreCase(str) && str.toLowerCase().endsWith("id"))
-            .findFirst();
-    boolean isMainAccount = authMap.getBoolean("main_account", false);
-    String unionId = authMap.getString("unionid");
-    String unionPlatform = authMap.getString("platform");
-    if (!idOption.isPresent()) {
-      logger.warn("invalid authData: no id field found.");
-      return result;
-    }
-    String platformIdPath = String.format("authData.%s.%s", platform.get(), idOption.get());
-    JsonObject platformQuery = new JsonObject().put(platformIdPath, authMap.getString(idOption.get()));
-    if (StringUtils.isEmpty(unionId)) {
-      result.currentPlatform = platform.get();
-      result.query = platformQuery;
-      return result;
-    }
-    if (StringUtils.isEmpty(unionPlatform)) {
-      logger.warn("invalid authData: unionid and unionplatform are required.");
-      return result;
-    }
-    String unionIdPath = String.format("authData._%s_unionid.uid", unionPlatform);
-    JsonObject unionidQuery = new JsonObject().put(unionIdPath, unionId);
-    result.query = new JsonObject().put("$or", new JsonArray(Arrays.asList(unionidQuery, platformQuery)));
-    result.isMainAccount = isMainAccount;
-    result.unionId = unionId;
-    result.unionPlatform = unionPlatform;
-    result.currentPlatform = platform.get();
-    return result;
   }
 
   private JsonObject convert2UpdateBson(JsonObject updateParam, AuthDataParseResult parseResult) {

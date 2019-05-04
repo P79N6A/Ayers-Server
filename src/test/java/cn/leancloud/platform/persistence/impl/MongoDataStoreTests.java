@@ -284,4 +284,33 @@ public class MongoDataStoreTests extends TestCase {
     latch.await();
     assertTrue(testSuccessed);
   }
+
+  public void testCreateIndexTwice() throws Exception {
+    DataStore.IndexOption indexOption = new DataStore.IndexOption();
+    indexOption.setName("updatedAt");
+    indexOption.setSparse(true);
+    dataStore.createIndexWithOptions("_User", new JsonObject().put("updatedAt", 1), indexOption, res -> {
+      if (res.failed()) {
+        dataStore.close();
+        System.out.println("failed to create index for updatedAt at first.");
+        res.cause().printStackTrace();
+        latch.countDown();
+      } else {
+        System.out.println("succeed to create index for updatedAt at first.");
+        dataStore.createIndexWithOptions("_User", new JsonObject().put("updatedAt", 1), indexOption, res2 -> {
+          dataStore.close();
+          if (res2.failed()) {
+            System.out.println("failed to create index for updatedAt again.");
+            res2.cause().printStackTrace();
+          } else {
+            System.out.println("succeed to create index for updatedAt again.");
+            testSuccessed = true;
+          }
+          latch.countDown();
+        });
+      }
+    });
+    latch.await();
+    assertTrue(testSuccessed);
+  }
 }

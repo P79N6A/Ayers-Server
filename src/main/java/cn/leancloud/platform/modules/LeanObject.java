@@ -8,10 +8,14 @@ import cn.leancloud.platform.modules.type.LeanGeoPoint;
 import cn.leancloud.platform.modules.type.LeanPointer;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.AbstractMap;
 
 public class LeanObject extends JsonObject{
+  protected static final Logger logger = LoggerFactory.getLogger(LeanObject.class);
+
   public static final String DATA_TYPE_DATE = "Date";
   public static final String DATA_TYPE_POINTER = "Pointer";
   public static final String DATA_TYPE_GEOPOINTER = "GeoPoint";

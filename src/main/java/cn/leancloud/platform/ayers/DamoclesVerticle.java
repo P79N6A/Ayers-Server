@@ -11,20 +11,25 @@ import cn.leancloud.platform.persistence.DataStore;
 import cn.leancloud.platform.persistence.DataStoreFactory;
 import cn.leancloud.platform.utils.JsonFactory;
 import cn.leancloud.platform.utils.StringUtils;
+import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
+import io.vertx.core.Handler;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
+import java.util.Objects;
+
 import static cn.leancloud.platform.common.ErrorCodes.INVALID_PARAMETER;
 
 /**
  * Data consistency defender.
  */
-public class DemoclesVerticle extends CommonVerticle {
-  private static final Logger logger = LoggerFactory.getLogger(DemoclesVerticle.class);
+public class DamoclesVerticle extends CommonVerticle {
+  private static final Logger logger = LoggerFactory.getLogger(DamoclesVerticle.class);
   private InMemoryLRUCache<String, JsonObject> classMetaCache;
   private DataStoreFactory dataStoreFactory = null;
 
@@ -38,24 +43,132 @@ public class DemoclesVerticle extends CommonVerticle {
         logger.info("succeed to save schema. clazz=" + clazz + ", schema=" + schema);
       }
     });
-    String  geoPointAttrPath = schema.findGeoPointAttr();
-    if (StringUtils.notEmpty(geoPointAttrPath)) {
-      boolean existed = (null == indices)? false :
-              indices.stream().filter(json -> geoPointAttrPath.equals(((JsonObject)json).getString("name"))).count() > 0;
-      if (!existed) {
-        final JsonArray newIndices = (null == indices)?new JsonArray():indices;
-        logger.info("auto create 2dsphere index for clazz=" + clazz + ", attr=" + geoPointAttrPath);
+
+    final JsonArray newIndices = (null == indices)?new JsonArray():indices;
+
+    Future<Boolean> future = Future.succeededFuture(true);
+    future.compose(res -> {
+      // make sure 2dsphere
+      String  geoPointAttrPath = schema.findGeoPointAttr();
+      Future<Boolean> sphereFuture = Future.future();
+      if (StringUtils.notEmpty(geoPointAttrPath)) {
+        JsonObject indexJson = new JsonObject().put(geoPointAttrPath, "2dsphere");
         DataStore.IndexOption indexOption = new DataStore.IndexOption().setSparse(true).setName(geoPointAttrPath);
-        dataStore.createIndexWithOptions(clazz, new JsonObject().put(geoPointAttrPath, "2dsphere"), indexOption, res -> {
-          if (res.failed()) {
-            logger.warn("failed to create index. attr=" + geoPointAttrPath + ". cause: " + res.cause());
+        makeSureIndexCreated(clazz, indexJson, indexOption, indices, dataStore, response -> {
+          if (response.failed()) {
+            logger.warn("failed to create index. attr=" + geoPointAttrPath + ". cause: " + response.cause());
+            future.fail(response.cause());
           } else {
-            logger.info("success to create index. attr=" + geoPointAttrPath);
-            newIndices.add(indexOption.toJson());
-            this.classMetaCache.put(clazz, new ClassMetaData(clazz, schema, newIndices));
+            if (response.result()) {
+              logger.info("success to create index. attr=" + geoPointAttrPath);
+              newIndices.add(indexOption.toJson());
+            }
+            future.complete(response.result());
           }
         });
+      } else {
+        sphereFuture.complete();
       }
+      return sphereFuture;
+    })
+    .compose(res -> makeSureDefaultIndex(clazz, "updatedAt", indices, newIndices, dataStore))
+    .compose(res -> makeSureDefaultIndex(clazz, "createdAt", indices, newIndices, dataStore))
+    .compose(res -> {
+      if ("_User".equals(clazz)) {
+        return makeSureDefaultIndex(clazz, "email", indices, newIndices, dataStore);
+      } else {
+        return Future.succeededFuture(true);
+      }
+    }).compose(res -> {
+        if ("_User".equals(clazz)) {
+          return makeSureDefaultIndex(clazz, "username", indices, newIndices, dataStore);
+        } else {
+          return Future.succeededFuture(true);
+        }
+    }).compose(res -> {
+      if ("_User".equals(clazz)) {
+        return makeSureDefaultIndex(clazz, "mobilePhoneNumber", indices, newIndices, dataStore);
+      } else {
+        return Future.succeededFuture(true);
+      }
+    }).compose(res -> {
+      if ("_User".equals(clazz)) {
+        List<String> authIndexPaths = schema.findAuthDataIndex();
+        Future<Boolean> composedFuture = Future.succeededFuture(true);
+        for (String attr : authIndexPaths) {
+          composedFuture = composedFuture.compose(r -> makeSureDefaultIndex(clazz, attr, indices, newIndices, dataStore));
+        }
+        return composedFuture;
+      } else {
+        return Future.succeededFuture(true);
+      }
+    }).setHandler(response -> {
+      dataStore.close();
+      this.classMetaCache.put(clazz, new ClassMetaData(clazz, schema, newIndices));
+    });
+  }
+
+  private Future<Boolean> makeSureDefaultIndex(String clazz, String attr, JsonArray existedIndex, JsonArray newIndices,
+                                               DataStore dataStore) {
+    Objects.requireNonNull(clazz);
+    Objects.requireNonNull(attr);
+    Objects.requireNonNull(newIndices);
+    Future<Boolean> defaultFuture = Future.future();
+    JsonObject indexJson = new JsonObject().put(attr, 1);
+    DataStore.IndexOption indexOption = new DataStore.IndexOption().setSparse(true).setUnique(true).setName(attr);
+    makeSureIndexCreated(clazz, indexJson, indexOption, existedIndex, dataStore, response -> {
+      if (response.failed()) {
+        logger.warn("failed to create index. attr=" + attr + ". cause: " + response.cause());
+        defaultFuture.fail(response.cause());
+      } else {
+        if (response.result()) {
+          logger.info("success to create index. attr=" + attr);
+          newIndices.add(indexOption.toJson());
+        }
+        defaultFuture.complete(response.result());
+      }
+    });
+
+    return defaultFuture;
+  }
+
+  private void makeSureIndexCreated(String clazz, JsonObject indexJson, DataStore.IndexOption indexOption,
+                                    JsonArray existedIndex, DataStore dataStore, Handler<AsyncResult<Boolean>> handler) {
+    Objects.requireNonNull(indexJson);
+    Objects.requireNonNull(indexOption);
+    Objects.requireNonNull(dataStore);
+    Objects.requireNonNull(handler);
+    if (indexJson.size() < 1) {
+      throw new IllegalArgumentException("indexJson is empty.");
+    }
+
+    String attrPath = indexJson.stream().findFirst().get().getKey();
+    boolean existed = (null == existedIndex) ? false :
+            existedIndex.stream().filter(json -> attrPath.equals(((JsonObject)json).getString("name"))).count() > 0;
+    if (existed) {
+      handler.handle(new AsyncResult<Boolean>() {
+        @Override
+        public Boolean result() {
+          return false;
+        }
+
+        @Override
+        public Throwable cause() {
+          return null;
+        }
+
+        @Override
+        public boolean succeeded() {
+          return true;
+        }
+
+        @Override
+        public boolean failed() {
+          return false;
+        }
+      });
+    } else {
+      dataStore.createIndexWithOptions(clazz, indexJson, indexOption, res -> handler.handle(res.map(res.succeeded())));
     }
   }
 
@@ -150,7 +263,7 @@ public class DemoclesVerticle extends CommonVerticle {
 
   @Override
   public void start(Future<Void> startFuture) throws Exception {
-    logger.info("start DemoclesVerticle...");
+    logger.info("start DamoclesVerticle...");
 
     dataStoreFactory = Configure.getInstance().getDataStoreFactory();
     classMetaCache = Configure.getInstance().getSchemaCache();
@@ -190,7 +303,7 @@ public class DemoclesVerticle extends CommonVerticle {
 
   @Override
   public void stop(Future<Void> stopFuture) throws Exception {
-    logger.info("stop DemoclesVerticle...");
+    logger.info("stop DamoclesVerticle...");
     stopFuture.complete();
   }
 }

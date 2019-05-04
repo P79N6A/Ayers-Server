@@ -5,7 +5,10 @@ import cn.leancloud.platform.modules.type.LeanPointer;
 import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.json.JsonObject;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static cn.leancloud.platform.modules.Schema.CompatResult.*;
 
@@ -25,6 +28,21 @@ public class Schema extends JsonObject {
 
   public String findGeoPointAttr() {
     return lookupGeoPoint(null, this);
+  }
+
+  public List<String> findAuthDataIndex() {
+    JsonObject authDataSchema = getJsonObject("authData");
+    JsonObject schema = null == authDataSchema? null : authDataSchema.getJsonObject("schema");
+    if (null == authDataSchema || null == schema) {
+      return new ArrayList<>();
+    }
+    List<String> result = schema.stream().map(entry -> {
+      String platform = entry.getKey();
+      JsonObject platformSchema = ((JsonObject) entry.getValue()).getJsonObject("schema");
+      String idAttr = platformSchema.fieldNames().stream().filter(s -> s.endsWith("id") && !s.equals("unionid")).findFirst().get();
+      return "authData." + platform + "." + idAttr;
+    }).collect(Collectors.toList());
+    return result;
   }
 
   private static String lookupGeoPoint(String base, JsonObject object) {
