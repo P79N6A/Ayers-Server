@@ -193,7 +193,7 @@ public class ObjectModifyHandler extends CommonHandler {
         int failureCode = ((ReplyException) response.cause()).failureCode();
         JsonObject responseJson = new JsonObject().put("code", failureCode).put("error", response.cause().getMessage());
         tmp.complete(new JsonObject().put("error", responseJson));
-      } if (response.cause() instanceof NoStackTraceThrowable) {
+      } else if (response.cause() instanceof NoStackTraceThrowable) {
         // failed by leanengine hook func.
         tmp.complete(new JsonObject().put("error", new JsonObject(response.cause().getMessage())));
       } else {

@@ -6,6 +6,7 @@ import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.HttpRequest;
 import io.vertx.ext.web.client.HttpResponse;
@@ -57,6 +58,12 @@ public class WebClientTests extends TestCase {
     HttpRequest<Buffer> request = this.webClient.post(PORT, HOST, path);
     fillHeaders(request);
     request.sendJsonObject(data, response -> handler.handle(response.map(response.result().bodyAsJsonObject())));
+  }
+
+  protected void postWithResultArray(String path, JsonObject data, Handler<AsyncResult<JsonArray>> handler) {
+    HttpRequest<Buffer> request = this.webClient.post(PORT, HOST, path);
+    fillHeaders(request);
+    request.sendJsonObject(data, response -> handler.handle(response.map(response.result().bodyAsJsonArray())));
   }
 
   protected void put(String path, JsonObject data, Handler<AsyncResult<JsonObject>> handler) {

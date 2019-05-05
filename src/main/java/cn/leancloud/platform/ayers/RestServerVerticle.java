@@ -333,17 +333,30 @@ public class RestServerVerticle extends CommonVerticle {
         }
       } else {
         JsonObject result = reply.result();
-        if (null != handler) {
-          handler.handle(result);
-        }
         logger.debug("rest server response: " + result);
         if (HttpMethod.POST == httpMethod && StringUtils.isEmpty(objectId)) {
           //Status: 201 Created
           //Location: https://heqfq0sw.api.lncld.net/1.1/classes/Post/<objectId>
           JsonObject location = new JsonObject().put("Location", Configure.getInstance().getBaseHost() + "/"
                   + context.request().path() + result.getString(LeanObject.ATTR_NAME_OBJECTID));
+          if (null != handler) {
+            handler.handle(result);
+          }
           created(context, location, result);
+        } else if (HttpMethod.GET == httpMethod && StringUtils.notEmpty(objectId)) {
+          JsonArray resultArray = result.getJsonArray("results");
+          JsonObject object = null == resultArray? null: (JsonObject) resultArray.stream().findFirst().get();
+          if (null == object) {
+            object = new JsonObject();
+          }
+          if (null != handler) {
+            handler.handle(object);
+          }
+          ok(context, object);
         } else {
+          if (null != handler) {
+            handler.handle(result);
+          }
           ok(context, result);
         }
       }

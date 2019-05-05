@@ -1,6 +1,5 @@
 package cn.leancloud.platform.ayers.handler;
 
-import cn.leancloud.platform.ayers.RequestParse;
 import cn.leancloud.platform.common.SMSServiceClient;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;

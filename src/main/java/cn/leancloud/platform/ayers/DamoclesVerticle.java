@@ -71,23 +71,23 @@ public class DamoclesVerticle extends CommonVerticle {
       }
       return sphereFuture;
     })
-    .compose(res -> makeSureDefaultIndex(clazz, "updatedAt", indices, newIndices, dataStore))
-    .compose(res -> makeSureDefaultIndex(clazz, "createdAt", indices, newIndices, dataStore))
+    .compose(res -> makeSureDefaultIndex(clazz, "updatedAt", false, indices, newIndices, dataStore))
+    .compose(res -> makeSureDefaultIndex(clazz, "createdAt", false, indices, newIndices, dataStore))
     .compose(res -> {
       if ("_User".equals(clazz)) {
-        return makeSureDefaultIndex(clazz, "email", indices, newIndices, dataStore);
+        return makeSureDefaultIndex(clazz, "email", true, indices, newIndices, dataStore);
       } else {
         return Future.succeededFuture(true);
       }
     }).compose(res -> {
         if ("_User".equals(clazz)) {
-          return makeSureDefaultIndex(clazz, "username", indices, newIndices, dataStore);
+          return makeSureDefaultIndex(clazz, "username", true, indices, newIndices, dataStore);
         } else {
           return Future.succeededFuture(true);
         }
     }).compose(res -> {
       if ("_User".equals(clazz)) {
-        return makeSureDefaultIndex(clazz, "mobilePhoneNumber", indices, newIndices, dataStore);
+        return makeSureDefaultIndex(clazz, "mobilePhoneNumber", true, indices, newIndices, dataStore);
       } else {
         return Future.succeededFuture(true);
       }
@@ -96,7 +96,7 @@ public class DamoclesVerticle extends CommonVerticle {
         List<String> authIndexPaths = schema.findAuthDataIndex();
         Future<Boolean> composedFuture = Future.succeededFuture(true);
         for (String attr : authIndexPaths) {
-          composedFuture = composedFuture.compose(r -> makeSureDefaultIndex(clazz, attr, indices, newIndices, dataStore));
+          composedFuture = composedFuture.compose(r -> makeSureDefaultIndex(clazz, attr, true, indices, newIndices, dataStore));
         }
         return composedFuture;
       } else {
@@ -108,14 +108,14 @@ public class DamoclesVerticle extends CommonVerticle {
     });
   }
 
-  private Future<Boolean> makeSureDefaultIndex(String clazz, String attr, JsonArray existedIndex, JsonArray newIndices,
+  private Future<Boolean> makeSureDefaultIndex(String clazz, String attr, boolean isUnique, JsonArray existedIndex, JsonArray newIndices,
                                                DataStore dataStore) {
     Objects.requireNonNull(clazz);
     Objects.requireNonNull(attr);
     Objects.requireNonNull(newIndices);
     Future<Boolean> defaultFuture = Future.future();
     JsonObject indexJson = new JsonObject().put(attr, 1);
-    DataStore.IndexOption indexOption = new DataStore.IndexOption().setSparse(true).setUnique(true).setName(attr);
+    DataStore.IndexOption indexOption = new DataStore.IndexOption().setSparse(true).setUnique(isUnique).setName(attr);
     makeSureIndexCreated(clazz, indexJson, indexOption, existedIndex, dataStore, response -> {
       if (response.failed()) {
         logger.warn("failed to create index. attr=" + attr + ". cause: " + response.cause());
