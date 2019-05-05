@@ -121,7 +121,7 @@ public class TransformerTest extends TestCase {
     JsonObject paramObj = new JsonObject(query);
     JsonObject newObj = BsonTransformer.encode2BsonRequest(paramObj, BsonTransformer.REQUEST_OP.QUERY);
     System.out.println(newObj.toString());
-    assertTrue(newObj.getJsonObject("createdAt").getJsonObject("$gte").getString("$date").equals("2015-06-29T00:00:00.000Z"));
+    assertTrue(newObj.getJsonObject("createdAt").getValue("$gte").toString().equals("2015-06-29T00:00:00.000Z"));
     assertTrue(newObj.getJsonObject("post").getString("$id").equals("558e20cbe4b060308e3eb36c"));
   }
 

@@ -49,6 +49,10 @@ public class RestServerVerticle extends CommonVerticle {
     crudCommonData(Constraints.INSTALLATION_CLASS, context);
   }
 
+  private void scanObjects(RoutingContext context) {
+    forbidden(context, new JsonObject().put("message", "not implement yet"));
+  }
+
   private void crudObject(RoutingContext context) {
     String clazz = parseRequestClassname(context);
     if (!ObjectSpecifics.validClassName(clazz)) {
@@ -449,6 +453,8 @@ public class RestServerVerticle extends CommonVerticle {
      * Storage Service endpoints.
      */
     router.get("/1.1/date").handler(this::serverDate);
+
+    router.get("/1.1/scan/classes/:clazz").handler(this::scanObjects);
 
     router.post("/1.1/classes/:clazz").handler(this::crudObject);
     router.get("/1.1/classes/:clazz").handler(this::crudObject);

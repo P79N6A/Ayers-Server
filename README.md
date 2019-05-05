@@ -39,6 +39,8 @@ Ayers is a structural data processing server based on Vertx.io and [Netty](https
 - add in-memory cache for session token(support up to 100k users, just work for standalone mode).
 
 ### todo
+- support class scan(low-priority, bcz it's just an alias for query)
+
 - managing mongodb collections.
 - support other mongodb commands.
 - support plugins

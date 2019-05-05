@@ -110,4 +110,26 @@ public class ObjectTests extends WebClientTests {
     latch.await();
     assertTrue(testSuccessed);
   }
+
+  public void testSimpleQuery() throws Exception {
+    String queryParam = "{\"pubUser\":\"LeanCloud官方客服\"}";
+    get("/1.1/classes/Post", new JsonObject().put("where", queryParam), res -> {
+      if (res.failed()) {
+        System.out.println("failed to call simple query. cause: " + res.cause());
+        latch.countDown();
+      } else {
+        System.out.println(res.result());
+        String query2 = "{\"createdAt\":{\"$gte\":{\"__type\":\"Date\",\"iso\":\"2015-06-29T00:00:00.000Z\"},\"$lt\":{\"__type\":\"Date\",\"iso\":\"2020-06-30T00:00:00.000Z\"}}}";
+        get("/1.1/classes/Post", new JsonObject().put("where", query2), res2 -> {
+          if (res2.succeeded()) {
+            System.out.println(res.result());
+            testSuccessed = true;
+          }
+          latch.countDown();
+        });
+      }
+    });
+    latch.await();
+    assertTrue(testSuccessed);
+  }
 }

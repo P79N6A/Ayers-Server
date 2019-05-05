@@ -2,14 +2,11 @@ package cn.leancloud.platform.common;
 
 import cn.leancloud.platform.modules.LeanObject;
 import cn.leancloud.platform.utils.JsonFactory;
-import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import org.bson.types.ObjectId;
-
+import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class BsonTransformer {
   public static final String CLASS_ATTR_MONGO_ID = "_id";
@@ -37,13 +34,15 @@ public class BsonTransformer {
     bsonModifierMap.put(REST_OP_ADD_UNIQUE, "$each");
   }
 
+  private static SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+
   public enum REQUEST_OP {
     CREATE, UPDATE, QUERY
   }
 
   // "location":{"__type":"GeoPoint","latitude":45.9,"longitude":76.3}
   //    to {"type":"Point","coordinates":[124.6682391,-17.8978304]}
-  private static JsonObject convertBuiltinTypeUnit(JsonObject o) {
+  private static JsonObject convertBuiltinTypeUnit(JsonObject o, REQUEST_OP op) {
     if (null == o) {
       return o;
     }
@@ -69,11 +68,11 @@ public class BsonTransformer {
     return result;
   }
 
-  private static JsonObject encode2BsonObject(JsonObject o, final boolean isCreateOp) throws ClassCastException {
+  private static JsonObject encode2BsonObject(JsonObject o, REQUEST_OP op) throws ClassCastException {
     if (null == o) {
       return o;
     }
-    JsonObject tmp = convertBuiltinTypeUnit(o);
+    JsonObject tmp = convertBuiltinTypeUnit(o, op);
     if (null != tmp) {
       return tmp;
     }
@@ -83,17 +82,31 @@ public class BsonTransformer {
               Object value = entry.getValue();
               Object newValue = value;
               if (LeanObject.ATTR_NAME_OBJECTID.equals(key)) {
+                // convert objectId to _id
                 result = new AbstractMap.SimpleEntry<>(CLASS_ATTR_MONGO_ID, newValue);
               } else if (null == value) {
                 // do nothing
               } else if (value instanceof JsonObject) {
-                newValue = encode2BsonObject((JsonObject) value, isCreateOp);
-                result = new AbstractMap.SimpleEntry<>(key, newValue);
+                newValue = encode2BsonObject((JsonObject) value, op);
+                // convert isodate string for query.
+                if (REQUEST_OP.QUERY == op && ((JsonObject)newValue).containsKey("$date")) {
+                  // FIXME: need to convert date string to ISODate.
+//                  try {
+//                    Date juDate = DATE_FORMAT.parse(((JsonObject) newValue).getString("$date"));
+//                    DateTime dateTime = new DateTime(juDate);
+//                    result = new AbstractMap.SimpleEntry<>(key, dateTime);
+//                  } catch (ParseException ex) {
+//                    ex.printStackTrace();
+//                  }
+                  result = new AbstractMap.SimpleEntry<>(key, ((JsonObject)newValue).getString("$date"));
+                } else {
+                  result = new AbstractMap.SimpleEntry<>(key, newValue);
+                }
               } else if (value instanceof JsonArray) {
                 newValue = ((JsonArray) value).stream()
                         .map(v ->{
                           if (v instanceof JsonObject)
-                            return encode2BsonObject((JsonObject) v, isCreateOp);
+                            return encode2BsonObject((JsonObject) v, op);
                           else
                             return v;
                         }).collect(JsonFactory.toJsonArray());
@@ -217,7 +230,7 @@ public class BsonTransformer {
   }
 
   public static JsonObject encode2BsonRequest(JsonObject o, REQUEST_OP op) throws ClassCastException {
-    JsonObject result = encode2BsonObject(o, op == REQUEST_OP.CREATE);
+    JsonObject result = encode2BsonObject(o, op);
     if (op == REQUEST_OP.QUERY) {
       return result;
     } else {
@@ -271,6 +284,10 @@ public class BsonTransformer {
         } else {
           result = new AbstractMap.SimpleEntry<String, Object>(LeanObject.ATTR_NAME_OBJECTID, value);
         }
+      } else if ((LeanObject.ATTR_NAME_UPDATED_TS.equals(key) || LeanObject.ATTR_NAME_CREATED_TS.equals(key))
+              && null != value && value instanceof JsonObject) {
+        String isoString = ((JsonObject)value).getString("$date");
+        result = new AbstractMap.SimpleEntry<String, Object>(key, isoString);
       } else if (value instanceof JsonObject) {
         JsonObject newValue = decodeBsonUnit((JsonObject) value);
         if (null != newValue) {

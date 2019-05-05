@@ -44,13 +44,13 @@ public class WebClientTests extends TestCase {
     httpRequest.putHeader(RequestParse.HEADER_CONTENT_TYPE, RequestParse.CONTENT_TYPE_JSON);
     httpRequest.putHeader("Accept", RequestParse.CONTENT_TYPE_JSON);
   }
-  protected void get(String path, String queryParam, Handler<AsyncResult<JsonObject>> handler) {
+  protected void get(String path, JsonObject queryParam, Handler<AsyncResult<JsonObject>> handler) {
     String fullPath = path;
-    if (StringUtils.notEmpty(queryParam)) {
-      fullPath += "?" + URLEncoder.encode(queryParam);
-    }
     HttpRequest<Buffer> request = this.webClient.get(PORT, HOST, fullPath);
     fillHeaders(request);
+    if (null != queryParam) {
+      queryParam.stream().forEach(kv -> request.addQueryParam(kv.getKey(), (String) kv.getValue()));
+    }
     request.send(response -> handler.handle(response.map(response.result().bodyAsJsonObject())));
   }
 

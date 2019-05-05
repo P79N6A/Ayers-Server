@@ -63,7 +63,7 @@ public class StorageVerticle extends CommonVerticle {
       return;
     }
     JsonObject findUpdateParam = convert2UpdateBson(updateParam, authParseResult);
-    Instant now = Instant.now();
+    JsonObject now = LeanObject.getCurrentDate();
     findUpdateParam.put(LeanObject.ATTR_NAME_UPDATED_TS, now);
 
     logger.debug("findAndUpdate within thirdparty signup/signin. query=" + query + ", paramAtferChanged=" + findUpdateParam);
@@ -118,7 +118,8 @@ public class StorageVerticle extends CommonVerticle {
     JsonObject authData = null;
 
     final DataStore dataStore = dataStoreFactory.getStore();
-    Instant now = Instant.now();
+//    Instant nowTS = Instant.now();
+    JsonObject now = LeanObject.getCurrentDate();
 
     switch (operation) {
       case RequestParse.OP_USER_SIGNIN:
@@ -176,7 +177,7 @@ public class StorageVerticle extends CommonVerticle {
           } else {
             JsonObject result = res.result();
             if (!fetchWhenSave) {
-              result.put("createdAt", now.toString());
+              result.put(LeanObject.ATTR_NAME_CREATED_TS, now.getString(LeanObject.ATTR_NAME_ISO));
             }
             logger.debug("storage verticle response: " + result);
             message.reply(result);
@@ -222,8 +223,8 @@ public class StorageVerticle extends CommonVerticle {
                 reportDatabaseError(message, res1.cause());
               } else if (StringUtils.notEmpty(objectId)) {
                 if (res1.result() > 0) {
-                  JsonObject result = new JsonObject().put("objectId", objectId);
-                  result.put("updatedAt", now.toString());
+                  JsonObject result = new JsonObject().put(LeanObject.ATTR_NAME_OBJECTID, objectId);
+                  result.put(LeanObject.ATTR_NAME_UPDATED_TS, now.getString(LeanObject.ATTR_NAME_ISO));
                   message.reply(result);
                 } else {
                   reportUserError(message, 404, "object not found");
@@ -244,7 +245,7 @@ public class StorageVerticle extends CommonVerticle {
           if (res.failed()) {
             reportDatabaseError(message, res.cause());
           } else {
-            message.reply(new JsonObject().put("removeCount", res.result()));
+            message.reply(new JsonObject().put("removedCount", res.result()));
           }
         });
         break;

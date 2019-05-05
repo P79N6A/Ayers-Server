@@ -11,6 +11,7 @@ import io.vertx.core.json.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.AbstractMap;
 
 public class LeanObject extends JsonObject{
@@ -44,6 +45,10 @@ public class LeanObject extends JsonObject{
   public static final String BUILTIN_ATTR_FILE_BUCKET = "bucket";
 
   private String className = "";
+
+  public static JsonObject getCurrentDate() {
+    return new JsonObject().put(ATTR_NAME_TYPE, DATA_TYPE_DATE).put(ATTR_NAME_ISO, Instant.now().toString());
+  }
 
   public LeanObject(String className, JsonObject value) {
     this(value);
