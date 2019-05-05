@@ -2,7 +2,7 @@ package cn.leancloud.platform.ayers.handler;
 
 import cn.leancloud.platform.ayers.RequestParse;
 import cn.leancloud.platform.common.BatchRequest;
-import cn.leancloud.platform.common.EngineHookProxy;
+import cn.leancloud.platform.engine.EngineHookProxy;
 import cn.leancloud.platform.common.ErrorCodes;
 import cn.leancloud.platform.engine.HookType;
 import cn.leancloud.platform.modules.ObjectSpecifics;
@@ -32,7 +32,7 @@ public class ObjectModifyHandler extends CommonHandler {
   public void create(String clazz, JsonObject body, boolean returnNewDoc, Handler<AsyncResult<JsonObject>> handler) {
     //sendDataOperationWithOption(clazz, null, HttpMethod.POST.toString(), null, body, returnNewDoc, handler);
     JsonObject headers = copyRequestHeaders(routingContext);
-    this.hookProxy.call(clazz, HookType.BeforeSave, new JsonObject().put("object", body), headers, routingContext, res -> {
+    this.hookProxy.call(clazz, HookType.BeforeSave, body, headers, routingContext, res -> {
       if (res.failed()) {
         logger.warn("lean engine hook failed. cause: " + res.cause());
         handler.handle(res);
@@ -41,9 +41,8 @@ public class ObjectModifyHandler extends CommonHandler {
         if (null == hookedBody) {
           handler.handle(wrapErrorResult(new IllegalAccessException("operation failed by BeforeSave Hook.")));
         } else {
-          hookedBody.remove("__before");
           logger.debug("get lean enginne hook result: " + hookedBody);
-          sendDataOperationWithOption(clazz, null, RequestParse.OP_OBJECT_POST, null, hookedBody.getJsonObject("object"),
+          sendDataOperationWithOption(clazz, null, RequestParse.OP_OBJECT_POST, null, hookedBody,
                   returnNewDoc, response -> {
                     if (response.failed()) {
                       handler.handle(response);
@@ -63,7 +62,7 @@ public class ObjectModifyHandler extends CommonHandler {
   public void update(String clazz, String objectId, JsonObject query, JsonObject update, boolean returnNewDoc,
                      Handler<AsyncResult<JsonObject>> handler) {
     JsonObject headers = copyRequestHeaders(routingContext);
-    this.hookProxy.call(clazz, HookType.BeforeUpdate, new JsonObject().put("object", update), headers, routingContext, res -> {
+    this.hookProxy.call(clazz, HookType.BeforeUpdate, update, headers, routingContext, res -> {
       if (res.failed()) {
         logger.warn("lean engine hook failed. cause: " + res.cause());
         handler.handle(res);
@@ -72,9 +71,8 @@ public class ObjectModifyHandler extends CommonHandler {
         if (null == hookedBody) {
           handler.handle(wrapErrorResult(new IllegalAccessException("operation failed by BeforeUpdate Hook.")));
         } else {
-          hookedBody.remove("__before");
           logger.debug("get lean enginne hook result: " + hookedBody);
-          sendDataOperationWithOption(clazz, objectId, RequestParse.OP_OBJECT_PUT, query, hookedBody.getJsonObject("object"), returnNewDoc, responnse -> {
+          sendDataOperationWithOption(clazz, objectId, RequestParse.OP_OBJECT_PUT, query, hookedBody, returnNewDoc, responnse -> {
             if (responnse.failed()) {
               handler.handle(responnse);
             } else {
@@ -91,8 +89,7 @@ public class ObjectModifyHandler extends CommonHandler {
 
   public void delete(String clazz, String objectId, JsonObject query, Handler<AsyncResult<JsonObject>> handler) {
     JsonObject headers = copyRequestHeaders(routingContext);
-    JsonObject deleteParam = new JsonObject().put("object", query);
-    this.hookProxy.call(clazz, HookType.BeforeDelete, deleteParam, headers, routingContext, res -> {
+    this.hookProxy.call(clazz, HookType.BeforeDelete, query, headers, routingContext, res -> {
       if (res.failed()) {
         logger.warn("lean engine hook failed. cause: " + res.cause());
         handler.handle(res);
@@ -102,7 +99,7 @@ public class ObjectModifyHandler extends CommonHandler {
         sendDataOperation(clazz, objectId, RequestParse.OP_OBJECT_DELETE, query, null, response ->{
           handler.handle(response);
           if (response.succeeded()) {
-            this.hookProxy.call(clazz, HookType.AfterDetele, deleteParam, headers, routingContext, any -> {
+            this.hookProxy.call(clazz, HookType.AfterDetele, query, headers, routingContext, any -> {
               // ignore it.
             });
           }

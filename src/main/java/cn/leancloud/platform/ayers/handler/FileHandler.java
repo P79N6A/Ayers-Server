@@ -39,7 +39,7 @@ public class FileHandler extends CommonHandler {
 
     Auth auth = Auth.create(configure.fileProviderAccessKey(), configure.fileProviderSecretKey());
     final String token = auth.uploadToken(bucketName, key);
-    body.remove("__type");
+    body.remove(LeanObject.ATTR_NAME_TYPE);
     body.put(LeanObject.BUILTIN_ATTR_FILE_URL, configure.fileDefaultHost() + key)
             .put(LeanObject.BUILTIN_ATTR_FILE_MIMETYPE, mimeType)
             .put(LeanObject.BUILTIN_ATTR_FILE_PROVIDER,configure.fileProvideName())

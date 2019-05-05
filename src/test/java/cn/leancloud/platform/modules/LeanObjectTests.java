@@ -46,7 +46,7 @@ public class LeanObjectTests extends TestCase {
     object2.put("dislike", -199);
     object2.put("spam", "false");
     try {
-      object.guessSchema().compatiableWith(object2.guessSchema());
+      object.guessSchema().compatibleWith(object2.guessSchema());
       fail();
     } catch (ConsistencyViolationException ex) {
       ;
@@ -67,7 +67,7 @@ public class LeanObjectTests extends TestCase {
     object2.put("commentCounts", 199);
     object2.put("dislike", -199);
     object2.put("author", new JsonObject().put("__type", "Pointer").put("className", "_User").put("objectId", "dhfiafheiire"));
-    assertTrue(object.guessSchema().compatiableWith(object2.guessSchema()) != CompatResult.NOT_MATCHED);
+    assertTrue(object.guessSchema().compatibleWith(object2.guessSchema()) != CompatResult.NOT_MATCHED);
   }
 
   public void testSchemaCheckWithDifferentPointer() throws Exception {
@@ -87,7 +87,7 @@ public class LeanObjectTests extends TestCase {
     object2.put("author", new JsonObject().put("__type", "Pointer").put("className", "Person").put("objectId", "dhfiafheiire"));
     System.out.println(object2.guessSchema());
     try {
-      CompatResult result = object.guessSchema().compatiableWith(object2.guessSchema());
+      CompatResult result = object.guessSchema().compatibleWith(object2.guessSchema());
       fail();
     } catch (ConsistencyViolationException ex) {
 

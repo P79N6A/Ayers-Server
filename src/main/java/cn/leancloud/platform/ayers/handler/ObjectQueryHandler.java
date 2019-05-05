@@ -309,7 +309,6 @@ public class ObjectQueryHandler extends CommonHandler {
   }
 
   private Future<Boolean> resolveSubQuery(JsonObject condition) {
-    logger.debug("try to resolve sub query: " + condition.toString());
     Future<Boolean> future = Future.succeededFuture(true);
     for (Map.Entry<String, Object> entry : condition.getMap().entrySet()) {
       Object value = entry.getValue();
@@ -317,7 +316,6 @@ public class ObjectQueryHandler extends CommonHandler {
       if (null != value && value instanceof JsonObject) {
         JsonObject jsonValue = (JsonObject) value;
         if (jsonValue.containsKey(OP_SELECT)) {
-          logger.debug("found $select node.");
           future = future.compose(res -> {
             JsonObject options = jsonValue.getJsonObject(OP_SELECT);
             String clazz = options.getString(QUERY_KEY_CLASSNAME);
@@ -332,7 +330,6 @@ public class ObjectQueryHandler extends CommonHandler {
                 JsonArray actualValues = any.result().getJsonArray("results").stream()
                         .map(obj -> ((JsonObject)obj).getValue(attrName))
                         .collect(JsonFactory.toJsonArray());
-                logger.debug("succeed to execute subQuery:" + options + ". results: " + actualValues.toString());
                 condition.put(key, new JsonObject().put("$in", actualValues));
                 subQueryFuture.complete(true);
               }
@@ -386,7 +383,7 @@ public class ObjectQueryHandler extends CommonHandler {
   //        },
   //        "key":"followee"
   //      }
-  private QueryOptions validSubQuery(JsonObject selectClause) {
+  private QueryOptions validateSubQuery(JsonObject selectClause) {
     if (null == selectClause) {
       return null;
     }
@@ -420,16 +417,14 @@ public class ObjectQueryHandler extends CommonHandler {
     if (null == condition || condition.size() == 0) {
       return condition;
     }
-    logger.debug("try to transform sub query: " + condition);
     JsonObject result = condition.stream().map(entry -> {
       Object value = entry.getValue();
       if (null != value && value instanceof JsonObject) {
         JsonObject tmpValue = (JsonObject) value;
         if (tmpValue.containsKey(OP_SELECT)) {
           JsonObject select = tmpValue.getJsonObject(OP_SELECT);
-          logger.debug("found $select node: " + select);
 
-          QueryOptions options = validSubQuery(select);
+          QueryOptions options = validateSubQuery(select);
           if (null == options) {
             logger.warn("invalid subQuery clause for key:" + entry.getKey());
             throw new IllegalArgumentException("invalid subQuery clause for key:" + entry.getKey());

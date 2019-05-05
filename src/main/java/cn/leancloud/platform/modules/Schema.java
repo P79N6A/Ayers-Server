@@ -80,7 +80,7 @@ public class Schema extends JsonObject {
     return result;
   }
 
-  public CompatResult compatiableWith(Schema other) throws ConsistencyViolationException {
+  public CompatResult compatibleWith(Schema other) throws ConsistencyViolationException {
     if (null == other) {
       return OVER_MATCHED;
     }
@@ -103,14 +103,14 @@ public class Schema extends JsonObject {
                   + ", expectedType:" + otherType + ", actualType:" + myType);
         } else if (LeanPointer.class.getName().equals(myType)) {
           if (!value.getString("reference", "").equals(otherValue.getString("reference"))) {
-            throw new ConsistencyViolationException("data consisitency violated. key:" + key
+            throw new ConsistencyViolationException("data consistency violated. key:" + key
                     + ", expectedPoint2Type:" + otherValue.getString("reference")
                     + ", actualPoint2Type:" + value.getString("reference"));
           }
         } else if (JsonObject.class.getName().equals(myType)) {
           Schema mySchema = new Schema(value.getJsonObject("schema"));
           Schema otherSchema = new Schema(otherValue.getJsonObject("schema"));
-          CompatResult tmpResult = mySchema.compatiableWith(otherSchema);
+          CompatResult tmpResult = mySchema.compatibleWith(otherSchema);
           if (tmpResult == NOT_MATCHED) {
             return NOT_MATCHED;
           } else if (tmpResult == OVER_MATCHED) {

@@ -13,7 +13,7 @@ public class SmsCodeHandler extends CommonHandler {
   private static final Logger logger = LoggerFactory.getLogger(SmsCodeHandler.class);
   private static final String LC_API_HOST = "api.leancloud.cn";
   private static final int LC_API_PORT = 443;
-//  private static final String LC_REQUEST_SMSCODE_PATH = "/1.1/requestSmsCode";
+  private static final String LC_REQUEST_SMSCODE_PATH = "/1.1/requestSmsCode";
   private static final String LC_REQUEST_VERIFYSMSCODE_FORMAT = "/1.1/verifySmsCode/%s";
   public SmsCodeHandler(Vertx vertx, RoutingContext context) {
     super(vertx, context);
@@ -25,7 +25,7 @@ public class SmsCodeHandler extends CommonHandler {
     JsonObject headerJson = copyRequestHeaders(routingContext);
 
     logger.debug("process requestSmsCode request. body:" + body);
-    client.post(LC_API_HOST, LC_API_PORT, routingContext.request().path(), headerJson, body, handler);
+    client.post(LC_API_HOST, LC_API_PORT, LC_REQUEST_SMSCODE_PATH, headerJson, body, handler);
   }
 
   public void verifySmsCode(JsonObject body, String smsCode, Handler<AsyncResult<JsonObject>> handler) {

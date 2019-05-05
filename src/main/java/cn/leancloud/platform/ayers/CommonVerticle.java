@@ -83,9 +83,6 @@ public class CommonVerticle extends AbstractVerticle {
             .putHeader("Access-Control-Allow-Origin", StringUtils.isEmpty(origin)? "*" : origin);
     if (null != header) {
       header.stream().sequential().forEach(entry -> response.putHeader(entry.getKey(), (String) entry.getValue()));
-//      for (Map.Entry entry: header.getMap().entrySet()) {
-//        response.putHeader((String) entry.getKey(), (String) entry.getValue());
-//      }
     }
     response.end(result);
   }

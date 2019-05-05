@@ -3,6 +3,7 @@ package cn.leancloud.platform.ayers;
 import cn.leancloud.platform.cache.InMemoryLRUCache;
 import cn.leancloud.platform.common.ClassMetaData;
 import cn.leancloud.platform.common.Configure;
+import cn.leancloud.platform.common.Constraints;
 import cn.leancloud.platform.common.ErrorCodes;
 import cn.leancloud.platform.modules.ConsistencyViolationException;
 import cn.leancloud.platform.modules.LeanObject;
@@ -71,28 +72,28 @@ public class DamoclesVerticle extends CommonVerticle {
       }
       return sphereFuture;
     })
-    .compose(res -> makeSureDefaultIndex(clazz, "updatedAt", false, indices, newIndices, dataStore))
-    .compose(res -> makeSureDefaultIndex(clazz, "createdAt", false, indices, newIndices, dataStore))
+    .compose(res -> makeSureDefaultIndex(clazz, LeanObject.ATTR_NAME_UPDATED_TS, false, indices, newIndices, dataStore))
+    .compose(res -> makeSureDefaultIndex(clazz, LeanObject.ATTR_NAME_CREATED_TS, false, indices, newIndices, dataStore))
     .compose(res -> {
-      if ("_User".equals(clazz)) {
-        return makeSureDefaultIndex(clazz, "email", true, indices, newIndices, dataStore);
+      if (Constraints.USER_CLASS.equals(clazz)) {
+        return makeSureDefaultIndex(clazz, LeanObject.BUILTIN_ATTR_EMAIL, true, indices, newIndices, dataStore);
       } else {
         return Future.succeededFuture(true);
       }
     }).compose(res -> {
-        if ("_User".equals(clazz)) {
-          return makeSureDefaultIndex(clazz, "username", true, indices, newIndices, dataStore);
+        if (Constraints.USER_CLASS.equals(clazz)) {
+          return makeSureDefaultIndex(clazz, LeanObject.BUILTIN_ATTR_USERNAME, true, indices, newIndices, dataStore);
         } else {
           return Future.succeededFuture(true);
         }
     }).compose(res -> {
-      if ("_User".equals(clazz)) {
-        return makeSureDefaultIndex(clazz, "mobilePhoneNumber", true, indices, newIndices, dataStore);
+      if (Constraints.USER_CLASS.equals(clazz)) {
+        return makeSureDefaultIndex(clazz, LeanObject.BUILTIN_ATTR_MOBILEPHONE, true, indices, newIndices, dataStore);
       } else {
         return Future.succeededFuture(true);
       }
     }).compose(res -> {
-      if ("_User".equals(clazz)) {
+      if (Constraints.USER_CLASS.equals(clazz)) {
         List<String> authIndexPaths = schema.findAuthDataIndex();
         Future<Boolean> composedFuture = Future.succeededFuture(true);
         for (String attr : authIndexPaths) {
@@ -214,7 +215,7 @@ public class DamoclesVerticle extends CommonVerticle {
               cachedData = (ClassMetaData)this.classMetaCache.get(clazz);
               if (null != cachedData) {
                 Schema cachedSchema = new Schema(cachedData.getSchema());
-                Schema.CompatResult compatResult = inputSchema.compatiableWith(cachedSchema);
+                Schema.CompatResult compatResult = inputSchema.compatibleWith(cachedSchema);
                 if (compatResult == Schema.CompatResult.NOT_MATCHED) {
                   message.reply(new JsonObject().put("result", false));
                 } else {
@@ -235,8 +236,8 @@ public class DamoclesVerticle extends CommonVerticle {
               cachedData = (ClassMetaData)this.classMetaCache.get(clazz);
               if (null != cachedData) {
                 Schema cachedSchema = new Schema(cachedData.getSchema());
-                Schema.CompatResult compatResult = inputSchema.compatiableWith(cachedSchema);
-                logger.debug("compatiable test. input=" + inputSchema + ", rule=" + cachedSchema + ", result=" + compatResult);
+                Schema.CompatResult compatResult = inputSchema.compatibleWith(cachedSchema);
+                logger.debug("compatibility test. input=" + inputSchema + ", rule=" + cachedSchema + ", result=" + compatResult);
                 if (compatResult == Schema.CompatResult.NOT_MATCHED) {
                   message.fail(INVALID_PARAMETER.getCode(), "data consistency violated.");
                 } else {

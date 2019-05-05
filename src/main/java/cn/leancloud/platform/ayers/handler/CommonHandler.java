@@ -98,20 +98,21 @@ public class CommonHandler {
     return true;
   }
 
+  // path examples:
+  //   /1.1/classes/Post
+  //   /1.1/classes/Post/objectId
+  //   /1.1/installations
+  //   /1.1/installations/objectId
+  //   /1.1/files
+  //   /1.1/files/objectId
+  //   /1.1/users
+  //   /1.1/users/objectId
+  //   /1.1/roles
+  //   /1.1/roles/objectId
   protected static Pair<String, String> parseClazzAndObjectId(String path) {
     String clazz = "";
     String objectId = "";
     if (StringUtils.notEmpty(path) && path.startsWith("/1.1/")) {
-      // /1.1/classes/Post
-      // /1.1/classes/Post/objectId
-      // /1.1/installations
-      // /1.1/installations/objectId
-      // /1.1/files
-      // /1.1/files/objectId
-      // /1.1/users
-      // /1.1/users/objectId
-      // /1.1/roles
-      // /1.1/roles/objectId
       String[] pathArray = path.substring("/1.1/".length()).split("/");
       if (pathArray[0].equalsIgnoreCase("classes")) {
         if (pathArray.length >= 2) {
@@ -204,10 +205,10 @@ public class CommonHandler {
     String upperOperation = operation.toUpperCase();
     DeliveryOptions options = new DeliveryOptions().addHeader(CommonVerticle.INTERNAL_MSG_HEADER_OP, upperOperation);
     if (shouldChangeSchema(clazz, upperOperation)) {
-      logger.debug("send to democles for scheme checking...");
+      logger.debug("send to damocles for scheme checking...");
       vertx.eventBus().send(Configure.MAILADDRESS_DEMOCLES_QUEUE, request, options, response -> {
         if (response.failed()) {
-          logger.warn("failed to check schema by democles.");
+          logger.warn("failed to check schema by damocles.");
           handler.handle(response.map(v -> (JsonObject)v.body()));
         } else {
           logger.debug("pass schema check, send to storage verticle.");

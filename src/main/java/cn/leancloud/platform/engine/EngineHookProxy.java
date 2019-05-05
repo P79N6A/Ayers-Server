@@ -1,7 +1,6 @@
-package cn.leancloud.platform.common;
+package cn.leancloud.platform.engine;
 
-import cn.leancloud.platform.engine.EngineMetaStore;
-import cn.leancloud.platform.engine.HookType;
+import cn.leancloud.platform.common.CommonWebClient;
 import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
@@ -13,6 +12,8 @@ import org.slf4j.LoggerFactory;
 
 public class EngineHookProxy extends CommonWebClient {
   private static final Logger logger = LoggerFactory.getLogger(EngineHookProxy.class);
+  private static final String LEAN_ENGINE_WRAP_ATTR = "object";
+
   private static EngineHookProxy instance = null;
 
   private EngineHookProxy(Vertx vertx) {
@@ -62,8 +63,10 @@ public class EngineHookProxy extends CommonWebClient {
       logger.debug("try to call hook function for class:" + clazz + ", type:" + type.getName() + "，param:" + param);
       String leanengineHost = engineMetaStore.getEngineHost();
       int leanenginePort = engineMetaStore.getEnginePort();
-      postWithFallback(leanengineHost, leanenginePort, funcPath, headers, param,
-              response -> handler.handle(response),
+
+      // TODO: why need to wrap {object:json}?
+      postWithFallback(leanengineHost, leanenginePort, funcPath, headers, new JsonObject().put(LEAN_ENGINE_WRAP_ATTR, param),
+              response -> handler.handle(response.map(obj -> obj.getJsonObject(LEAN_ENGINE_WRAP_ATTR))),
               throwable -> {
                 logger.warn("failed to call lean engine. cause: " + throwable);
                 return param;
