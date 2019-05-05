@@ -1,18 +1,14 @@
 package cn.leancloud.platform.ayers.handler;
 
-import cn.leancloud.platform.ayers.CommonVerticle;
 import cn.leancloud.platform.ayers.RequestParse;
 import cn.leancloud.platform.common.BatchRequest;
-import cn.leancloud.platform.common.Configure;
 import cn.leancloud.platform.common.EngineHookProxy;
 import cn.leancloud.platform.common.ErrorCodes;
 import cn.leancloud.platform.engine.HookType;
 import cn.leancloud.platform.modules.ObjectSpecifics;
 import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.*;
-import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.eventbus.ReplyException;
-import io.vertx.core.http.HttpMethod;
 import io.vertx.core.impl.NoStackTraceThrowable;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -43,31 +39,11 @@ public class ObjectModifyHandler extends CommonHandler {
       } else {
         JsonObject hookedBody = res.result();
         if (null == hookedBody) {
-          handler.handle(new AsyncResult<JsonObject>() {
-            @Override
-            public JsonObject result() {
-              return null;
-            }
-
-            @Override
-            public Throwable cause() {
-              return new IllegalAccessException("operation failed by BeforeSave Hook.");
-            }
-
-            @Override
-            public boolean succeeded() {
-              return false;
-            }
-
-            @Override
-            public boolean failed() {
-              return true;
-            }
-          });
+          handler.handle(wrapErrorResult(new IllegalAccessException("operation failed by BeforeSave Hook.")));
         } else {
           hookedBody.remove("__before");
           logger.debug("get lean enginne hook result: " + hookedBody);
-          sendDataOperationWithOption(clazz, null, RequestParse.OP_OBJECT_POST, null, hookedBody,
+          sendDataOperationWithOption(clazz, null, RequestParse.OP_OBJECT_POST, null, hookedBody.getJsonObject("object"),
                   returnNewDoc, response -> {
                     if (response.failed()) {
                       handler.handle(response);
@@ -94,31 +70,11 @@ public class ObjectModifyHandler extends CommonHandler {
       } else {
         JsonObject hookedBody = res.result();
         if (null == hookedBody) {
-          handler.handle(new AsyncResult<JsonObject>() {
-            @Override
-            public JsonObject result() {
-              return null;
-            }
-
-            @Override
-            public Throwable cause() {
-              return new IllegalAccessException("operation failed by BeforeUpdate Hook.");
-            }
-
-            @Override
-            public boolean succeeded() {
-              return false;
-            }
-
-            @Override
-            public boolean failed() {
-              return true;
-            }
-          });
+          handler.handle(wrapErrorResult(new IllegalAccessException("operation failed by BeforeUpdate Hook.")));
         } else {
           hookedBody.remove("__before");
           logger.debug("get lean enginne hook result: " + hookedBody);
-          sendDataOperationWithOption(clazz, objectId, RequestParse.OP_OBJECT_PUT, query, hookedBody, returnNewDoc, responnse -> {
+          sendDataOperationWithOption(clazz, objectId, RequestParse.OP_OBJECT_PUT, query, hookedBody.getJsonObject("object"), returnNewDoc, responnse -> {
             if (responnse.failed()) {
               handler.handle(responnse);
             } else {

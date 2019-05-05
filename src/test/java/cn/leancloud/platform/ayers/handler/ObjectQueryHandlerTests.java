@@ -3,6 +3,9 @@ package cn.leancloud.platform.ayers.handler;
 import io.vertx.core.json.JsonObject;
 import junit.framework.TestCase;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class ObjectQueryHandlerTests extends TestCase {
   @Override
   protected void setUp() throws Exception {
@@ -10,6 +13,15 @@ public class ObjectQueryHandlerTests extends TestCase {
 
   @Override
   protected void tearDown() throws Exception {
+  }
+
+  public void testProjectParse() throws Exception {
+    String keys = "content";
+    List<String> attrs = new ArrayList<>();
+    attrs.add("author");
+    JsonObject result = ObjectQueryHandler.parseProjectParam(keys, attrs);
+    assertTrue(null != result);
+    assertTrue(result.size() > 2);
   }
 
   public void testValidateNormalQuery() throws Exception {

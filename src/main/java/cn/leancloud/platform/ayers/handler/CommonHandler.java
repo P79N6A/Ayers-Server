@@ -29,8 +29,32 @@ public class CommonHandler {
     this.routingContext = context;
   }
 
-  protected boolean assertNotNull(Object param, Handler<AsyncResult<JsonObject>> handler) {
-    AsyncResult<JsonObject> failure = new AsyncResult<JsonObject>() {
+  protected static <T> AsyncResult<T> wrapActualResult(T value) {
+    return new AsyncResult<T>() {
+      @Override
+      public T result() {
+        return value;
+      }
+
+      @Override
+      public Throwable cause() {
+        return null;
+      }
+
+      @Override
+      public boolean succeeded() {
+        return true;
+      }
+
+      @Override
+      public boolean failed() {
+        return false;
+      }
+    };
+  }
+
+  protected static AsyncResult<JsonObject> wrapErrorResult(Throwable throwable) {
+    return new AsyncResult<JsonObject>() {
       @Override
       public JsonObject result() {
         return null;
@@ -38,7 +62,7 @@ public class CommonHandler {
 
       @Override
       public Throwable cause() {
-        return new InvalidParameterException(ErrorCodes.INVALID_PARAMETER.getMessage());
+        return throwable;
       }
 
       @Override
@@ -51,6 +75,10 @@ public class CommonHandler {
         return true;
       }
     };
+  }
+
+  protected boolean assertNotNull(Object param, Handler<AsyncResult<JsonObject>> handler) {
+    AsyncResult<JsonObject> failure = wrapErrorResult(new InvalidParameterException(ErrorCodes.INVALID_PARAMETER.getMessage()));
     if (null == param) {
       if (null != handler) {
         handler.handle(failure);

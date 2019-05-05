@@ -212,6 +212,7 @@ public class MongoDataStoreTests extends TestCase {
     JsonObject filter = new JsonObject();
     DataStore.QueryOption option = new DataStore.QueryOption();
     option.setLimit(100);
+    option.setFields(new JsonObject().put("author", 1).put("_id", 1));
     dataStore.findWithOptions("Comment", filter, option, res -> {
       if (res.succeeded()) {
         res.result().forEach(a -> System.out.println(a));

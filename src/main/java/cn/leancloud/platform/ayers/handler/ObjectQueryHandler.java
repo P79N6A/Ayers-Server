@@ -3,11 +3,7 @@ package cn.leancloud.platform.ayers.handler;
 import cn.leancloud.platform.modules.LeanObject;
 import cn.leancloud.platform.utils.JsonFactory;
 import cn.leancloud.platform.utils.StringUtils;
-import com.sun.org.apache.xpath.internal.operations.Bool;
-import io.vertx.core.AsyncResult;
-import io.vertx.core.Future;
-import io.vertx.core.Handler;
-import io.vertx.core.Vertx;
+import io.vertx.core.*;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -63,15 +59,22 @@ public class ObjectQueryHandler extends CommonHandler {
     return sortJson;
   }
 
-  public static JsonObject parseProjectParam(String keys) {
+  public static JsonObject parseProjectParam(String keys, List<String> includeArray) {
     if (StringUtils.isEmpty(keys)) {
       return null;
     }
     JsonObject fieldJson = new JsonObject();
-    Stream.concat(Arrays.stream(keys.split(",")), Arrays.stream(ALWAYS_PROJECT_KEYS))
+    List<String> appendKeys = new ArrayList<>();//Arrays.asList(ALWAYS_PROJECT_KEYS);
+    appendKeys.addAll(Arrays.asList(ALWAYS_PROJECT_KEYS));
+    if (null != includeArray && includeArray.size() > 0) {
+      appendKeys.addAll(includeArray);
+    }
+    Set<String> attrSet = Stream.concat(Arrays.stream(keys.split(",")), appendKeys.stream())
             .filter(StringUtils::notEmpty)
-            .collect(Collectors.toSet())
-            .forEach(k -> fieldJson.put(k, 1));
+            .collect(Collectors.toSet());
+    for (String k: attrSet) {
+      fieldJson.put(k, 1);
+    }
     return fieldJson;
   }
 
@@ -154,14 +157,18 @@ public class ObjectQueryHandler extends CommonHandler {
     }
   }
 
-  public void query(String clazz, String objectId, JsonObject query, Handler<AsyncResult<JsonObject>> handler) {
-    String where = query.getString(QUERY_KEY_WHERE, "{}");
-    String order = query.getString(QUERY_KEY_ORDER);
-    int limit = Integer.valueOf(query.getString(QUERY_KEY_LIMIT, DEFAULT_QUERY_LIMIT));
-    int skip = Integer.valueOf(query.getString(QUERY_KEY_SKIP, DEFAULT_QUERY_SKIP));
-    int count = Integer.valueOf(query.getString(QUERY_KEY_COUNT, DEFAULT_QUERY_COUNT));
-    String include = query.getString(QUERY_KEY_INCLUDE);
-    String keys = query.getString(QUERY_KEY_KEYS);
+  public void query(String clazz, String objectId, JsonObject queryParam, Handler<AsyncResult<JsonObject>> handler) {
+    Objects.requireNonNull(clazz);
+    Objects.requireNonNull(queryParam);
+    Objects.requireNonNull(handler);
+
+    String where = queryParam.getString(QUERY_KEY_WHERE, "{}");
+    String order = queryParam.getString(QUERY_KEY_ORDER);
+    int limit = Integer.valueOf(queryParam.getString(QUERY_KEY_LIMIT, DEFAULT_QUERY_LIMIT));
+    int skip = Integer.valueOf(queryParam.getString(QUERY_KEY_SKIP, DEFAULT_QUERY_SKIP));
+    int count = Integer.valueOf(queryParam.getString(QUERY_KEY_COUNT, DEFAULT_QUERY_COUNT));
+    String include = queryParam.getString(QUERY_KEY_INCLUDE);
+    String keys = queryParam.getString(QUERY_KEY_KEYS);
 
     final List<String> includeArray;
     if (StringUtils.notEmpty(include)) {
@@ -173,11 +180,13 @@ public class ObjectQueryHandler extends CommonHandler {
 
     JsonObject condition = new JsonObject(where);
     JsonObject orderJson = parseSortParam(order);
-    JsonObject fieldJson = parseProjectParam(keys);
+    JsonObject fieldJson = parseProjectParam(keys, includeArray);
 
     if (StringUtils.notEmpty(objectId)) {
       condition.put(LeanObject.ATTR_NAME_OBJECTID, objectId);
     }
+
+    logger.debug("where-" + condition + ", order-" + orderJson + ", field-" + fieldJson + ", include-" + include);
 
     try {
       final JsonObject transformedCondition = transformSubQuery(condition);
@@ -185,76 +194,122 @@ public class ObjectQueryHandler extends CommonHandler {
       future.setHandler(res -> {
         if (res.failed()) {
           logger.warn("failed to execute subQuery. cause:" + res.cause().getMessage());
-          if (null != handler) {
-            handler.handle(new AsyncResult<JsonObject>() {
-              @Override
-              public JsonObject result() {
-                return null;
-              }
-
-              @Override
-              public Throwable cause() {
-                return res.cause();
-              }
-
-              @Override
-              public boolean succeeded() {
-                return false;
-              }
-
-              @Override
-              public boolean failed() {
-                return true;
-              }
-            });
-          }
+          handler.handle(wrapErrorResult(res.cause()));
         } else {
           QueryOptions queryOptions = new QueryOptions();
           queryOptions.setWhere(transformedCondition).setOrder(orderJson).setKeys(fieldJson).setLimit(limit).setSkip(skip).setCount(count);
 
-          logger.debug("begin to execute actual query option: " + queryOptions.toJson());
-          // TODO: we need to process include clause yet.
-          execute(clazz, queryOptions.toJson(), includeArray, handler);
+          logger.debug("begin to execute actual queryParam option: " + queryOptions.toJson());
+
+          execute(clazz, queryOptions.toJson(), includeArray, response -> {
+            if (response.failed()) {
+              logger.warn("query failed: " + response.cause().getMessage());
+              handler.handle(response);
+              return;
+            }
+            if (includeArray.size() < 1) {
+              logger.debug("include list is empty, return directly.");
+              handler.handle(response);
+              return;
+            }
+            JsonArray results = response.result().getJsonArray("results");
+            int resultCount = (null == results)? 0 : results.size();
+            if (null == results || resultCount < 1) {
+              logger.debug("result list is empty, return directly.");
+              handler.handle(response);
+              return;
+            }
+            logger.debug("first results:" + results);
+            List<Future> futures = includeArray.stream().map(attr -> {
+              Future<Void> future1 = Future.future();
+              List<Object> includeResults = results.stream().filter(obj -> ((JsonObject)obj).containsKey(attr)).collect(Collectors.toList());
+              if (null == includeResults || includeResults.size() < 1) {
+                future1.complete();
+                return future1;
+              }
+              JsonObject firstResult = (JsonObject) includeResults.get(0);
+              String className = firstResult.getJsonObject(attr).getString(LeanObject.ATTR_NAME_CLASSNAME);
+              logger.debug("try to execute include query. attr=" + attr + ", targetClazz=" + className);
+
+              // FIXME: maybe attr is not top attribute, such as {"location":{"city":{"__type":"Pointer", "className":"City", "objectId":"lshfieafhiehfeei2eh2o"}}}
+              // will query with includeKey="location.city"
+
+              List<String> targetObjectIds = includeResults.stream()
+                      .map(obj -> ((JsonObject)obj).getJsonObject(attr).getString(LeanObject.ATTR_NAME_OBJECTID))
+                      .filter(StringUtils::notEmpty)
+                      .collect(Collectors.toList());
+
+              JsonObject subWhere = new JsonObject().put("objectId", new JsonObject().put("$in", targetObjectIds));
+              QueryOptions subQueryOptions = new QueryOptions();
+              subQueryOptions.setWhere(subWhere).setLimit(resultCount);
+
+              logger.debug("include query options: " + subQueryOptions.toJson());
+              execute(className, subQueryOptions.toJson(), null, any -> {
+                if (any.failed()) {
+                  logger.warn("failed to execute include query. cause: " + any.cause().getMessage());
+                  future1.fail(any.cause());
+                } else {
+                  JsonArray oneAttrResults = any.result().getJsonArray("results");
+                  logger.debug("include query results: " + oneAttrResults);
+
+                  if (null != oneAttrResults && oneAttrResults.size() > 0) {
+                    // parse and mapping result.
+                    Map<String, JsonObject> attrMaps = new HashMap<>(oneAttrResults.size());
+
+                    oneAttrResults.stream().forEach(obj -> attrMaps.put(((JsonObject)obj).getString(LeanObject.ATTR_NAME_OBJECTID), (JsonObject)obj));
+
+                    results.stream().forEach(obj2 -> {
+                      JsonObject tmp = (JsonObject)obj2;
+                      if (tmp.containsKey(attr)) {
+                        String tmpObjectId = tmp.getJsonObject(attr).getString(LeanObject.ATTR_NAME_OBJECTID);
+                        JsonObject completedObject = attrMaps.get(tmpObjectId);
+                        if (null != completedObject) {
+                          logger.debug("replace attr:" + attr + ", objectId:" + tmpObjectId + ", jsonObject:" + completedObject);
+                          tmp.put(attr, completedObject);
+                        } else {
+                          logger.warn("not found result for attr:" + attr + ", objectId:" + tmpObjectId);
+                        }
+                      }
+                    });
+                  }
+                  future1.complete();
+                }
+              });
+              return future1;
+            }).collect(Collectors.toList());
+            CompositeFuture.all(futures).setHandler(any -> {
+              if (any.failed()) {
+                logger.warn("failed to execute all include query. cause: " + any.cause().getMessage());
+                handler.handle(wrapErrorResult(any.cause()));
+              } else {
+                logger.debug("AllInOne finished. results=" + results);
+                handler.handle(wrapActualResult(new JsonObject().put("results", results)));
+              }
+            });
+          });
         }
       });
     } catch (IllegalArgumentException ex) {
       logger.warn("failed to validate subQuery clause. cause:" + ex.getMessage());
-      handler.handle(new AsyncResult<JsonObject>() {
-        @Override
-        public JsonObject result() {
-          return null;
-        }
-
-        @Override
-        public Throwable cause() {
-          return ex;
-        }
-
-        @Override
-        public boolean succeeded() {
-          return false;
-        }
-
-        @Override
-        public boolean failed() {
-          return true;
-        }
-      });
+      handler.handle(wrapErrorResult(ex));
     }
-
-//    JsonObject integratedQuery = new JsonObject().put(QUERY_KEY_WHERE, condition).put(QUERY_KEY_ORDER, orderJson)
-//            .put(QUERY_KEY_KEYS, fieldJson).put(QUERY_KEY_LIMIT, limit).put(QUERY_KEY_SKIP, skip).put(QUERY_KEY_COUNT, count);
-//
-//    sendDataOperation(clazz, null, HttpMethod.GET.toString(), integratedQuery, null, handler);
   }
 
+  /**
+   * execute query actually.
+   *
+   * @param clazz         className
+   * @param options       query options.
+   * @param includeArray  reserved for call aggregate api in future.
+   * @param handler       callback handler.
+   */
   private void execute(String clazz, JsonObject options, List<String> includeArray,
                        Handler<AsyncResult<JsonObject>> handler) {
     sendDataOperation(clazz, null, HttpMethod.GET.toString(), options, null, handler);
   }
 
   private Future<Boolean> resolveSubQuery(JsonObject condition) {
-    logger.debug("try to resolve query: " + condition.toString());
+    logger.debug("try to resolve sub query: " + condition.toString());
     Future<Boolean> future = Future.succeededFuture(true);
     for (Map.Entry<String, Object> entry : condition.getMap().entrySet()) {
       Object value = entry.getValue();
@@ -365,7 +420,7 @@ public class ObjectQueryHandler extends CommonHandler {
     if (null == condition || condition.size() == 0) {
       return condition;
     }
-    logger.debug("try to transform query: " + condition);
+    logger.debug("try to transform sub query: " + condition);
     JsonObject result = condition.stream().map(entry -> {
       Object value = entry.getValue();
       if (null != value && value instanceof JsonObject) {
@@ -380,13 +435,6 @@ public class ObjectQueryHandler extends CommonHandler {
             throw new IllegalArgumentException("invalid subQuery clause for key:" + entry.getKey());
           }
           return new AbstractMap.SimpleEntry<String, Object>(entry.getKey(), new JsonObject().put(OP_SELECT, options.toJson()));
-//        } if (tmpValue.containsKey(OP_INQUERY)) {
-//          JsonObject select = tmpValue.getJsonObject(OP_INQUERY);
-//          QueryOptions options = validSubQuery(select);
-//          if (null == options) {
-//            throw new IllegalArgumentException("invalid subQuery clause for key:" + entry.getKey());
-//          }
-//          return new AbstractMap.SimpleEntry<String, Object>(entry.getKey(), new JsonObject().put(OP_INQUERY, options.toJson()));
         } else {
           return new AbstractMap.SimpleEntry<String, Object>(entry.getKey(), transformSubQuery(tmpValue));
         }

@@ -1,8 +1,14 @@
 package cn.leancloud.platform.integrate;
 
 import cn.leancloud.platform.utils.StringUtils;
+import io.vertx.core.CompositeFuture;
+import io.vertx.core.Future;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 
 public class ObjectTests extends WebClientTests {
   @Override
@@ -127,6 +133,103 @@ public class ObjectTests extends WebClientTests {
           }
           latch.countDown();
         });
+      }
+    });
+    latch.await();
+    assertTrue(testSuccessed);
+  }
+
+  public void testPreIncludeQuery() throws Exception {
+    Random rand = new Random(System.currentTimeMillis());
+    String ReviewerFormat = "{\"name\":\"review no. %d\", \"tags\":[\"%s\", \"%s\"]}";
+    String[] tags = new String[]{"designs", "read", "story", "web", "best", "comments", "Dragon Ball",
+            "restful", "fruits", "layout", "sprite", "compare", "draw", "large", "think", "expensive"};
+
+    String commentSourceText = "Tag clouds are typically represented using inline HTML elements. The tags can appear in alphabetical order, in a random order, they can be sorted by weight, and so on. Sometimes, further visual properties are manipulated in addition to font size, such as the font color, intensity, or weight.[18] Most popular is a rectangular tag arrangement with alphabetical sorting in a sequential line-by-line layout. The decision for an optimal layout should be driven by the expected user goals.[18] Some prefer to cluster the tags semantically so that similar tags will appear near each other[19][20][21] or use embedding techniques such as tSNE to position words.[12] Edges can be added to emphasize the co-occurrences of tags and visualize interactions.[12] Heuristics can be used to reduce the size of the tag cloud whether or not the purpose is to cluster the tags.[20]\n" +
+            "\n" +
+            "Tag cloud visual taxonomy is determined by a number of attributes: tag ordering rule (e.g. alphabetically, by importance, by context, randomly, ordered for visual quality), shape of the entire cloud (e.g. rectangular, circle, given map borders), shape of tag bounds (rectangle, or character body), tag rotation (none, free, limited), vertical tag alignment (sticking to typographical baselines, free). A tag cloud on the web must address problems of modeling and controlling aesthetics, constructing a two-dimensional layout of tags, and all these must be done in short time on volatile browser platform. Tags clouds to be used on the web must be in HTML, not graphics, to make them robot-readable, they must be constructed on the client side using the fonts available in the browser, and they must fit in a rectangular box";
+    int commentSourceLength = commentSourceText.length();
+
+    int tag_len = tags.length;
+    int reviewerCount = 10;
+    int CommentCount = 20;
+
+    List<String> reviewerIds = new ArrayList<>(reviewerCount);
+
+    List<Future> reviewFutures = new ArrayList<>(reviewerCount);
+    for (int i = 0; i < reviewerCount; i++) {
+      Future tmp = Future.future();
+      reviewFutures.add(tmp);
+      String tag1 = tags[rand.nextInt(tag_len)];
+      String tag2 = tags[rand.nextInt(tag_len)];
+      String reviewer = String.format(ReviewerFormat, i, tag1, tag2);
+      post("/1.1/classes/Reviewer", new JsonObject(reviewer), res -> {
+        if (res.failed()) {
+          res.cause().printStackTrace();
+          tmp.fail(res.cause());
+        } else {
+          reviewerIds.add(res.result().getString("objectId"));
+          tmp.complete();
+        }
+      });
+    }
+    CompositeFuture.all(reviewFutures).setHandler(res -> {
+      if (res.failed()) {
+        res.cause().printStackTrace();
+        latch.countDown();
+      } else {
+        // do next.
+        List<Future> commentFutures = new ArrayList<>(CommentCount);
+        for (int i = 0;i < CommentCount;i++) {
+          int reviewerIndex = rand.nextInt(reviewerCount);
+          int textBegin = rand.nextInt(commentSourceLength);
+          int textEnd = rand.nextInt(commentSourceLength);
+          if (textBegin > textEnd) {
+            int t = textBegin;
+            textBegin = textEnd;
+            textEnd = t;
+          }
+          String slice = commentSourceText.substring(textBegin, textEnd);
+          String oneObjectId = reviewerIds.get(reviewerIndex);
+          JsonObject reviewJson = new JsonObject().put("__type", "Pointer").put("className", "Reviewer").put("objectId", oneObjectId);
+          Future tmp = Future.future();
+          commentFutures.add(tmp);
+          post("/1.1/classes/Comment", new JsonObject().put("content", slice).put("author", reviewJson), res2 -> {
+            if (res2.failed()) {
+              res2.cause().printStackTrace();
+              tmp.fail(res2.cause());
+            } else {
+              tmp.complete();
+            }
+          });
+        }
+        CompositeFuture.all(commentFutures).setHandler(fin -> {
+          latch.countDown();
+          testSuccessed = fin.succeeded();
+        });
+      }
+    });
+    latch.await();
+    assertTrue(testSuccessed);
+  }
+
+  public void testIncludeQuery() throws Exception {
+    JsonObject where = new JsonObject().put("author", new JsonObject().put("$exists", true));
+    JsonObject queryParam = new JsonObject();
+    queryParam.put("limit", "5");
+    queryParam.put("where", where.toString());
+    queryParam.put("keys", "content");
+    queryParam.put("include", "author");
+    queryParam.put("order", "updatedAt");
+    get("/1.1/classes/Comment", queryParam, res -> {
+      if (res.failed()) {
+        System.out.println(res.cause().getMessage());
+        latch.countDown();
+      } else {
+        JsonArray results = res.result().getJsonArray("results");
+        testSuccessed = results.size() > 0;
+        results.stream().forEach(a -> System.out.println(a));
+        latch.countDown();
       }
     });
     latch.await();
