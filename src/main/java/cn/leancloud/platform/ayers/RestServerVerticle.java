@@ -352,7 +352,7 @@ public class RestServerVerticle extends CommonVerticle {
         }
       } else {
         JsonObject result = reply.result();
-        logger.debug("rest server response: " + result);
+//        logger.debug("rest server response: " + result);
         if (HttpMethod.POST == httpMethod && StringUtils.isEmpty(objectId)) {
           //Status: 201 Created
           //Location: https://heqfq0sw.api.lncld.net/1.1/classes/Post/<objectId>

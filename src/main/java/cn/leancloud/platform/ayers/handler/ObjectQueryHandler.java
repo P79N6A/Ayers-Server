@@ -47,7 +47,7 @@ public class ObjectQueryHandler extends CommonHandler {
       return null;
     }
     JsonObject sortJson = new JsonObject();
-    Arrays.stream(order.split(",")).filter(StringUtils::notEmpty).forEach( a -> {
+    Arrays.stream(order.split(",")).filter(StringUtils::notEmpty).forEach(a -> {
       if (a.startsWith("+")) {
         sortJson.put(a.substring(1), 1);
       } else if (a.startsWith("-")) {
@@ -72,7 +72,7 @@ public class ObjectQueryHandler extends CommonHandler {
     Set<String> attrSet = Stream.concat(Arrays.stream(keys.split(",")), appendKeys.stream())
             .filter(StringUtils::notEmpty)
             .collect(Collectors.toSet());
-    for (String k: attrSet) {
+    for (String k : attrSet) {
       fieldJson.put(k, 1);
     }
     return fieldJson;
@@ -213,90 +213,86 @@ public class ObjectQueryHandler extends CommonHandler {
               return;
             }
             JsonArray results = response.result().getJsonArray("results");
-            int resultCount = (null == results)? 0 : results.size();
+            int resultCount = (null == results) ? 0 : results.size();
             if (null == results || resultCount < 1) {
               logger.debug("result list is empty, return directly.");
               handler.handle(response);
               return;
             }
-            logger.debug("first results:" + results);
-            List<Future> futures = includeArray.stream().map(attr -> {
-              Future<Void> future1Attr = Future.future();
-              List<Object> includedAttrResults = results.stream()
-                      .filter(obj -> ((JsonObject)obj).containsKey(attr) && null != ((JsonObject)obj).getValue(attr))
-                      .collect(Collectors.toList());
-              if (null == includedAttrResults || includedAttrResults.size() < 1) {
-                logger.debug("there is nothing for target attr: " + attr);
-                future1Attr.complete();
-                return future1Attr;
-              }
-              JsonObject firstResult = (JsonObject) includedAttrResults.get(0);
-              if (!(firstResult.getValue(attr) instanceof JsonObject)) {
-                logger.debug("there is non-jsonobject for target attr: " + attr);
-                future1Attr.complete();
-                return future1Attr;
-              }
-              String className = firstResult.getJsonObject(attr).getString(LeanObject.ATTR_NAME_CLASSNAME);
-              if (StringUtils.isEmpty(className)) {
-                logger.warn("there is invalid Pointer(no className) for target attr: " + attr);
-                future1Attr.complete();
-                return future1Attr;
-              }
-
-              logger.debug("try to execute include query. attr=" + attr + ", targetClazz=" + className);
-
-              // FIXME: maybe attr is not top attribute, such as {"location":{"city":{"__type":"Pointer", "className":"City", "objectId":"lshfieafhiehfeei2eh2o"}}}
-              // will query with includeKey="location.city"
-
-              List<String> targetObjectIds = includedAttrResults.stream()
-                      .map(obj -> ((JsonObject)obj).getJsonObject(attr).getString(LeanObject.ATTR_NAME_OBJECTID))
-                      .filter(StringUtils::notEmpty)
-                      .collect(Collectors.toList());
-
-              JsonObject subWhere = new JsonObject().put("objectId", new JsonObject().put("$in", targetObjectIds));
-              QueryOptions subQueryOptions = new QueryOptions();
-              subQueryOptions.setWhere(subWhere).setLimit(resultCount);
-
-              logger.debug("include query options: " + subQueryOptions.toJson());
-              execute(className, subQueryOptions.toJson(), null, any -> {
-                if (any.failed()) {
-                  logger.warn("failed to execute include query. cause: " + any.cause().getMessage());
-                  future1Attr.fail(any.cause());
-                } else {
-                  JsonArray oneAttrResults = any.result().getJsonArray("results");
-                  logger.debug("include query results: " + oneAttrResults);
-
-                  if (null != oneAttrResults && oneAttrResults.size() > 0) {
-                    // parse and mapping result.
-                    Map<String, JsonObject> attrMaps = new HashMap<>(oneAttrResults.size());
-
-                    oneAttrResults.stream().forEach(obj -> attrMaps.put(((JsonObject)obj).getString(LeanObject.ATTR_NAME_OBJECTID), (JsonObject)obj));
-
-                    results.stream().forEach(obj2 -> {
-                      JsonObject tmp = (JsonObject)obj2;
-                      if (tmp.containsKey(attr)) {
-                        String tmpObjectId = tmp.getJsonObject(attr).getString(LeanObject.ATTR_NAME_OBJECTID);
-                        JsonObject completedObject = attrMaps.get(tmpObjectId);
-                        if (null != completedObject) {
-                          logger.debug("replace attr:" + attr + ", objectId:" + tmpObjectId + ", jsonObject:" + completedObject);
-                          tmp.put(attr, completedObject);
-                        } else {
-                          logger.warn("not found result for attr:" + attr + ", objectId:" + tmpObjectId);
-                        }
+//            logger.debug("first results:" + results);
+            List<Future> futures = includeArray.stream()
+                    .map(attr -> {
+                      Future<Void> future1Attr = Future.future();
+                      List<Object> includedAttrResults = results.stream()
+                              .filter(obj -> (obj instanceof JsonObject) && null != JsonFactory.getJsonObject((JsonObject) obj, attr))
+                              .collect(Collectors.toList());
+                      if (null == includedAttrResults || includedAttrResults.size() < 1) {
+                        logger.debug("there is nothing for target attr: " + attr);
+                        future1Attr.complete();
+                        return future1Attr;
                       }
-                    });
-                  }
-                  future1Attr.complete();
-                }
-              });
-              return future1Attr;
-            }).collect(Collectors.toList());
+                      JsonObject firstResult = (JsonObject) includedAttrResults.get(0);
+                      JsonObject pointerJson = JsonFactory.getJsonObject(firstResult, attr);
+                      String className = pointerJson.getString(LeanObject.ATTR_NAME_CLASSNAME);
+                      if (StringUtils.isEmpty(className)) {
+                        logger.warn("there is invalid Pointer(no className) for target attr: " + attr);
+                        future1Attr.complete();
+                        return future1Attr;
+                      }
+
+                      logger.debug("try to execute include query. attr=" + attr + ", targetClazz=" + className);
+
+                      List<String> targetObjectIds = includedAttrResults.stream()
+                              .map(obj -> JsonFactory.getJsonObject((JsonObject) obj, attr).getString(LeanObject.ATTR_NAME_OBJECTID))
+                              .filter(StringUtils::notEmpty)
+                              .collect(Collectors.toList());
+
+                      JsonObject subWhere = new JsonObject().put("objectId", new JsonObject().put("$in", targetObjectIds));
+                      QueryOptions subQueryOptions = new QueryOptions();
+                      subQueryOptions.setWhere(subWhere).setLimit(resultCount);
+//                      logger.debug("include query options: " + subQueryOptions.toJson());
+
+                      execute(className, subQueryOptions.toJson(), null, any -> {
+                        if (any.failed()) {
+                          logger.warn("failed to execute include query. cause: " + any.cause().getMessage());
+                          future1Attr.fail(any.cause());
+                        } else {
+                          JsonArray oneAttrResults = any.result().getJsonArray("results");
+//                          logger.debug("include query results: " + oneAttrResults);
+
+                          if (null != oneAttrResults && oneAttrResults.size() > 0) {
+                            // parse and mapping result.
+                            Map<String, JsonObject> attrMaps = new HashMap<>(oneAttrResults.size());
+
+                            oneAttrResults.stream()
+                                    .forEach(obj -> attrMaps.put(((JsonObject) obj).getString(LeanObject.ATTR_NAME_OBJECTID), (JsonObject) obj));
+
+                            results.stream().forEach(obj2 -> {
+                              JsonObject tmp = (JsonObject) obj2;
+                              JsonObject attrTargetJson = JsonFactory.getJsonObject(tmp, attr);
+                              if (null != attrTargetJson) {
+                                String tmpObjectId = attrTargetJson.getString(LeanObject.ATTR_NAME_OBJECTID);
+                                JsonObject completedObject = attrMaps.get(tmpObjectId);
+                                if (null != completedObject) {
+                                  logger.debug("replace attr:" + attr + ", objectId:" + tmpObjectId + ", jsonObject:" + completedObject);
+                                  JsonFactory.replaceJsonValue(tmp, attr, completedObject);
+                                } else {
+                                  logger.warn("not found result for attr:" + attr + ", objectId:" + tmpObjectId);
+                                }
+                              }
+                            });
+                          }
+                          future1Attr.complete();
+                        }
+                      });
+                      return future1Attr;
+                    }).collect(Collectors.toList());
             CompositeFuture.all(futures).setHandler(any -> {
               if (any.failed()) {
                 logger.warn("failed to execute all include query. cause: " + any.cause().getMessage());
                 handler.handle(wrapErrorResult(any.cause()));
               } else {
-                logger.debug("AllInOne finished. results=" + results);
+//                logger.debug("AllInOne finished. results=" + results);
                 handler.handle(wrapActualResult(new JsonObject().put("results", results)));
               }
             });
@@ -312,10 +308,10 @@ public class ObjectQueryHandler extends CommonHandler {
   /**
    * execute query actually.
    *
-   * @param clazz         className
-   * @param options       query options.
-   * @param includeArray  reserved for call aggregate api in future.
-   * @param handler       callback handler.
+   * @param clazz        className
+   * @param options      query options.
+   * @param includeArray reserved for call aggregate api in future.
+   * @param handler      callback handler.
    */
   private void execute(String clazz, JsonObject options, List<String> includeArray,
                        Handler<AsyncResult<JsonObject>> handler) {
@@ -342,7 +338,7 @@ public class ObjectQueryHandler extends CommonHandler {
                 subQueryFuture.fail(any.cause());
               } else {
                 JsonArray actualValues = any.result().getJsonArray("results").stream()
-                        .map(obj -> ((JsonObject)obj).getValue(attrName))
+                        .map(obj -> ((JsonObject) obj).getValue(attrName))
                         .collect(JsonFactory.toJsonArray());
                 condition.put(key, new JsonObject().put("$in", actualValues));
                 subQueryFuture.complete(true);
@@ -355,7 +351,7 @@ public class ObjectQueryHandler extends CommonHandler {
         }
       } else if (null != value && value instanceof JsonArray) {
         future = future.compose(val -> {
-          JsonArray arrayValue = (JsonArray)value;
+          JsonArray arrayValue = (JsonArray) value;
           Future<Boolean> arrayFuture = Future.future();
           for (Object v : arrayValue.getList()) {
             if (null != v && v instanceof JsonObject) {
@@ -368,7 +364,8 @@ public class ObjectQueryHandler extends CommonHandler {
                 return dummyFuture;
               });
             }
-          };
+          }
+          ;
           return arrayFuture;
         });
       } else {
@@ -447,10 +444,11 @@ public class ObjectQueryHandler extends CommonHandler {
         } else {
           return new AbstractMap.SimpleEntry<String, Object>(entry.getKey(), transformSubQuery(tmpValue));
         }
-      } if (null != value && value instanceof JsonArray) {
-        JsonArray newValue = ((JsonArray)value).stream().map(v -> {
+      }
+      if (null != value && value instanceof JsonArray) {
+        JsonArray newValue = ((JsonArray) value).stream().map(v -> {
           if (v instanceof JsonObject) {
-            return transformSubQuery((JsonObject)v);
+            return transformSubQuery((JsonObject) v);
           } else {
             return v;
           }

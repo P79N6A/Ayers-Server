@@ -20,6 +20,7 @@ public class LeanObject extends JsonObject{
   public static final String DATA_TYPE_DATE = "Date";
   public static final String DATA_TYPE_POINTER = "Pointer";
   public static final String DATA_TYPE_GEOPOINTER = "GeoPoint";
+  public static final String DATA_TYPE_File = "File";
 
   public static final String ATTR_NAME_TYPE = "__type";
   public static final String ATTR_NAME_OP = "__op";

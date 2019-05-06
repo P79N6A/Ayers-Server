@@ -58,6 +58,11 @@ public class BsonTransformer {
         result = new JsonObject();
         result.put("$ref", className);
         result.put("$id", new ObjectId(objectId).toString());
+      } else if (LeanObject.DATA_TYPE_File.equalsIgnoreCase(type)) {
+        String objectId = o.getString("id");
+        result = new JsonObject();
+        result.put("$ref", Constraints.FILE_CLASS);
+        result.put("$id", new ObjectId(objectId).toString());
       } else if (LeanObject.DATA_TYPE_GEOPOINTER.equalsIgnoreCase(type)) {
         double latitude = o.getDouble(LeanObject.ATTR_NAME_LATITUDE);
         double longitude = o.getDouble(LeanObject.ATTR_NAME_LONGITUDE);
@@ -243,9 +248,15 @@ public class BsonTransformer {
     if (o.containsKey("$ref") && o.containsKey("$id")) {
       String className = o.getString("$ref");
       String objectId = o.getString("$id");
-      newValue = new JsonObject().put(LeanObject.ATTR_NAME_TYPE, LeanObject.DATA_TYPE_POINTER);
-      newValue.put(LeanObject.ATTR_NAME_OBJECTID, objectId);
-      newValue.put(LeanObject.ATTR_NAME_CLASSNAME, className);
+      if (Constraints.FILE_CLASS.equalsIgnoreCase(className)) {
+        // File is a special Pointer.
+        newValue = new JsonObject().put(LeanObject.ATTR_NAME_TYPE, LeanObject.DATA_TYPE_File);
+        newValue.put("id", objectId);
+      } else {
+        newValue = new JsonObject().put(LeanObject.ATTR_NAME_TYPE, LeanObject.DATA_TYPE_POINTER);
+        newValue.put(LeanObject.ATTR_NAME_OBJECTID, objectId);
+        newValue.put(LeanObject.ATTR_NAME_CLASSNAME, className);
+      }
     } else if (o.containsKey("$date")) {
       newValue = new JsonObject().put(LeanObject.ATTR_NAME_TYPE, LeanObject.DATA_TYPE_DATE);
       newValue.put(LeanObject.ATTR_NAME_ISO, o.getString("$date"));
@@ -289,7 +300,7 @@ public class BsonTransformer {
         String isoString = ((JsonObject)value).getString("$date");
         result = new AbstractMap.SimpleEntry<String, Object>(key, isoString);
       } else if (value instanceof JsonObject) {
-        JsonObject newValue = decodeBsonUnit((JsonObject) value);
+        JsonObject newValue = decodeBsonObject((JsonObject) value);
         if (null != newValue) {
           result = new AbstractMap.SimpleEntry<>(key, newValue);
         }

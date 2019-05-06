@@ -8,7 +8,6 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.stream.Collector;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public final class JsonFactory {
@@ -107,5 +106,55 @@ public final class JsonFactory {
         t.put((String) u.getKey(), u.getValue());
       }
     }, JsonObject::mergeIn);
+  }
+
+  public static JsonObject getJsonObject(JsonObject source, String fieldPath) {
+    if (null == source || StringUtils.isEmpty(fieldPath)) {
+      return null;
+    }
+    int dotIndex = fieldPath.indexOf(".");
+    String first;
+    String rest;
+    if (dotIndex <= 0) {
+      first = fieldPath;
+      Object firstJson = source.getValue(first);
+      if (null == firstJson || !(firstJson instanceof JsonObject)) {
+        return null;
+      } else {
+        return (JsonObject) firstJson;
+      }
+    } else {
+      first = fieldPath.substring(0, dotIndex);
+      rest = fieldPath.substring(dotIndex + 1);
+      Object firstJson = source.getValue(first);
+      if (null == firstJson || !(firstJson instanceof JsonObject)) {
+        return null;
+      } else {
+        return getJsonObject((JsonObject) firstJson, rest);
+      }
+    }
+  }
+
+  public static boolean replaceJsonValue(JsonObject source, String fieldPath, JsonObject value) {
+    if (null == source || StringUtils.isEmpty(fieldPath)) {
+      return false;
+    }
+    int dotIndex = fieldPath.indexOf(".");
+    String first;
+    String rest;
+    if (dotIndex <= 0) {
+      first = fieldPath;
+      source.put(first, value);
+      return true;
+    } else {
+      first = fieldPath.substring(0, dotIndex);
+      rest = fieldPath.substring(dotIndex + 1);
+      Object firstJson = source.getValue(first);
+      if (null == firstJson || !(firstJson instanceof JsonObject)) {
+        return false;
+      } else {
+        return replaceJsonValue((JsonObject) firstJson, rest, value);
+      }
+    }
   }
 }

@@ -194,7 +194,7 @@ public class ObjectTests extends WebClientTests {
           JsonObject reviewJson = new JsonObject().put("__type", "Pointer").put("className", "Reviewer").put("objectId", oneObjectId);
           Future tmp = Future.future();
           commentFutures.add(tmp);
-          post("/1.1/classes/Comment", new JsonObject().put("content", slice).put("author", reviewJson), res2 -> {
+          post("/1.1/classes/Comment", new JsonObject().put("content", slice).put("writer", new JsonObject().put("ptr", reviewJson)), res2 -> {
             if (res2.failed()) {
               res2.cause().printStackTrace();
               tmp.fail(res2.cause());
@@ -231,12 +231,12 @@ public class ObjectTests extends WebClientTests {
   }
 
   public void testIncludeQuery() throws Exception {
-    JsonObject where = new JsonObject().put("author", new JsonObject().put("$exists", true));
+    JsonObject where = new JsonObject().put("writer", new JsonObject().put("$exists", true));
     JsonObject queryParam = new JsonObject();
     queryParam.put("limit", "5");
     queryParam.put("where", where.toString());
     queryParam.put("keys", "content");
-    queryParam.put("include", "author");
+    queryParam.put("include", "author,writer.ptr");
     queryParam.put("order", "updatedAt");
     get("/1.1/classes/Comment", queryParam, res -> {
       if (res.failed()) {

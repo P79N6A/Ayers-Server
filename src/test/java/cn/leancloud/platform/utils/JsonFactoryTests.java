@@ -35,4 +35,26 @@ public class JsonFactoryTests extends TestCase {
     JsonObject res = input.stream().collect(JsonFactory.toJsonObject());
     System.out.println(res);
   }
+
+  public void testGetJsonObject() throws Exception {
+    JsonObject tmp = new JsonObject();
+    tmp.put("address", new JsonObject().put("province", new JsonObject().put("city", new JsonObject().put("name", "beijing"))));
+    JsonObject beijing = JsonFactory.getJsonObject(tmp, "address.province.city");
+    assertTrue(null != beijing);
+    assertTrue(beijing.getString("name").equals("beijing"));
+    JsonObject shanghai = JsonFactory.getJsonObject(tmp, "address.city.town.district");
+    assertTrue(null == shanghai);
+
+    JsonObject capital = new JsonObject().put("name", "beijing").put("area", 4223432).put("population", 432423212);
+    boolean replaceResult = JsonFactory.replaceJsonValue(tmp, "address.city.town", capital);
+    assertTrue(!replaceResult);
+    replaceResult = JsonFactory.replaceJsonValue(tmp, "address.province.city", capital);
+    assertTrue(replaceResult);
+    replaceResult = JsonFactory.replaceJsonValue(tmp, "address.province.city.area", new JsonObject().put("long", 43.43));
+    assertTrue(replaceResult);
+
+    beijing = JsonFactory.getJsonObject(tmp, "address.province.city");
+    assertTrue(null != beijing);
+    assertTrue(beijing.getInteger("population") == 432423212);
+  }
 }

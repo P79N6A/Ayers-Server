@@ -1,7 +1,9 @@
 package cn.leancloud.platform.common;
 
+import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
 import junit.framework.TestCase;
+import scala.collection.immutable.Stream;
 
 public class TransformerTest extends TestCase {
 
@@ -252,6 +254,73 @@ public class TransformerTest extends TestCase {
     System.out.println(newObj.toString());
     assertTrue(newObj.getJsonObject("$set").getJsonObject("param").getValue("mime_type") == null);
     assertTrue(newObj.getJsonObject("$set").getJsonObject("param").getString("provider").equals("qiniu"));
+  }
+
+  public void testDecodeWithMultiLayerPointer() throws Exception {
+    String param = "{\n" +
+            "    \"_id\" : \"5ccff10816dadd2147a72aaa\",\n" +
+            "    \"content\" : \"Tag cloud visual taxonomy using the\",\n" +
+            "    \"writer\" : {\n" +
+            "      \"ptr\" : {\n" +
+            "        \"$ref\" : \"Reviewer\",\n" +
+            "        \"$id\" : \"5ccff10816dadd2147a72aa0\"\n" +
+            "      }\n" +
+            "    },\n" +
+            "   \"author\" : {\n" +
+            "        \"$ref\" : \"Reviewer\",\n" +
+            "        \"$id\" : \"5ccff10816dadd2147a72aa0\"\n" +
+            "      },\n" +
+            "    \"createdAt\" : \"2019-05-06T08:32:08.98Z\",\n" +
+            "    \"updatedAt\" : \"2019-05-06T08:32:08.98Z\"\n" +
+            "  }";
+    JsonObject result = BsonTransformer.decodeBsonObject(new JsonObject(param));
+    System.out.println(Json.encodePrettily(result));
+    assertTrue(null != result);
+  }
+
+  public void testProcessFileJson() throws Exception {
+    String param;
+    JsonObject bsonObject;
+    JsonObject jsonObject;
+
+    param = "{\n" +
+            "        \"name\": \"hjiang\",\n" +
+            "        \"picture\": {\n" +
+            "          \"id\": \"543cbaede4b07db196f50f3c\",\n" +
+            "          \"__type\": \"File\"\n" +
+            "        }\n" +
+            "      }";
+    bsonObject = BsonTransformer.encode2BsonRequest(new JsonObject(param), BsonTransformer.REQUEST_OP.CREATE);
+    System.out.println(Json.encodePrettily(bsonObject));
+    assertTrue(null != bsonObject);
+    assertTrue(bsonObject.getJsonObject("picture").getString("$ref").equals(Constraints.FILE_CLASS));
+    assertTrue(bsonObject.getJsonObject("picture").getString("$id").equals("543cbaede4b07db196f50f3c"));
+    jsonObject = BsonTransformer.decodeBsonObject(bsonObject);
+    System.out.println(Json.encodePrettily(jsonObject));
+    assertTrue(null != jsonObject);
+    assertTrue(jsonObject.getJsonObject("picture").getString("__type").equals("File"));
+    assertTrue(jsonObject.getJsonObject("picture").getString("id").equals("543cbaede4b07db196f50f3c"));
+
+    param = "{\"name\": \"system\"," +
+            " \"sys\": true,\n" +
+            " \"author\": {\n" +
+            "        \"name\": \"hjiang\",\n" +
+            "        \"picture\": {\n" +
+            "          \"id\": \"543cbaede4b07db196f50f3c\",\n" +
+            "          \"__type\": \"File\"\n" +
+            "        }\n" +
+            "   }" +
+            "}";
+    bsonObject = BsonTransformer.encode2BsonRequest(new JsonObject(param), BsonTransformer.REQUEST_OP.CREATE);
+    System.out.println(Json.encodePrettily(bsonObject));
+    assertTrue(null != bsonObject);
+    assertTrue(bsonObject.getJsonObject("author").getJsonObject("picture").getString("$ref").equals(Constraints.FILE_CLASS));
+    assertTrue(bsonObject.getJsonObject("author").getJsonObject("picture").getString("$id").equals("543cbaede4b07db196f50f3c"));
+    jsonObject = BsonTransformer.decodeBsonObject(bsonObject);
+    System.out.println(Json.encodePrettily(jsonObject));
+    assertTrue(null != jsonObject);
+    assertTrue(jsonObject.getJsonObject("author").getJsonObject("picture").getString("__type").equals("File"));
+    assertTrue(jsonObject.getJsonObject("author").getJsonObject("picture").getString("id").equals("543cbaede4b07db196f50f3c"));
   }
 
   public void testJsonMerge() throws Exception {
