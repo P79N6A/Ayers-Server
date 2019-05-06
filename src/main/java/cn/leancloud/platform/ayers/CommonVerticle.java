@@ -54,7 +54,7 @@ public class CommonVerticle extends AbstractVerticle {
     JsonObject body;
     if (HttpMethod.GET.equals(httpMethod)) {
       Map<String, String> filteredEntries = context.request().params().entries()
-              .stream().parallel()
+              .parallelStream()
               .filter(entry ->
                       !REQUEST_PARAM_CLAZZ.equalsIgnoreCase(entry.getKey()) && !REQUEST_PARAM_OBJECTID.equalsIgnoreCase(entry.getKey()))
               .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));

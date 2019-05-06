@@ -1,5 +1,6 @@
 package cn.leancloud.platform.modules;
 
+import io.vertx.core.json.JsonObject;
 import junit.framework.TestCase;
 
 public class ObjectSpecificsTests extends TestCase {
@@ -21,9 +22,50 @@ public class ObjectSpecificsTests extends TestCase {
         true, true, true, true,
         false, false, false, false};
     for (int i = 0; i < paths.length; i++) {
-      boolean tmp = ObjectSpecifics.validRequestPath(paths[i]);
+      boolean tmp = ObjectSpecifics.validateRequestPath(paths[i]);
       System.out.println("check " + paths[i] + ", result=" + tmp);
       assertTrue( expecteds[i] == tmp);
     }
+  }
+
+  public void testValidNullJson() throws Exception {
+    boolean r = ObjectSpecifics.validateObject(null);
+    assertTrue(r);
+  }
+
+  public void testValidateNormalSimpleJson() throws Exception {
+    String json = "{\n" +
+            "  \"content\": \"每个 Java 程序员必备的 8 个开发工具\",\n" +
+            "  \"pubUser\": \"LeanCloud官方客服\",\n" +
+            "  \"pubTimestamp\": 1435541999\n" +
+            "}";
+    boolean r = ObjectSpecifics.validateObject(new JsonObject(json));
+    assertTrue(r);
+  }
+
+  public void testValidateNormalRecursiveJson() throws Exception {
+    String json = "{\"tags\":{\"__op\":\"AddUnique\",\"objects\":[\"Frontend\",\"JavaScript\"]}," +
+            "\"balance\":{\"__op\":\"Decrement\",\"amount\": 30}," +
+            "\"downvotes\":{\"__op\":\"Delete\"}}";
+    boolean r = ObjectSpecifics.validateObject(new JsonObject(json));
+    assertTrue(r);
+  }
+
+  public void testValidateAbnormalSimpleJson() throws Exception {
+    String json = "{\n" +
+            "  \"$content\": \"每个 Java 程序员必备的 8 个开发工具\",\n" +
+            "  \"#pubUser\": \"LeanCloud官方客服\",\n" +
+            "  \"?pubTimestamp\": 1435541999\n" +
+            "}";
+    boolean r = ObjectSpecifics.validateObject(new JsonObject(json));
+    assertTrue(!r);
+  }
+
+  public void testValidateAbnormalRecursiveJson() throws Exception {
+    String json = "{\"tags\":{\"__op\":\"AddUnique\",\"objects\":[\"Frontend\",\"JavaScript\"]}," +
+            "\"balance\":{\"__op\":\"Decrement\",\"#amount\": 30}," +
+            "\"downvotes\":{\"$__op\":\"Delete\"}}";
+    boolean r = ObjectSpecifics.validateObject(new JsonObject(json));
+    assertTrue(!r);
   }
 }

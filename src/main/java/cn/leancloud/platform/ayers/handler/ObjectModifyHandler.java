@@ -120,11 +120,11 @@ public class ObjectModifyHandler extends CommonHandler {
     String clazz = pair.getLeft();
     String objectId = pair.getRight();
     if (StringUtils.isEmpty(method) || !isUpdatableOperation(method) || StringUtils.isEmpty(path)
-            || !ObjectSpecifics.validRequestPath(path)) {
+            || !ObjectSpecifics.validateRequestPath(path)) {
       logger.warn("invalid request. method:" + method + ", path:" + path);
       return null;
     }
-    if (StringUtils.isEmpty(clazz) && !ObjectSpecifics.validClassName(clazz)) {
+    if (StringUtils.isEmpty(clazz) && !ObjectSpecifics.validateClassName(clazz)) {
       logger.warn("invalid clazz:" + clazz);
       return null;
     }

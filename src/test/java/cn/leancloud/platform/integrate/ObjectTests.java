@@ -235,4 +235,8 @@ public class ObjectTests extends WebClientTests {
     latch.await();
     assertTrue(testSuccessed);
   }
+
+  public void testSubQuery() throws Exception {
+
+  }
 }

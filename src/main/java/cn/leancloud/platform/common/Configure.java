@@ -14,8 +14,8 @@ import org.slf4j.LoggerFactory;
 
 public class Configure {
   private static final Logger logger = LoggerFactory.getLogger(Configure.class);
-  public static final String MAILADDRESS_DATASTORE_QUEUE = "datastore.queue";
-  public static final String MAILADDRESS_DEMOCLES_QUEUE = "democles.queue";
+  public static final String MAIL_ADDRESS_DATASTORE_QUEUE = "datastore.queue";
+  public static final String MAIL_ADDRESS_DAMOCLES_QUEUE = "damocles.queue";
 
   private static Configure instance = null;
   private JsonObject settings = new JsonObject();

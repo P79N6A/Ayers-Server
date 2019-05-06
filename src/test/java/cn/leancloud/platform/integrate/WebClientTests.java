@@ -38,6 +38,8 @@ public class WebClientTests extends TestCase {
   protected void tearDown() throws Exception {
   }
 
+  public void testDummy() throws Exception {}
+
   private void fillHeaders(HttpRequest httpRequest) {
     httpRequest.putHeader(RequestParse.HEADER_LC_APPID, "testAppId");
     httpRequest.putHeader(RequestParse.HEADER_LC_APPKEY, "testAppKey");

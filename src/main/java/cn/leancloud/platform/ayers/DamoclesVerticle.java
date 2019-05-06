@@ -296,8 +296,8 @@ public class DamoclesVerticle extends CommonVerticle {
           }
         });
       }
-      vertx.eventBus().consumer(Configure.MAILADDRESS_DEMOCLES_QUEUE, this::onMessage);
-      logger.info("begin to consume address: " + Configure.MAILADDRESS_DEMOCLES_QUEUE);
+      vertx.eventBus().consumer(Configure.MAIL_ADDRESS_DAMOCLES_QUEUE, this::onMessage);
+      logger.info("begin to consume address: " + Configure.MAIL_ADDRESS_DAMOCLES_QUEUE);
       startFuture.complete();
     });
   }

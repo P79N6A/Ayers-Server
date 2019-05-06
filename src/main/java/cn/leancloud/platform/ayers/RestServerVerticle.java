@@ -26,6 +26,7 @@ import io.vertx.ext.web.api.validation.HTTPRequestValidationHandler;
 import io.vertx.ext.web.api.validation.ValidationException;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CorsHandler;
+import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,7 +56,7 @@ public class RestServerVerticle extends CommonVerticle {
 
   private void crudObject(RoutingContext context) {
     String clazz = parseRequestClassname(context);
-    if (!ObjectSpecifics.validClassName(clazz)) {
+    if (!ObjectSpecifics.validateClassName(clazz)) {
       logger.warn("invalid class name: " + clazz);
       badRequest(context, ErrorCodes.INVALID_CLASSNAME.toJson());
       return;
@@ -167,7 +168,7 @@ public class RestServerVerticle extends CommonVerticle {
     if (HttpMethod.POST.equals(httpMethod)) {
       String roleName = body.getString("name");
       JsonObject acl = body.getJsonObject(LeanObject.BUILTIN_ATTR_ACL);
-      if (!ObjectSpecifics.validRoleName(roleName)) {
+      if (!ObjectSpecifics.validateRoleName(roleName)) {
         badRequest(context, ErrorCodes.INVALID_ROLENAME.toJson());
         return;
       }
@@ -318,6 +319,13 @@ public class RestServerVerticle extends CommonVerticle {
 
     logger.debug("curl object. clazz=" + clazz + ", objectId=" + objectId + ", method=" + httpMethod
             + ", param=" + body + ", fetchWhenSave=" + fetchWhenSave);
+
+    if ((HttpMethod.POST.equals(httpMethod) || HttpMethod.PUT.equals(httpMethod)) && null != body) {
+      if (!ObjectSpecifics.validateObject(body)) {
+        badRequest(context, ErrorCodes.INVALID_PARAMETER.toJson());
+        return;
+      }
+    }
 
     Handler<AsyncResult<JsonObject>> replayHandler = reply -> {
       if (reply.failed()) {
@@ -516,12 +524,11 @@ public class RestServerVerticle extends CommonVerticle {
         logger.warn("invalid request. cause: " + validationErrorMessage);
       }
     });
-//    router.errorHandler(HttpStatus.SC_INTERNAL_SERVER_ERROR, routingContext -> {
-//      if (routingContext.failed()) {
-//        logger.warn("internal error. cause: " + routingContext.failure().getMessage());
-//      }
-//      routingContext.next();
-//    });
+    router.errorHandler(HttpStatus.SC_INTERNAL_SERVER_ERROR, routingContext -> {
+      if (routingContext.failed()) {
+        logger.warn("internal error. cause: " + routingContext.failure().getMessage());
+      }
+    });
 
     int portNumber = Configure.getInstance().listenPort();
     httpServer.requestHandler(router).listen(portNumber, ar -> {

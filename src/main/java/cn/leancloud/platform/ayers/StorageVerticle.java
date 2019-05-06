@@ -14,7 +14,6 @@ import io.vertx.core.json.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Instant;
 import java.util.stream.Stream;
 
 import static cn.leancloud.platform.modules.User.parseAuthData;
@@ -337,8 +336,8 @@ public class StorageVerticle extends CommonVerticle {
     logger.info("start StorageVerticle...");
     prepareDatabase();
 
-    vertx.eventBus().consumer(Configure.MAILADDRESS_DATASTORE_QUEUE, this::onMessage);
-    logger.info("begin to consume address: " + Configure.MAILADDRESS_DATASTORE_QUEUE);
+    vertx.eventBus().consumer(Configure.MAIL_ADDRESS_DATASTORE_QUEUE, this::onMessage);
+    logger.info("begin to consume address: " + Configure.MAIL_ADDRESS_DATASTORE_QUEUE);
     startFuture.complete();
   }
 

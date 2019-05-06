@@ -1,6 +1,5 @@
 package cn.leancloud.platform.ayers.handler;
 
-import cn.leancloud.platform.ayers.CommonVerticle;
 import cn.leancloud.platform.ayers.RequestParse;
 import cn.leancloud.platform.codec.Base64;
 import cn.leancloud.platform.codec.MessageDigest;
@@ -133,7 +132,7 @@ public class UserHandler extends CommonHandler {
       if (!usernamePassSelected && !mobileSmscodeSelected && !mobilePassSelected && !thirdPartyLogin) {
         result.setSuccess(false);
         result.setMessage(ErrorCodes.INVALID_PARAMETER.getMessage());
-      } else if (StringUtils.notEmpty(email) && !ObjectSpecifics.validEmail(email)) {
+      } else if (StringUtils.notEmpty(email) && !ObjectSpecifics.validateEmail(email)) {
         result.setSuccess(false);
         result.setMessage(ErrorCodes.INVALID_EMAIL.getMessage());
       } else {

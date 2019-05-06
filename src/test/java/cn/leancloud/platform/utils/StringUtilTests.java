@@ -1,7 +1,6 @@
 package cn.leancloud.platform.utils;
 
 import cn.leancloud.platform.modules.ObjectSpecifics;
-import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import junit.framework.TestCase;
@@ -31,7 +30,7 @@ public class StringUtilTests extends TestCase {
     boolean[] expected = new boolean[]{true, false, false, false, false, true};
 
     for (int i = 0; i < paths.length; i++) {
-      boolean ret = ObjectSpecifics.validRequestPath(paths[i]);
+      boolean ret = ObjectSpecifics.validateRequestPath(paths[i]);
       assertTrue(ret == expected[i]);
     }
   }

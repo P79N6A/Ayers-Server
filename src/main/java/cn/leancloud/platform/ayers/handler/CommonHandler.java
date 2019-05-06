@@ -173,7 +173,7 @@ public class CommonHandler {
     String upperOperation = operation.toUpperCase();
     DeliveryOptions options = new DeliveryOptions().addHeader(CommonVerticle.INTERNAL_MSG_HEADER_OP, upperOperation);
 
-    vertx.eventBus().send(Configure.MAILADDRESS_DEMOCLES_QUEUE, request, options, res -> {
+    vertx.eventBus().send(Configure.MAIL_ADDRESS_DAMOCLES_QUEUE, request, options, res -> {
       handler.handle(res.map(v -> (JsonObject) v.body()));
     });
   }
@@ -206,19 +206,19 @@ public class CommonHandler {
     DeliveryOptions options = new DeliveryOptions().addHeader(CommonVerticle.INTERNAL_MSG_HEADER_OP, upperOperation);
     if (shouldChangeSchema(clazz, upperOperation)) {
       logger.debug("send to damocles for scheme checking...");
-      vertx.eventBus().send(Configure.MAILADDRESS_DEMOCLES_QUEUE, request, options, response -> {
+      vertx.eventBus().send(Configure.MAIL_ADDRESS_DAMOCLES_QUEUE, request, options, response -> {
         if (response.failed()) {
           logger.warn("failed to check schema by damocles.");
           handler.handle(response.map(v -> (JsonObject)v.body()));
         } else {
           logger.debug("pass schema check, send to storage verticle.");
-          vertx.eventBus().send(Configure.MAILADDRESS_DATASTORE_QUEUE, request, options,
+          vertx.eventBus().send(Configure.MAIL_ADDRESS_DATASTORE_QUEUE, request, options,
                   res2 -> handler.handle(res2.map(v -> (JsonObject)v.body())));
         }
       });
     } else {
       logger.debug("send to storage verticle directly...");
-      vertx.eventBus().send(Configure.MAILADDRESS_DATASTORE_QUEUE, request, options,
+      vertx.eventBus().send(Configure.MAIL_ADDRESS_DATASTORE_QUEUE, request, options,
               res -> handler.handle(res.map(v -> (JsonObject) v.body())));
     }
   }
