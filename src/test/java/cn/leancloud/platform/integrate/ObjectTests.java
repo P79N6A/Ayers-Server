@@ -213,6 +213,23 @@ public class ObjectTests extends WebClientTests {
     assertTrue(testSuccessed);
   }
 
+  public void testPostFileObject() throws Exception {
+    String json = "{\"metaData\": {\"owner\": \"unknown\", \"__source\": \"external\"},\n" +
+            "\"name\": \"screen.jpg\",\n" +
+            "\"url\": \"http://i1.wp.com/blog.avoscloud.com/wp-content/uploads/2014/05/screen568x568-1.jpg?resize=202%2C360\"}";
+    post("/1.1/files/screen.jpg", new JsonObject(json), res -> {
+      if (res.failed()) {
+        System.out.println(res.cause().getMessage());
+        latch.countDown();
+      } else {
+        testSuccessed = true;
+        latch.countDown();
+      }
+    });
+    latch.await();
+    assertTrue(testSuccessed);
+  }
+
   public void testIncludeQuery() throws Exception {
     JsonObject where = new JsonObject().put("author", new JsonObject().put("$exists", true));
     JsonObject queryParam = new JsonObject();

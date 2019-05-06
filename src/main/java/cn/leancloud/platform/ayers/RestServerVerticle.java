@@ -31,6 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.util.Optional;
 
 /**
  * Hello world!
@@ -314,9 +315,15 @@ public class RestServerVerticle extends CommonVerticle {
     String objectId = parseRequestObjectId(context);
     JsonObject body = parseRequestBody(context);
     HttpMethod httpMethod = context.request().method();
+    String name = parseRequestName(context);
     String fetchWhenSave = context.request().getParam("fetchWhenSave");
     boolean returnNewObject = Boolean.valueOf(fetchWhenSave);
 
+    if (Constraints.FILE_CLASS.equals(clazz) && StringUtils.notEmpty(name) && HttpMethod.POST.equals(httpMethod)) {
+      if (null != body && !body.containsKey(REQUEST_PARAM_NAME)) {
+        body.put(REQUEST_PARAM_NAME, name);
+      }
+    }
     logger.debug("curl object. clazz=" + clazz + ", objectId=" + objectId + ", method=" + httpMethod
             + ", param=" + body + ", fetchWhenSave=" + fetchWhenSave);
 
@@ -357,9 +364,12 @@ public class RestServerVerticle extends CommonVerticle {
           created(context, location, result);
         } else if (HttpMethod.GET == httpMethod && StringUtils.notEmpty(objectId)) {
           JsonArray resultArray = result.getJsonArray("results");
-          JsonObject object = null == resultArray? null: (JsonObject) resultArray.stream().findFirst().get();
-          if (null == object) {
-            object = new JsonObject();
+          JsonObject object = new JsonObject();
+          if (null != resultArray) {
+            Optional optional = resultArray.stream().findFirst();
+            if (optional.isPresent()) {
+              object = (JsonObject) optional.get();
+            }
           }
           if (null != handler) {
             handler.handle(object);
@@ -496,6 +506,7 @@ public class RestServerVerticle extends CommonVerticle {
     router.get("/1.1/files/:objectId").handler(this::crudSingleFile);
     router.delete("/1.1/files/:objectId").handler(this::crudSingleFile);
     router.post("/1.1/files").handler(this::crudSingleFile);
+    router.post("/1.1/files/:name").handler(this::crudSingleFile);
 
     router.post("/1.1/roles").handler(this::crudRole);
     router.get("/1.1/roles").handler(this::crudRole);
@@ -506,13 +517,13 @@ public class RestServerVerticle extends CommonVerticle {
     router.post("/1.1/batch").handler(this::batchWrite);
     router.post("/1.1/batch/save").handler(this::batchWrite);
 
-    router.post("/1.1/schema/:clazz/_test").handler(this::testSchema);
-    router.post("/1.1/schema/:clazz").handler(this::addSchemaIfAbsent);
-    router.get("/1.1/schema/:clazz").handler(this::listSchema);
+    router.post("/1.1/schemas/:clazz/_test").handler(this::testSchema);
+    router.post("/1.1/schemas/:clazz").handler(this::addSchemaIfAbsent);
+    router.get("/1.1/schemas/:clazz").handler(this::listSchema);
 
     router.post("/1.1/indices/:clazz").handler(this::createIndex);
     router.get("/1.1/indices/:clazz").handler(this::listIndex);
-    router.delete("/1.1/indices/:clazz/:indexName").handler(this::deleteIndex);
+    router.delete("/1.1/indices/:clazz/:name").handler(this::deleteIndex);
 
     router.post("/1.1/requestSmsCode").handler(this::requestSmsCode);
     router.post("/1.1/verifySmsCode/:smscode").handler(this::verifySmsCode);
@@ -527,6 +538,7 @@ public class RestServerVerticle extends CommonVerticle {
     router.errorHandler(HttpStatus.SC_INTERNAL_SERVER_ERROR, routingContext -> {
       if (routingContext.failed()) {
         logger.warn("internal error. cause: " + routingContext.failure().getMessage());
+        routingContext.failure().printStackTrace();
       }
     });
 
@@ -631,7 +643,7 @@ public class RestServerVerticle extends CommonVerticle {
 
   private void deleteIndex(RoutingContext context) {
     String clazz = parseRequestClassname(context);
-    String indexName = parseRequestIndexName(context);
+    String indexName = parseRequestName(context);
     IndexHandler handler = new IndexHandler(vertx, context);
     handler.delete(clazz, indexName, res -> {
       if (res.failed()) {

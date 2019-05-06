@@ -21,7 +21,7 @@ public class CommonVerticle extends AbstractVerticle {
 
   protected static final String REQUEST_PARAM_OBJECTID = "objectId";
   protected static final String REQUEST_PARAM_CLAZZ = "clazz";
-  protected static final String REQUEST_PARAM_INDEXNAME = "indexName";
+  protected static final String REQUEST_PARAM_NAME = "name";
 
   public static final String INTERNAL_MSG_ATTR_CLASS = "class";
   public static final String INTERNAL_MSG_ATTR_OBJECT_ID = "objectId";
@@ -45,8 +45,8 @@ public class CommonVerticle extends AbstractVerticle {
     return context.request().getParam(REQUEST_PARAM_CLAZZ);
   }
 
-  protected String parseRequestIndexName(RoutingContext context) {
-    return context.request().getParam(REQUEST_PARAM_INDEXNAME);
+  protected String parseRequestName(RoutingContext context) {
+    return context.request().getParam(REQUEST_PARAM_NAME);
   }
 
   protected JsonObject parseRequestBody(RoutingContext context) {

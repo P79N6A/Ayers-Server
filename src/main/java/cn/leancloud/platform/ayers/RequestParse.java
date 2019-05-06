@@ -169,11 +169,10 @@ public class RequestParse {
       useMasterKey = true;
     } else if (StringUtils.notEmpty(requestSign)) {
       String[] signParts = requestSign.split(",");
-
       if (signParts.length > 1) {
         requestSign = signParts[0];
         requestTimestamp = signParts[1];
-        if (signParts.length == 3 || signParts[2].equalsIgnoreCase("master")) {
+        if (signParts.length == 3 && signParts[2].equalsIgnoreCase("master")) {
           useMasterKey = true;
         }
       } else {

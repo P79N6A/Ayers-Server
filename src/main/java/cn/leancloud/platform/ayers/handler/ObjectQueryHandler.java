@@ -221,20 +221,34 @@ public class ObjectQueryHandler extends CommonHandler {
             }
             logger.debug("first results:" + results);
             List<Future> futures = includeArray.stream().map(attr -> {
-              Future<Void> future1 = Future.future();
-              List<Object> includeResults = results.stream().filter(obj -> ((JsonObject)obj).containsKey(attr)).collect(Collectors.toList());
-              if (null == includeResults || includeResults.size() < 1) {
-                future1.complete();
-                return future1;
+              Future<Void> future1Attr = Future.future();
+              List<Object> includedAttrResults = results.stream()
+                      .filter(obj -> ((JsonObject)obj).containsKey(attr) && null != ((JsonObject)obj).getValue(attr))
+                      .collect(Collectors.toList());
+              if (null == includedAttrResults || includedAttrResults.size() < 1) {
+                logger.debug("there is nothing for target attr: " + attr);
+                future1Attr.complete();
+                return future1Attr;
               }
-              JsonObject firstResult = (JsonObject) includeResults.get(0);
+              JsonObject firstResult = (JsonObject) includedAttrResults.get(0);
+              if (!(firstResult.getValue(attr) instanceof JsonObject)) {
+                logger.debug("there is non-jsonobject for target attr: " + attr);
+                future1Attr.complete();
+                return future1Attr;
+              }
               String className = firstResult.getJsonObject(attr).getString(LeanObject.ATTR_NAME_CLASSNAME);
+              if (StringUtils.isEmpty(className)) {
+                logger.warn("there is invalid Pointer(no className) for target attr: " + attr);
+                future1Attr.complete();
+                return future1Attr;
+              }
+
               logger.debug("try to execute include query. attr=" + attr + ", targetClazz=" + className);
 
               // FIXME: maybe attr is not top attribute, such as {"location":{"city":{"__type":"Pointer", "className":"City", "objectId":"lshfieafhiehfeei2eh2o"}}}
               // will query with includeKey="location.city"
 
-              List<String> targetObjectIds = includeResults.stream()
+              List<String> targetObjectIds = includedAttrResults.stream()
                       .map(obj -> ((JsonObject)obj).getJsonObject(attr).getString(LeanObject.ATTR_NAME_OBJECTID))
                       .filter(StringUtils::notEmpty)
                       .collect(Collectors.toList());
@@ -247,7 +261,7 @@ public class ObjectQueryHandler extends CommonHandler {
               execute(className, subQueryOptions.toJson(), null, any -> {
                 if (any.failed()) {
                   logger.warn("failed to execute include query. cause: " + any.cause().getMessage());
-                  future1.fail(any.cause());
+                  future1Attr.fail(any.cause());
                 } else {
                   JsonArray oneAttrResults = any.result().getJsonArray("results");
                   logger.debug("include query results: " + oneAttrResults);
@@ -272,10 +286,10 @@ public class ObjectQueryHandler extends CommonHandler {
                       }
                     });
                   }
-                  future1.complete();
+                  future1Attr.complete();
                 }
               });
-              return future1;
+              return future1Attr;
             }).collect(Collectors.toList());
             CompositeFuture.all(futures).setHandler(any -> {
               if (any.failed()) {
