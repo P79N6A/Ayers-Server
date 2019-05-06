@@ -57,7 +57,7 @@ public class EngineHookProxy extends CommonWebClient {
     EngineMetaStore engineMetaStore = EngineMetaStore.getInstance();
     String funcPath = engineMetaStore.getHookFunctionPath(clazz, type);
     if (StringUtils.isEmpty(funcPath)) {
-      logger.debug("not found hook function for class:" + clazz + ", type:" + type.getName());
+//      logger.debug("not found hook function for class:" + clazz + ", type:" + type.getName());
       handler.handle(wrapAsyncResult(param));
     } else {
       logger.debug("try to call hook function for class:" + clazz + ", type:" + type.getName() + "，param:" + param);

@@ -151,8 +151,8 @@ public class ObjectTests extends WebClientTests {
     int commentSourceLength = commentSourceText.length();
 
     int tag_len = tags.length;
-    int reviewerCount = 10;
-    int CommentCount = 20;
+    int reviewerCount = 1;
+    int CommentCount = 2;
 
     List<String> reviewerIds = new ArrayList<>(reviewerCount);
 
@@ -189,12 +189,15 @@ public class ObjectTests extends WebClientTests {
             textBegin = textEnd;
             textEnd = t;
           }
+          if (textEnd - textBegin > 30) {
+            textEnd = textBegin + 30;
+          }
           String slice = commentSourceText.substring(textBegin, textEnd);
           String oneObjectId = reviewerIds.get(reviewerIndex);
           JsonObject reviewJson = new JsonObject().put("__type", "Pointer").put("className", "Reviewer").put("objectId", oneObjectId);
           Future tmp = Future.future();
           commentFutures.add(tmp);
-          post("/1.1/classes/Comment", new JsonObject().put("content", slice).put("writer", new JsonObject().put("ptr", reviewJson)), res2 -> {
+          post("/1.1/classes/Comment", new JsonObject().put("content", slice).put("author", new JsonObject().put("ptr", reviewJson)), res2 -> {
             if (res2.failed()) {
               res2.cause().printStackTrace();
               tmp.fail(res2.cause());

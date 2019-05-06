@@ -52,10 +52,10 @@ public class EngineMetaStore {
    */
   public String getHookFunctionPath(String clazz, HookType type) {
     String key = String.format(HOOK_FUNC_FORMAT, type.getName(), clazz);
-    logger.debug("look for key: " + key);
+//    logger.debug("look for key: " + key);
     if (hookFuntions.containsKey(key)) {
       String path = String.format(HOOK_FUNC_REQUEST_PATH, clazz, type.getRequestPath());
-      logger.debug("found path: " + path);
+//      logger.debug("found path: " + path);
       return path;
     } else {
       return null;

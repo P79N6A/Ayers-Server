@@ -344,7 +344,7 @@ public class RestServerVerticle extends CommonVerticle {
           } else {
             badRequest(context, responseJson);
           }
-        } if (reply.cause() instanceof NoStackTraceThrowable) {
+        } else if (reply.cause() instanceof NoStackTraceThrowable) {
           // failed by leanengine hook func.
           badRequest(context, new JsonObject(reply.cause().getMessage()));
         } else {
