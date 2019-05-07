@@ -1,6 +1,7 @@
 package cn.leancloud.platform.common;
 
 import cn.leancloud.platform.modules.LeanObject;
+import cn.leancloud.platform.modules.Schema;
 import cn.leancloud.platform.utils.JsonFactory;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -49,21 +50,21 @@ public class BsonTransformer {
     JsonObject result = null;
     if (o.containsKey(LeanObject.ATTR_NAME_TYPE) && o.getValue(LeanObject.ATTR_NAME_TYPE) instanceof String) {
       String type = o.getString(LeanObject.ATTR_NAME_TYPE);
-      if (LeanObject.DATA_TYPE_DATE.equalsIgnoreCase(type)) {
+      if (Schema.DATA_TYPE_DATE.equalsIgnoreCase(type)) {
         String isoString = o.getString(LeanObject.ATTR_NAME_ISO);
         result = new JsonObject().put("$date", isoString);
-      } else if (LeanObject.DATA_TYPE_POINTER.equalsIgnoreCase(type)) {
+      } else if (Schema.DATA_TYPE_POINTER.equalsIgnoreCase(type)) {
         String className = o.getString(LeanObject.ATTR_NAME_CLASSNAME);
         String objectId = o.getString(LeanObject.ATTR_NAME_OBJECTID);
         result = new JsonObject();
         result.put("$ref", className);
         result.put("$id", new ObjectId(objectId).toString());
-      } else if (LeanObject.DATA_TYPE_File.equalsIgnoreCase(type)) {
+      } else if (Schema.DATA_TYPE_FILE.equalsIgnoreCase(type)) {
         String objectId = o.getString("id");
         result = new JsonObject();
         result.put("$ref", Constraints.FILE_CLASS);
         result.put("$id", new ObjectId(objectId).toString());
-      } else if (LeanObject.DATA_TYPE_GEOPOINTER.equalsIgnoreCase(type)) {
+      } else if (Schema.DATA_TYPE_GEOPOINT.equalsIgnoreCase(type)) {
         double latitude = o.getDouble(LeanObject.ATTR_NAME_LATITUDE);
         double longitude = o.getDouble(LeanObject.ATTR_NAME_LONGITUDE);
         result = new JsonObject().put("type", "Point");
@@ -250,22 +251,22 @@ public class BsonTransformer {
       String objectId = o.getString("$id");
       if (Constraints.FILE_CLASS.equalsIgnoreCase(className)) {
         // File is a special Pointer.
-        newValue = new JsonObject().put(LeanObject.ATTR_NAME_TYPE, LeanObject.DATA_TYPE_File);
+        newValue = new JsonObject().put(LeanObject.ATTR_NAME_TYPE, Schema.DATA_TYPE_FILE);
         newValue.put("id", objectId);
       } else {
-        newValue = new JsonObject().put(LeanObject.ATTR_NAME_TYPE, LeanObject.DATA_TYPE_POINTER);
+        newValue = new JsonObject().put(LeanObject.ATTR_NAME_TYPE, Schema.DATA_TYPE_POINTER);
         newValue.put(LeanObject.ATTR_NAME_OBJECTID, objectId);
         newValue.put(LeanObject.ATTR_NAME_CLASSNAME, className);
       }
     } else if (o.containsKey("$date")) {
-      newValue = new JsonObject().put(LeanObject.ATTR_NAME_TYPE, LeanObject.DATA_TYPE_DATE);
+      newValue = new JsonObject().put(LeanObject.ATTR_NAME_TYPE, Schema.DATA_TYPE_DATE);
       newValue.put(LeanObject.ATTR_NAME_ISO, o.getString("$date"));
     } else if ("Point".equalsIgnoreCase(o.getString("type")) && null != o.getJsonArray("coordinates")) {
       JsonArray coordinates = o.getJsonArray("coordinates");
       if (coordinates.size() == 2) {
         double longitude = coordinates.getDouble(0);
         double latitude = coordinates.getDouble(1);
-        newValue = new JsonObject().put(LeanObject.ATTR_NAME_TYPE, LeanObject.DATA_TYPE_GEOPOINTER);
+        newValue = new JsonObject().put(LeanObject.ATTR_NAME_TYPE, Schema.DATA_TYPE_GEOPOINT);
         newValue.put(LeanObject.ATTR_NAME_LONGITUDE, longitude);
         newValue.put(LeanObject.ATTR_NAME_LATITUDE, latitude);
       } else {

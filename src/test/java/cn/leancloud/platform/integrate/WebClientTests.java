@@ -14,6 +14,8 @@ import io.vertx.ext.web.client.WebClient;
 import junit.framework.TestCase;
 
 import java.net.URLEncoder;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
 public class WebClientTests extends TestCase {
@@ -23,6 +25,7 @@ public class WebClientTests extends TestCase {
   protected static final String HOST = "localhost";
   protected static final int PORT = 8080;
 
+  private Map<String, String> otherHeaders = new HashMap<>();
 
   public WebClientTests() {
     webClient = WebClient.create(Vertx.vertx());
@@ -32,6 +35,7 @@ public class WebClientTests extends TestCase {
   protected void setUp() throws Exception {
     latch = new CountDownLatch(1);
     testSuccessed = false;
+    otherHeaders.clear();
   }
 
   @Override
@@ -40,11 +44,18 @@ public class WebClientTests extends TestCase {
 
   public void testDummy() throws Exception {}
 
+  protected void addHttpHeader(String name, String value) {
+    otherHeaders.put(name, value);
+  }
+
   private void fillHeaders(HttpRequest httpRequest) {
     httpRequest.putHeader(RequestParse.HEADER_LC_APPID, "testAppId");
     httpRequest.putHeader(RequestParse.HEADER_LC_APPKEY, "testAppKey");
     httpRequest.putHeader(RequestParse.HEADER_CONTENT_TYPE, RequestParse.CONTENT_TYPE_JSON);
     httpRequest.putHeader("Accept", RequestParse.CONTENT_TYPE_JSON);
+    for (Map.Entry<String, String> entry : otherHeaders.entrySet()) {
+      httpRequest.putHeader(entry.getKey(), entry.getValue());
+    }
   }
   protected void get(String path, JsonObject queryParam, Handler<AsyncResult<JsonObject>> handler) {
     String fullPath = path;

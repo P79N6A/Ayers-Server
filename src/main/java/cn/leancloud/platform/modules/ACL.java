@@ -17,12 +17,8 @@ public class ACL {
 
     Permissions(boolean read, boolean write) {
       super();
-      if (read) {
-        put(KEY_READ_PERMISSION, read);
-      }
-      if (write) {
-        put(KEY_WRITE_PERMISSION, write);
-      }
+      put(KEY_READ_PERMISSION, read);
+      put(KEY_WRITE_PERMISSION, write);
     }
 
     Permissions(Map<String, Object> map) {
@@ -58,11 +54,19 @@ public class ACL {
     }
 
     boolean getReadPermission() {
-      return get(KEY_READ_PERMISSION);
+      if (containsKey(KEY_READ_PERMISSION)) {
+        return get(KEY_READ_PERMISSION);
+      } else {
+        return false;
+      }
     }
 
     boolean getWritePermission() {
-      return get(KEY_WRITE_PERMISSION);
+      if (containsKey(KEY_WRITE_PERMISSION)) {
+        return get(KEY_WRITE_PERMISSION);
+      } else {
+        return false;
+      }
     }
   }
 
@@ -143,7 +147,7 @@ public class ACL {
       return false;
     }
     Permissions permissions = permissionsById.get(userId);
-    return permissions != null && permissions.getReadPermission();
+    return permissions == null ? false : permissions.getReadPermission();
   }
 
   /**
@@ -156,7 +160,7 @@ public class ACL {
       return false;
     }
     Permissions permissions = permissionsById.get(userId);
-    return permissions != null && permissions.getWritePermission();
+    return permissions == null ? false : permissions.getWritePermission();
   }
 
   /**

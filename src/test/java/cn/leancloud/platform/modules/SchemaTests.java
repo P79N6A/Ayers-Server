@@ -27,7 +27,7 @@ public class SchemaTests extends TestCase {
             "    \"expired\": \"expiredafe\",\n" +
             "    \"unionid\": \"faheifeunio\",\n" +
             "    \"platform\": \"weixin\",\n" +
-            "    \"main_account\": \"true\"\n" +
+            "    \"main_account\": true\n" +
             "  },\n" +
             " \"wqq\": {\n" +
             "    \"openid\": \"openidafhie\",\n" +
@@ -35,7 +35,7 @@ public class SchemaTests extends TestCase {
             "    \"expired\": \"faefwerewfdf\",\n" +
             "    \"unionid\": \"afhiefneiekke\",\n" +
             "    \"platform\": \"weixin\",\n" +
-            "    \"main_account\": \"false\"\n" +
+            "    \"main_account\": false\n" +
             "  }" +
             " }" +
             "}";

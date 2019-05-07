@@ -3,10 +3,6 @@ package cn.leancloud.platform.modules;
 import cn.leancloud.platform.common.BsonTransformer;
 import cn.leancloud.platform.utils.JsonFactory;
 import cn.leancloud.platform.utils.StringUtils;
-import cn.leancloud.platform.modules.type.LeanDate;
-import cn.leancloud.platform.modules.type.LeanGeoPoint;
-import cn.leancloud.platform.modules.type.LeanPointer;
-import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,11 +12,6 @@ import java.util.AbstractMap;
 
 public class LeanObject extends JsonObject{
   protected static final Logger logger = LoggerFactory.getLogger(LeanObject.class);
-
-  public static final String DATA_TYPE_DATE = "Date";
-  public static final String DATA_TYPE_POINTER = "Pointer";
-  public static final String DATA_TYPE_GEOPOINTER = "GeoPoint";
-  public static final String DATA_TYPE_File = "File";
 
   public static final String ATTR_NAME_TYPE = "__type";
   public static final String ATTR_NAME_OP = "__op";
@@ -52,7 +43,7 @@ public class LeanObject extends JsonObject{
   private String className = "";
 
   public static JsonObject getCurrentDate() {
-    return new JsonObject().put(ATTR_NAME_TYPE, DATA_TYPE_DATE).put(ATTR_NAME_ISO, Instant.now().toString());
+    return new JsonObject().put(ATTR_NAME_TYPE, Schema.DATA_TYPE_DATE).put(ATTR_NAME_ISO, Instant.now().toString());
   }
 
   public LeanObject(String className, JsonObject value) {
@@ -97,22 +88,24 @@ public class LeanObject extends JsonObject{
       return null;
     }
     if (value instanceof Integer || value instanceof Float || value instanceof Double) {
-      return new JsonObject().put("type", Number.class.getName());
+      return new JsonObject().put(Schema.SCHEMA_KEY_TYPE, Number.class.getSimpleName());
     } else if (value instanceof JsonObject) {
       JsonObject newValue = (JsonObject) value;
       if (newValue.containsKey(ATTR_NAME_TYPE)) {
         String type = newValue.getString(ATTR_NAME_TYPE);
-        if (DATA_TYPE_DATE.equalsIgnoreCase(type)) {
+        if (Schema.DATA_TYPE_DATE.equalsIgnoreCase(type)) {
           if (StringUtils.notEmpty(newValue.getString(ATTR_NAME_ISO))) {
-            return new JsonObject().put("type", LeanDate.class.getName());
+            return new JsonObject().put(Schema.SCHEMA_KEY_TYPE, Schema.DATA_TYPE_DATE);
           }
-        } else if (DATA_TYPE_POINTER.equalsIgnoreCase(type)) {
+        } else if (Schema.DATA_TYPE_POINTER.equalsIgnoreCase(type)) {
           String className = newValue.getString(ATTR_NAME_CLASSNAME);
           if (StringUtils.notEmpty(className)) {
-            return new JsonObject().put("type", LeanPointer.class.getName()).put("reference", className);
+            return new JsonObject().put(Schema.SCHEMA_KEY_TYPE, Schema.DATA_TYPE_POINTER).put(Schema.SCHEMA_KEY_REF, className);
           }
-        } else if (DATA_TYPE_GEOPOINTER.equalsIgnoreCase(type)) {
-          return new JsonObject().put("type", LeanGeoPoint.class.getName());
+        } else if (Schema.DATA_TYPE_GEOPOINT.equalsIgnoreCase(type)) {
+          return new JsonObject().put(Schema.SCHEMA_KEY_TYPE, Schema.DATA_TYPE_GEOPOINT);
+        } else if (Schema.DATA_TYPE_FILE.equalsIgnoreCase(type)) {
+          return new JsonObject().put(Schema.SCHEMA_KEY_TYPE, Schema.DATA_TYPE_FILE).put("v", 2);
         }
       } else if (newValue.containsKey(ATTR_NAME_OP)) {
         String operation = newValue.getString(ATTR_NAME_OP);
@@ -122,13 +115,13 @@ public class LeanObject extends JsonObject{
           case BsonTransformer.REST_OP_ADD_UNIQUE:
           case BsonTransformer.REST_OP_REMOVE_RELATION:
           case BsonTransformer.REST_OP_REMOVE:
-            return new JsonObject().put("type", JsonArray.class.getName());
+            return new JsonObject().put(Schema.SCHEMA_KEY_TYPE, Schema.DATA_TYPE_ARRAY);
           case BsonTransformer.REST_OP_BITAND:
           case BsonTransformer.REST_OP_BITOR:
           case BsonTransformer.REST_OP_BITXOR:
           case BsonTransformer.REST_OP_INCREMENT:
           case BsonTransformer.REST_OP_DECREMENT:
-            return new JsonObject().put("type", Number.class.getName());
+            return new JsonObject().put(Schema.SCHEMA_KEY_TYPE, Schema.DATA_TYPE_NUMBER);
           case BsonTransformer.REST_OP_DELETE:
             return null;
           default:
@@ -139,9 +132,9 @@ public class LeanObject extends JsonObject{
               .map(entry -> new AbstractMap.SimpleEntry(entry.getKey(), guessValueType(entry.getValue())))
               .filter(simpleEntry -> simpleEntry.getValue() != null)
               .collect(JsonFactory.toJsonObject());
-      return new JsonObject().put("type", JsonObject.class.getName()).put("schema", recurSchema);
+      return new JsonObject().put(Schema.SCHEMA_KEY_TYPE, Schema.DATA_TYPE_OBJECT).put(Schema.SCHEMA_KEY_SCHEMA, recurSchema);
     }
-    return new JsonObject().put("type", value.getClass().getName());
+    return new JsonObject().put(Schema.SCHEMA_KEY_TYPE, value.getClass().getSimpleName());
   }
 
   public Schema guessSchema() {

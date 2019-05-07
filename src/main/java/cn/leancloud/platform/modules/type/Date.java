@@ -1,4 +1,4 @@
 package cn.leancloud.platform.modules.type;
 
-public class LeanDate {
+public class Date {
 }
