@@ -1,6 +1,7 @@
 package cn.leancloud.platform.ayers.handler;
 
 import cn.leancloud.platform.ayers.RequestParse;
+import cn.leancloud.platform.cache.UnifiedCache;
 import cn.leancloud.platform.codec.Base64;
 import cn.leancloud.platform.codec.MessageDigest;
 import cn.leancloud.platform.common.*;
@@ -156,24 +157,48 @@ public class UserHandler extends CommonHandler {
 
   public void signup(JsonObject param, Handler<AsyncResult<JsonObject>> handler) {
     String operation = RequestParse.OP_USER_SIGNUP;
-    sendDataOperationWithOption(Constraints.USER_CLASS, null, operation, null, param, true, handler);
+    sendDataOperationWithOption(Constraints.USER_CLASS, null, operation, null, param, true, res -> {
+      if (res.succeeded() && null != res.result()) {
+        JsonObject user = res.result();
+        UnifiedCache.getGlobalInstance().put(user.getString(LeanObject.BUILTIN_ATTR_SESSION_TOKEN), user);
+      }
+      handler.handle(res);
+    });
   }
 
   public void signin(JsonObject param, Handler<AsyncResult<JsonObject>> handler) {
     String operation = RequestParse.OP_USER_SIGNIN;
-    sendDataOperationWithOption(Constraints.USER_CLASS, null, operation, null, param, true, handler);
+    sendDataOperationWithOption(Constraints.USER_CLASS, null, operation, null, param, true, res -> {
+      if (res.succeeded() && null != res.result()) {
+        JsonObject user = res.result();
+        UnifiedCache.getGlobalInstance().put(user.getString(LeanObject.BUILTIN_ATTR_SESSION_TOKEN), user);
+      }
+      handler.handle(res);
+    });
   }
 
-  public void validateSessionToken(String objectId, String sessionToken, Handler<AsyncResult<JsonObject>> handler) {
+  public void validateSessionToken(String sessionToken, Handler<AsyncResult<JsonObject>> handler) {
     JsonObject body = new JsonObject().put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, sessionToken);
-    sendDataOperation(Constraints.USER_CLASS, objectId, HttpMethod.GET.toString(), body, null, handler);
+    sendDataOperation(Constraints.USER_CLASS, null, HttpMethod.GET.toString(), body, null, res -> {
+      if (res.succeeded() && null != res.result()) {
+        JsonObject user = res.result();
+        UnifiedCache.getGlobalInstance().put(user.getString(LeanObject.BUILTIN_ATTR_SESSION_TOKEN), user);
+      }
+      handler.handle(res);
+    });
   }
 
   public void updateSessionToken(String objectId, String sessionToken, String newSessionToken, Handler<AsyncResult<JsonObject>> handler) {
-    // find and update.
+    // findMetaInfo and updateSingleObject.
     JsonObject query = new JsonObject().put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, sessionToken).put(LeanObject.ATTR_NAME_OBJECTID, objectId);
     JsonObject update = new JsonObject().put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, newSessionToken);
-    sendDataOperationWithOption(Constraints.USER_CLASS, objectId, HttpMethod.PUT.toString(), query, update, true, handler);
+    sendDataOperationWithOption(Constraints.USER_CLASS, objectId, HttpMethod.PUT.toString(), query, update, true, res -> {
+      if (res.succeeded() && null != res.result()) {
+        JsonObject user = res.result();
+        UnifiedCache.getGlobalInstance().put(user.getString(LeanObject.BUILTIN_ATTR_SESSION_TOKEN), user);
+      }
+      handler.handle(res);
+    });
   }
 
 

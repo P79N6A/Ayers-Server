@@ -6,6 +6,7 @@ import io.vertx.core.Handler;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import javafx.util.converter.DateStringConverter;
 
 import java.util.List;
 
@@ -155,6 +156,7 @@ public interface DataStore {
       return json;
     }
   }
+
   DataStore insertWithOptions(String clazz, JsonObject obj, InsertOption options, Handler<AsyncResult<JsonObject>> resultHandler);
   DataStore findOne(String clazz, JsonObject query, JsonObject fields, Handler<AsyncResult<JsonObject>> resultHandler);
   DataStore updateWithOptions(String clazz, JsonObject query, JsonObject object, UpdateOption options,
@@ -178,9 +180,10 @@ public interface DataStore {
                                    Handler<AsyncResult<Void>> resultHandler);
   DataStore listIndices(String clazz, Handler<AsyncResult<JsonArray>> resultHandler);
 
-  DataStore findSchema(String clazz, Handler<AsyncResult<JsonObject>> resultHandler);
-  DataStore upsertSchema(String clazz, Schema schema, Handler<AsyncResult<JsonObject>> resultHandler);
-  DataStore listSchemas(Handler<AsyncResult<List<JsonObject>>> resultHandler);
-  DataStore removeSchema(String clazz, Handler<AsyncResult<Long>> resultHandler);
+  DataStore findMetaInfo(String clazz, Handler<AsyncResult<JsonObject>> resultHandler);
+  DataStore upsertMetaInfo(String clazz, JsonObject metaInfo, Handler<AsyncResult<JsonObject>> resultHandler);
+  DataStore listClassMetaInfo(Handler<AsyncResult<List<JsonObject>>> resultHandler);
+  DataStore removeMetaInfo(String clazz, Handler<AsyncResult<Long>> resultHandler);
+
   void close();
 }

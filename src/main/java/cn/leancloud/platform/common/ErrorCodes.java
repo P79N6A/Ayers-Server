@@ -21,7 +21,7 @@ public enum ErrorCodes {
   INVALID_JSON_FORMAT(107, "Malformed json object. A json dictionary is expected."),
 
   OBJECT_TOO_LARGE(116, "The object is too large."),
-  USER_NOT_FOUND(211, "Could not find user."),
+  USER_NOT_FOUND(211, "Could not findMetaInfo user."),
   EMAIL_NOT_VERIFIED(216, "Email address isn't verified."),
 
   OBJECT_NOT_FOUND(101, ""),

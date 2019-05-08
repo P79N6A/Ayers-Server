@@ -76,7 +76,7 @@ public class MainVerticle extends CommonVerticle {
                 .build(vertx);
       }
       configure.setDataStoreFactory(dataStoreFactory);
-      configure.setSchemaCache(new InMemoryLRUCache<>(1000));
+      configure.setClassMetaDataCache(new InMemoryLRUCache<>(1000));
 
       Future<String> httpVerticleDeployment = Future.future();
       vertx.deployVerticle(new RestServerVerticle(), httpVerticleDeployment);

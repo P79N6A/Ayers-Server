@@ -26,11 +26,11 @@ public class ObjectTests extends WebClientTests {
             .put("pubUser", "LeanCloud官方客服").put("pubTimestamp", 1435541999);
     post("/1.1/classes/Post", data, response -> {
       if (response.failed()) {
-        System.out.println("failed to create object, cause:" + response.cause());
+        System.out.println("failed to createSingleObject object, cause:" + response.cause());
         latch.countDown();
       } else {
         JsonObject result = response.result();
-        System.out.println("create result: " + result);
+        System.out.println("createSingleObject result: " + result);
         String objectId = result.getString("objectId");
         assertTrue(StringUtils.notEmpty(objectId) && result.getString("createdAt") != null);
         get("/1.1/classes/Post/" + objectId, null, res -> {
@@ -44,16 +44,16 @@ public class ObjectTests extends WebClientTests {
             JsonObject update = new JsonObject().put("content", "每个 JavaScript 程序员必备的 9 个开发工具");
             put("/1.1/classes/Post/" + objectId, update, res3 -> {
               if (res3.failed()) {
-                System.out.println("failed to update object, cause:" + res3.cause());
+                System.out.println("failed to updateSingleObject object, cause:" + res3.cause());
                 latch.countDown();
               } else {
-                System.out.println("update result: " + res3.result());
+                System.out.println("updateSingleObject result: " + res3.result());
                 delete("/1.1/classes/Post/" + objectId, null, res4 -> {
                   if (res4.failed()) {
-                    System.out.println("failed to delete object, cause:" + res4.cause());
+                    System.out.println("failed to deleteSingleObject object, cause:" + res4.cause());
                     latch.countDown();
                   } else {
-                    System.out.println("delete result: " + res4.result());
+                    System.out.println("deleteSingleObject result: " + res4.result());
                     testSuccessed = true;
                     latch.countDown();
                   }

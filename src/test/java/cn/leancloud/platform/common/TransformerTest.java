@@ -248,7 +248,7 @@ public class TransformerTest extends TestCase {
   }
 
   public void testEncodeNullValue() throws Exception {
-    String param = "{\"class\":\"_File\",\"param\":{\"key\":\"b2d5cb4e988cd6f19198.js\",\"name\":\"stream-test.js\",\"metaData\":{\"owner\":\"unknown\"},\"url\":\"http://lc-ohqhxu3m.cn-n1.lcfile.com/b2d5cb4e988cd6f19198.js\",\"mime_type\":null,\"provider\":\"qiniu\",\"bucket\":\"ohqhxu3m\"}}";
+    String param = "{\"class\":\"_File\",\"param\":{\"key\":\"b2d5cb4e988cd6f19198.js\",\"name\":\"stream-testSchema.js\",\"metaData\":{\"owner\":\"unknown\"},\"url\":\"http://lc-ohqhxu3m.cn-n1.lcfile.com/b2d5cb4e988cd6f19198.js\",\"mime_type\":null,\"provider\":\"qiniu\",\"bucket\":\"ohqhxu3m\"}}";
     JsonObject paramObj = new JsonObject(param);
     JsonObject newObj = BsonTransformer.encode2BsonRequest(paramObj, BsonTransformer.REQUEST_OP.UPDATE);
     System.out.println(newObj.toString());

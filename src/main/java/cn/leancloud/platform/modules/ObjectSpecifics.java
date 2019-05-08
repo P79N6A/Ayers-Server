@@ -1,6 +1,5 @@
 package cn.leancloud.platform.modules;
 
-import cn.leancloud.platform.ayers.handler.ObjectQueryHandler;
 import io.vertx.core.impl.ConcurrentHashSet;
 import io.vertx.core.json.JsonObject;
 
@@ -56,8 +55,12 @@ public class ObjectSpecifics {
     boolean result = data.stream().map(entry -> {
       String key = entry.getKey();
       Object v = entry.getValue();
+      if (LeanObject.BUILTIN_ATTR_ACL.equals(key)) {
+        return true;
+      }
       boolean isValid = validateAttrName(key);
       if (!isValid) {
+        System.out.println("found invalid key: " + key);
         return isValid;
       }
       if (null != v && v instanceof JsonObject) {

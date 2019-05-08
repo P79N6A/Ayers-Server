@@ -57,7 +57,7 @@ public class FileHandler extends CommonHandler {
     if (result) {
       // TODO: remove appId/objectId/token from cache.
     } else {
-      // TODO: remove appId/objectId/token from cache, delete File document.
+      // TODO: remove appId/objectId/token from cache, deleteSingleObject File document.
     }
   }
 }

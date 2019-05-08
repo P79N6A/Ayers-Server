@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.AbstractMap;
+import java.util.List;
 
 public class LeanObject extends JsonObject{
   protected static final Logger logger = LoggerFactory.getLogger(LeanObject.class);
@@ -63,6 +64,11 @@ public class LeanObject extends JsonObject{
   public LeanObject(JsonObject value) {
     super(value.getMap());
   }
+
+  public static LeanObject fromJson(String className, JsonObject value) {
+    return new LeanObject(className, value);
+  }
+
   public String getObjectId() {
     return getString(ATTR_NAME_OBJECTID);
   }
@@ -81,6 +87,24 @@ public class LeanObject extends JsonObject{
 
   public void setClassName(String className) {
     this.className = className;
+  }
+
+  public boolean checkOperationByACL(boolean isWrite, String userId, List<String> userRoles) {
+    JsonObject aclJson = getJsonObject(BUILTIN_ATTR_ACL);
+    if (null == aclJson) {
+      // always enable if non acl.
+      return true;
+    }
+    ACL acl = new ACL(aclJson);
+    boolean publicAllowed = isWrite ? acl.getPublicWriteAccess() : acl.getPublicReadAccess();
+    if (publicAllowed) {
+      return true;
+    }
+    if (StringUtils.isEmpty(userId)) {
+      return false;
+    }
+    boolean userIdSetting = isWrite ? acl.getWriteAccess(userId) : acl.getReadAccess(userId);
+    return userIdSetting;
   }
 
   private static JsonObject guessValueType(Object value) {
@@ -140,7 +164,12 @@ public class LeanObject extends JsonObject{
   public Schema guessSchema() {
     JsonObject result = stream().filter(entry -> null != entry.getValue()).map(entry -> {
       Object value = entry.getValue();
-      JsonObject valueType = guessValueType(value);
+      JsonObject valueType;
+      if (LeanObject.BUILTIN_ATTR_ACL.equals(entry.getKey())) {
+        valueType = new JsonObject().put("type", "ACL");
+      } else {
+        valueType = guessValueType(value);
+      }
       return new AbstractMap.SimpleEntry(entry.getKey(), valueType);
     }).filter(simpleEntry -> simpleEntry.getValue() != null).collect(JsonFactory.toJsonObject());
     return new Schema(result);

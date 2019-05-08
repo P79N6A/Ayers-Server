@@ -61,6 +61,8 @@ public class RequestParse {
   public static final String OP_USER_SIGNUP = "SIGNUP";
   //public static final String OP_USER_AUTH_LOGIN = "AUTH_LOGIN";
 
+  public static final String OP_CREATE_CLASS = "CREATE_CLASS";
+
   public static final String OP_CREATE_INDEX = "CREATE_INDEX";
   public static final String OP_DELETE_INDEX = "DELETE_INDEX";
   public static final String OP_LIST_INDEX = "LIST_INDEX";

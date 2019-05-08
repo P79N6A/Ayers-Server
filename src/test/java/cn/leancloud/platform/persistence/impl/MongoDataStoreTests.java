@@ -9,7 +9,6 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.streams.ReadStream;
 import junit.framework.TestCase;
-import scala.collection.immutable.StreamIterator;
 
 import java.time.Instant;
 import java.util.Arrays;
@@ -28,7 +27,7 @@ public class MongoDataStoreTests extends TestCase {
     JsonObject mongoConfig = new JsonObject()
             .put("host", "localhost")
             .put("port", 27027)
-            .put("db_name", "uluru-test")
+            .put("db_name", "uluru-testSchema")
             .put("maxPoolSize", 3)
             .put("minPoolSize", 1)
             .put("keepAlive", true);
@@ -53,7 +52,7 @@ public class MongoDataStoreTests extends TestCase {
   public void testInsertDocument() throws Exception {
     JsonObject document = new JsonObject();
     document.put("time", System.currentTimeMillis());
-    dataStore.insertWithOptions("test", document, null, res -> {
+    dataStore.insertWithOptions("testSchema", document, null, res -> {
       if (res.succeeded()) {
         System.out.println(res.result());
         testSuccessed = true;
@@ -67,7 +66,7 @@ public class MongoDataStoreTests extends TestCase {
     JsonObject filter = new JsonObject().put("time", new JsonObject().put("$lt", System.currentTimeMillis()));
     DataStore.QueryOption option = new DataStore.QueryOption();
     option.setLimit(100);
-    dataStore.findWithOptions("test", filter, option, res -> {
+    dataStore.findWithOptions("testSchema", filter, option, res -> {
       if (res.succeeded()) {
         System.out.println(res.result());
         testSuccessed = res.result().size() > 1;
@@ -79,12 +78,12 @@ public class MongoDataStoreTests extends TestCase {
 
   public void testUpdateWithOptions() throws Exception {
     JsonObject query = new JsonObject().put("objectId", "5cbc637de7573f0226106226");
-    JsonObject update = new JsonObject().put("updatedAt", Instant.now()).put("source", "modified by unit test");
+    JsonObject update = new JsonObject().put("updatedAt", Instant.now()).put("source", "modified by unit testSchema");
     DataStore.QueryOption option = new DataStore.QueryOption();
     option.setLimit(100);
     DataStore.UpdateOption updateOption = new DataStore.UpdateOption();
     updateOption.setReturnNewDocument(true);
-    dataStore.findOneAndUpdateWithOptions("test", query, update, option, updateOption, res -> {
+    dataStore.findOneAndUpdateWithOptions("testSchema", query, update, option, updateOption, res -> {
       if (res.succeeded()) {
         System.out.println(res.result());
         testSuccessed = res.result() != null;
@@ -110,13 +109,13 @@ public class MongoDataStoreTests extends TestCase {
 
     Schema schema2 = object.guessSchema();
 
-    dataStore.upsertSchema("Post", schema1, event -> {
+    dataStore.upsertMetaInfo("Post", schema1, event -> {
       if (event.failed()) {
         System.out.println("failed to upsert first schema. cause: " + event.cause());
         latch.countDown();
       } else {
         System.out.println("succeed to upsert first schema. result: " + event.result());
-        dataStore.listSchemas(event2 -> {
+        dataStore.listClassMetaInfo(event2 -> {
           if (event2.failed()) {
             System.out.println("failed to list schema after first upsert. cause: " + event2.cause());
             latch.countDown();
@@ -125,13 +124,13 @@ public class MongoDataStoreTests extends TestCase {
             latch.countDown();
           } else {
             System.out.println("succeed to list schema after first upsert. result: " + event2.result());
-            dataStore.upsertSchema("Post", schema2, event1 -> {
+            dataStore.upsertMetaInfo("Post", schema2, event1 -> {
               if (event1.failed()) {
                 System.out.println("failed to upsert schema again. cause: " + event1.cause());
                 latch.countDown();
               } else {
                 System.out.println("succeed to upsert schema again. result: " + event1.result());
-                dataStore.removeSchema("Post", event3 -> {
+                dataStore.removeMetaInfo("Post", event3 -> {
                   if (event3.failed()) {
                     System.out.println("failed to remove schema. cause: " + event3.cause());
                     latch.countDown();
@@ -155,7 +154,7 @@ public class MongoDataStoreTests extends TestCase {
   }
 
   public void testListEmptyIndex() throws Exception {
-    dataStore.listIndices("test", res -> {
+    dataStore.listIndices("testSchema", res -> {
       if (res.succeeded()) {
         System.out.println(res.result().toString());
         JsonArray result = res.result().stream().filter(json -> !"_id_".equals(((JsonObject)json).getString("name")))
@@ -238,6 +237,20 @@ public class MongoDataStoreTests extends TestCase {
     latch.await();
   }
 
+  public void testListClassMetaData() throws Exception {
+    dataStore.listClassMetaInfo(response -> {
+      if (response.failed()) {
+        latch.countDown();
+      } else {
+        System.out.println(response.result());
+        testSuccessed = true;
+        latch.countDown();
+      }
+    });
+    latch.await();
+    assertTrue(testSuccessed);
+  }
+
   public void testIndexCRUD() throws Exception {
     LeanObject object = new LeanObject("Post");
     object.put("title", "LeanCloud");
@@ -258,7 +271,7 @@ public class MongoDataStoreTests extends TestCase {
         dataStore.createIndexWithOptions("Post", new JsonObject().put("localtion", "2dsphere"), indexOption,
                 res2 -> {
           if (res2.failed()) {
-            System.out.println("failed to create index. cause: " + res2.cause());
+            System.out.println("failed to createSingleObject index. cause: " + res2.cause());
             latch.countDown();
           } else {
             dataStore.listIndices("Post", res3 -> {
@@ -293,18 +306,18 @@ public class MongoDataStoreTests extends TestCase {
     dataStore.createIndexWithOptions("_User", new JsonObject().put("updatedAt", 1), indexOption, res -> {
       if (res.failed()) {
         dataStore.close();
-        System.out.println("failed to create index for updatedAt at first.");
+        System.out.println("failed to createSingleObject index for updatedAt at first.");
         res.cause().printStackTrace();
         latch.countDown();
       } else {
-        System.out.println("succeed to create index for updatedAt at first.");
+        System.out.println("succeed to createSingleObject index for updatedAt at first.");
         dataStore.createIndexWithOptions("_User", new JsonObject().put("updatedAt", 1), indexOption, res2 -> {
           dataStore.close();
           if (res2.failed()) {
-            System.out.println("failed to create index for updatedAt again.");
+            System.out.println("failed to createSingleObject index for updatedAt again.");
             res2.cause().printStackTrace();
           } else {
-            System.out.println("succeed to create index for updatedAt again.");
+            System.out.println("succeed to createSingleObject index for updatedAt again.");
             testSuccessed = true;
           }
           latch.countDown();

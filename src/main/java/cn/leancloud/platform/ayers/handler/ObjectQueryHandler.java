@@ -1,7 +1,10 @@
 package cn.leancloud.platform.ayers.handler;
 
+import cn.leancloud.platform.ayers.RequestParse;
+import cn.leancloud.platform.modules.ClassPermission;
 import cn.leancloud.platform.modules.LeanObject;
 import cn.leancloud.platform.utils.JsonFactory;
+import cn.leancloud.platform.utils.JsonUtils;
 import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.*;
 import io.vertx.core.http.HttpMethod;
@@ -162,6 +165,38 @@ public class ObjectQueryHandler extends CommonHandler {
     Objects.requireNonNull(queryParam);
     Objects.requireNonNull(handler);
 
+    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(this.routingContext);
+    ClassPermission.OP op = ClassPermission.OP.FIND;
+    if (StringUtils.notEmpty(objectId)) {
+      op = ClassPermission.OP.GET;
+    }
+    classPermissionCheck(clazz, null, headers, op, response -> {
+      if (response.failed()) {
+        logger.warn("failed to check class permission. cause: " + response.cause().getMessage());
+        handler.handle(wrapErrorResult(new UnsupportedOperationException("Class permission check failed.")));
+      } if (!response.result()) {
+        handler.handle(wrapErrorResult(new UnsupportedOperationException("Class permission check failed.")));
+      } else {
+        if (StringUtils.notEmpty(objectId)) {
+          objectACLCheck(clazz, objectId, headers, ClassPermission.OP.GET, res2 -> {
+            if (res2.failed()) {
+              logger.warn("failed to check object ACL. cause: " + res2.cause().getMessage());
+              handler.handle(wrapErrorResult(new UnsupportedOperationException("Object ACL permission check failed.")));
+            } else if (!res2.result()){
+              logger.debug("not allowed operation bcz of object ACL.");
+              handler.handle(wrapErrorResult(new UnsupportedOperationException("Object ACL permission check failed.")));
+            } else {
+              queryWithCondition(clazz, objectId, queryParam, handler);
+            }
+          });
+        } else {
+          queryWithCondition(clazz, objectId, queryParam, handler);
+        }
+      }
+    });
+  }
+
+  private void queryWithCondition(String clazz, String objectId, JsonObject queryParam, Handler<AsyncResult<JsonObject>> handler) {
     String where = queryParam.getString(QUERY_KEY_WHERE, "{}");
     String order = queryParam.getString(QUERY_KEY_ORDER);
     int limit = Integer.valueOf(queryParam.getString(QUERY_KEY_LIMIT, DEFAULT_QUERY_LIMIT));
@@ -224,7 +259,7 @@ public class ObjectQueryHandler extends CommonHandler {
                     .map(attr -> {
                       Future<Void> future1Attr = Future.future();
                       List<Object> includedAttrResults = results.stream()
-                              .filter(obj -> (obj instanceof JsonObject) && null != JsonFactory.getJsonObject((JsonObject) obj, attr))
+                              .filter(obj -> (obj instanceof JsonObject) && null != JsonUtils.getJsonObject((JsonObject) obj, attr))
                               .collect(Collectors.toList());
                       if (null == includedAttrResults || includedAttrResults.size() < 1) {
                         logger.debug("there is nothing for target attr: " + attr);
@@ -232,7 +267,7 @@ public class ObjectQueryHandler extends CommonHandler {
                         return future1Attr;
                       }
                       JsonObject firstResult = (JsonObject) includedAttrResults.get(0);
-                      JsonObject pointerJson = JsonFactory.getJsonObject(firstResult, attr);
+                      JsonObject pointerJson = JsonUtils.getJsonObject(firstResult, attr);
                       String className = pointerJson.getString(LeanObject.ATTR_NAME_CLASSNAME);
                       if (StringUtils.isEmpty(className)) {
                         logger.warn("there is invalid Pointer(no className) for target attr: " + attr);
@@ -243,7 +278,7 @@ public class ObjectQueryHandler extends CommonHandler {
                       logger.debug("try to execute include query. attr=" + attr + ", targetClazz=" + className);
 
                       List<String> targetObjectIds = includedAttrResults.stream()
-                              .map(obj -> JsonFactory.getJsonObject((JsonObject) obj, attr).getString(LeanObject.ATTR_NAME_OBJECTID))
+                              .map(obj -> JsonUtils.getJsonObject((JsonObject) obj, attr).getString(LeanObject.ATTR_NAME_OBJECTID))
                               .filter(StringUtils::notEmpty)
                               .collect(Collectors.toList());
 
@@ -269,13 +304,13 @@ public class ObjectQueryHandler extends CommonHandler {
 
                             results.stream().forEach(obj2 -> {
                               JsonObject tmp = (JsonObject) obj2;
-                              JsonObject attrTargetJson = JsonFactory.getJsonObject(tmp, attr);
+                              JsonObject attrTargetJson = JsonUtils.getJsonObject(tmp, attr);
                               if (null != attrTargetJson) {
                                 String tmpObjectId = attrTargetJson.getString(LeanObject.ATTR_NAME_OBJECTID);
                                 JsonObject completedObject = attrMaps.get(tmpObjectId);
                                 if (null != completedObject) {
                                   logger.debug("replace attr:" + attr + ", objectId:" + tmpObjectId + ", jsonObject:" + completedObject);
-                                  JsonFactory.replaceJsonValue(tmp, attr, completedObject);
+                                  JsonUtils.replaceJsonValue(tmp, attr, completedObject);
                                 } else {
                                   logger.warn("not found result for attr:" + attr + ", objectId:" + tmpObjectId);
                                 }

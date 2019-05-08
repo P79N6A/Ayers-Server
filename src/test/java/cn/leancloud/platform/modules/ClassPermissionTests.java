@@ -19,7 +19,7 @@ public class ClassPermissionTests extends TestCase {
             "\"find\" : { \"*\" : true, \"users\" : [ ], \"roles\" : [ ] }," +
             "\"get\" : { \"*\" : true }," +
             "\"update\" : { \"users\" : [ ], \"roles\" : [ \"Administrator\" ] }," +
-            "\"delete\" : { \"users\" : \"5cd102ced3761600696fce99\", \"roles\" : \"\" }," +
+            "\"delete\" : { \"users\" : \"5cd102ced3761600696fce99,abcfeifehw\", \"roles\" : \"\" }," +
             "\"add_fields\" : { \"onlySignInUsers\" : true, \"users\" : [ ], \"roles\" : [ ] } }";
     ClassPermission classPermission = new ClassPermission(new JsonObject(permission));
     assertTrue(classPermission.checkOperation(ClassPermission.OP.FIND, null, null));

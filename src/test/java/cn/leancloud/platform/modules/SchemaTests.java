@@ -47,6 +47,10 @@ public class SchemaTests extends TestCase {
     List<String> authDataIndex = userSchema.findAuthDataIndex();
     authDataIndex.stream().forEach(s -> System.out.println(s));
     assertTrue(authDataIndex.size() == 2);
+
+    String existedSchemaString = "{ \"salt\" : { \"type\" : \"String\" }, \"email\" : { \"type\" : \"String\" }, \"sessionToken\" : { \"type\" : \"String\" }, \"updatedAt\" : { \"type\" : \"Date\" }, \"_r\" : { \"type\" : \"Array\" }, \"ACL\" : { \"type\" : \"ACL\" }, \"password\" : { \"type\" : \"String\" }, \"objectId\" : { \"type\" : \"String\" }, \"username\" : { \"type\" : \"String\" }, \"createdAt\" : { \"type\" : \"Date\" }, \"emailVerified\" : { \"type\" : \"Boolean\" }, \"_w\" : { \"type\" : \"Array\" }, \"mobilePhoneNumber\" : { \"type\" : \"String\" }, \"authData\" : { \"type\" : \"Object\", \"user_private\" : true }, \"mobilePhoneVerified\" : { \"type\" : \"Boolean\" } }";
+    Schema existedSchema = new Schema(new JsonObject(existedSchemaString));
+    assertTrue(Schema.CompatResult.FULLY_MATCHED != userSchema.compatibleWith(existedSchema));
   }
 
   public void testNoneAuthDataSchema() throws Exception {

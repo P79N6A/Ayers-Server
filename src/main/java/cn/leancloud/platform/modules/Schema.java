@@ -1,13 +1,9 @@
 package cn.leancloud.platform.modules;
 
-import cn.leancloud.platform.modules.type.GeoPoint;
-import cn.leancloud.platform.modules.type.Pointer;
 import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.json.JsonObject;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static cn.leancloud.platform.modules.Schema.CompatResult.*;
@@ -27,6 +23,7 @@ public class Schema extends JsonObject {
   public static final String SCHEMA_KEY_TYPE = "type";
   public static final String SCHEMA_KEY_SCHEMA = "schema";
   public static final String SCHEMA_KEY_REF = "reference";
+
   public enum CompatResult {
     OVER_MATCHED,
     FULLY_MATCHED,
@@ -52,10 +49,20 @@ public class Schema extends JsonObject {
     }
     List<String> result = schema.stream().map(entry -> {
       String platform = entry.getKey();
+      if (null == entry.getValue() || !(entry.getValue() instanceof JsonObject)) {
+        return null;
+      }
       JsonObject platformSchema = ((JsonObject) entry.getValue()).getJsonObject("schema");
-      String idAttr = platformSchema.fieldNames().stream().filter(s -> s.endsWith("id") && !s.equals("unionid")).findFirst().get();
+      if (null == platformSchema) {
+        return null;
+      }
+      Optional<String> idOption = platformSchema.fieldNames().stream().filter(s -> s.endsWith("id") && !s.equals("unionid")).findFirst();
+      if (!idOption.isPresent()) {
+        return null;
+      }
+      String idAttr = idOption.get();
       return "authData." + platform + "." + idAttr;
-    }).collect(Collectors.toList());
+    }).filter(StringUtils::notEmpty).collect(Collectors.toList());
     return result;
   }
 
@@ -110,7 +117,7 @@ public class Schema extends JsonObject {
         String myType = value.getString(SCHEMA_KEY_TYPE);
         String otherType = otherValue.getString(SCHEMA_KEY_TYPE);
         if (DATA_TYPE_ANY.equalsIgnoreCase(otherType)) {
-          // pass all Object type
+          // pass ANY type
           continue;
         } else if (!myType.equals(otherType)) {
           throw new ConsistencyViolationException("data consistency violated. key:" + key

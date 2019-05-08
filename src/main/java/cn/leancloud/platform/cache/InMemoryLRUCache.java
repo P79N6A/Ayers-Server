@@ -7,7 +7,7 @@ public class InMemoryLRUCache<K, V> {
 
   public InMemoryLRUCache(int capacity) {
     cache = new ConcurrentLinkedHashMap.Builder<K, V>()
-            .maximumWeightedCapacity(capacity > 1000 ? 1000 : capacity)
+            .maximumWeightedCapacity(capacity)
             .build();
   }
 
@@ -33,5 +33,17 @@ public class InMemoryLRUCache<K, V> {
 
   public V getQuietly(K key) {
     return this.cache.getQuietly(key);
+  }
+
+  public long capacity() {
+    return cache.capacity();
+  }
+
+  public long size() {
+    return this.cache.size();
+  }
+
+  public boolean isFull() {
+    return size() >= capacity();
   }
 }

@@ -1,6 +1,7 @@
 package cn.leancloud.platform.persistence.impl;
 
 import cn.leancloud.platform.common.Constraints;
+import cn.leancloud.platform.modules.ClassMetaData;
 import cn.leancloud.platform.utils.StringUtils;
 import cn.leancloud.platform.common.BsonTransformer;
 import cn.leancloud.platform.modules.LeanObject;
@@ -167,7 +168,7 @@ public class MongoDBDataStore implements DataStore {
   public DataStore findOneAndUpdate(String clazz, JsonObject query, JsonObject update,
                                     Handler<AsyncResult<JsonObject>> resultHandler) {
     if (StringUtils.isEmpty(clazz) || null == query || null == update) {
-      resultHandler.handle(new InvalidParameterResult("class or query or update is required."));
+      resultHandler.handle(new InvalidParameterResult("class or query or updateSingleObject is required."));
     } else {
       JsonObject condition = BsonTransformer.encode2BsonRequest(query, BsonTransformer.REQUEST_OP.QUERY);
       JsonObject updateObject = BsonTransformer.encode2BsonRequest(update, BsonTransformer.REQUEST_OP.UPDATE);
@@ -180,7 +181,7 @@ public class MongoDBDataStore implements DataStore {
   public DataStore findOneAndUpdateWithOptions(String clazz, JsonObject query, JsonObject update, QueryOption queryOption,
                                                UpdateOption updateOption, Handler<AsyncResult<JsonObject>> resultHandler) {
     if (StringUtils.isEmpty(clazz) || null == query || null == update) {
-      resultHandler.handle(new InvalidParameterResult("class or query or update is required."));
+      resultHandler.handle(new InvalidParameterResult("class or query or updateSingleObject is required."));
     } else {
 
       JsonObject condition = BsonTransformer.encode2BsonRequest(query, BsonTransformer.REQUEST_OP.QUERY);
@@ -264,6 +265,7 @@ public class MongoDBDataStore implements DataStore {
     }
     return this;
   }
+
   public DataStore createClass(String clazz, Handler<AsyncResult<Void>> resultHandler) {
     if (StringUtils.isEmpty(clazz)) {
       resultHandler.handle(new InvalidParameterResult<>("class is required."));
@@ -305,24 +307,23 @@ public class MongoDBDataStore implements DataStore {
     return this;
   }
 
-  public DataStore findSchema(String clazz, Handler<AsyncResult<JsonObject>> resultHandler) {
+  public DataStore findMetaInfo(String clazz, Handler<AsyncResult<JsonObject>> resultHandler) {
     JsonObject query = new JsonObject().put("class", clazz);
     return this.findOne(Constraints.METADATA_CLASS, query, null, resultHandler);
   }
 
-  public DataStore upsertSchema(String clazz, Schema schema, Handler<AsyncResult<JsonObject>> resultHandler) {
+  public DataStore upsertMetaInfo(String clazz, JsonObject update, Handler<AsyncResult<JsonObject>> resultHandler) {
     JsonObject query = new JsonObject().put("class", clazz);
-    JsonObject update = new JsonObject().put("class", clazz).put("schema", schema);
     QueryOption queryOption = new QueryOption();
     UpdateOption option = new UpdateOption().setUpsert(true).setReturnNewDocument(true);
     return this.findOneAndUpdateWithOptions(Constraints.METADATA_CLASS, query, update, queryOption, option, resultHandler);
   }
 
-  public DataStore listSchemas(Handler<AsyncResult<List<JsonObject>>> resultHandler) {
+  public DataStore listClassMetaInfo(Handler<AsyncResult<List<JsonObject>>> resultHandler) {
     return this.find(Constraints.METADATA_CLASS, new JsonObject(), resultHandler);
   }
 
-  public DataStore removeSchema(String clazz, Handler<AsyncResult<Long>> resultHandler) {
+  public DataStore removeMetaInfo(String clazz, Handler<AsyncResult<Long>> resultHandler) {
     JsonObject query = new JsonObject().put("class", clazz);
     return this.remove(Constraints.METADATA_CLASS, query, resultHandler);
   }

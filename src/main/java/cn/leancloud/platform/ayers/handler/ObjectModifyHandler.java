@@ -1,11 +1,12 @@
 package cn.leancloud.platform.ayers.handler;
 
 import cn.leancloud.platform.ayers.RequestParse;
+import cn.leancloud.platform.cache.UnifiedCache;
 import cn.leancloud.platform.common.BatchRequest;
 import cn.leancloud.platform.engine.EngineHookProxy;
 import cn.leancloud.platform.common.ErrorCodes;
 import cn.leancloud.platform.engine.HookType;
-import cn.leancloud.platform.modules.ObjectSpecifics;
+import cn.leancloud.platform.modules.*;
 import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.*;
 import io.vertx.core.eventbus.ReplyException;
@@ -18,19 +19,34 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class ObjectModifyHandler extends CommonHandler {
   private static final Logger logger = LoggerFactory.getLogger(ObjectModifyHandler.class);
 
   private EngineHookProxy hookProxy;
+  private boolean enableCreateClassByClient = true;
+
   public ObjectModifyHandler(Vertx vertx, RoutingContext context) {
     super(vertx, context);
     this.hookProxy = EngineHookProxy.getInstance(vertx);
   }
 
-  public void create(String clazz, JsonObject body, boolean returnNewDoc, Handler<AsyncResult<JsonObject>> handler) {
-    //sendDataOperationWithOption(clazz, null, HttpMethod.POST.toString(), null, body, returnNewDoc, handler);
+  private void appendACLIfNeed(String clazz, JsonObject body, ClassMetaData classMetaData, String currentUserObjectId) {
+    if (body.containsKey(LeanObject.BUILTIN_ATTR_ACL)) {
+      return;
+    }
+    if (null == classMetaData || null == classMetaData.getACLTemplate()) {
+      return;
+    }
+    JsonObject aclTemplate = classMetaData.getACLTemplate();
+    ObjectACLTemplate template = ObjectACLTemplate.Builder.build(aclTemplate);
+    ACL acl = template.genACL4User(currentUserObjectId, null);
+    body.put(LeanObject.BUILTIN_ATTR_ACL, acl.toJson());
+  }
+
+  private void sendCreateOperation(String clazz, JsonObject body, boolean returnNewDoc, Handler<AsyncResult<JsonObject>> handler) {
     JsonObject headers = copyRequestHeaders(routingContext);
     this.hookProxy.call(clazz, HookType.BeforeSave, body, headers, routingContext, res -> {
       if (res.failed()) {
@@ -59,8 +75,61 @@ public class ObjectModifyHandler extends CommonHandler {
     });
   }
 
-  public void update(String clazz, String objectId, JsonObject query, JsonObject update, boolean returnNewDoc,
-                     Handler<AsyncResult<JsonObject>> handler) {
+  private void executeCreateOperation(ClassMetaData classMetaData, String clazz, JsonObject body, boolean returnNewDoc,
+                                      Handler<AsyncResult<JsonObject>> handler) {
+    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(this.routingContext);
+    classPermissionCheck(clazz, body, headers, ClassPermission.OP.CREATE, response -> {
+      if (response.failed()) {
+        logger.warn("failed to check class permission. cause: " + response.cause().getMessage());
+        handler.handle(wrapErrorResult(new UnsupportedOperationException("Class permission check failed.")));
+      } else if (!response.result()) {
+        logger.debug("not allowed operation bcz of class permission.");
+        handler.handle(wrapErrorResult(new UnsupportedOperationException("Class permission check failed.")));
+      } else {
+        String sessionToken = headers.getSessionToken();
+        String currentUserId = null;
+        if (StringUtils.notEmpty(sessionToken)) {
+          JsonObject currentUser = UnifiedCache.getGlobalInstance().get(sessionToken);
+          if (null != currentUser) {
+            currentUserId = currentUser.getString(LeanObject.ATTR_NAME_OBJECTID);
+          }
+          appendACLIfNeed(clazz, body, classMetaData, currentUserId);
+        }
+        sendCreateOperation(clazz, body, returnNewDoc, handler);
+      }
+    });
+
+  }
+
+  public void createSingleObject(String clazz, JsonObject body, boolean returnNewDoc, Handler<AsyncResult<JsonObject>> handler) {
+    Objects.requireNonNull(clazz);
+    Objects.requireNonNull(body);
+    Objects.requireNonNull(handler);
+
+    //make sure class existed.
+    ClassMetaData classMetaData = (ClassMetaData) this.classMetaCache.get(clazz);
+    if (null == classMetaData) {
+      if (!enableCreateClassByClient) {
+        logger.debug("create class from REST isn't allowed.");
+        handler.handle(wrapErrorResult(new UnsupportedOperationException("It's forbidden to create class from REST API")));
+      } else {
+        MetaDataHandler handler1 = new MetaDataHandler(vertx, routingContext);
+        handler1.createClass(clazz, "normal", null, response -> {
+          if (response.failed()) {
+            logger.warn("failed to create class. cause:" + response.cause().getMessage());
+            handler.handle(response);
+          } else {
+            executeCreateOperation(classMetaData, clazz, body, returnNewDoc, handler);
+          }
+        });
+      }
+    } else {
+      executeCreateOperation(classMetaData, clazz, body, returnNewDoc, handler);
+    }
+  }
+
+  private void sendUpdateOperation(String clazz, String objectId, JsonObject query, JsonObject update, boolean returnNewDoc,
+                                   Handler<AsyncResult<JsonObject>> handler) {
     JsonObject headers = copyRequestHeaders(routingContext);
     this.hookProxy.call(clazz, HookType.BeforeUpdate, update, headers, routingContext, res -> {
       if (res.failed()) {
@@ -86,8 +155,38 @@ public class ObjectModifyHandler extends CommonHandler {
       }
     });
   }
+  public void updateSingleObject(String clazz, String objectId, JsonObject query, JsonObject update, boolean returnNewDoc,
+                                 Handler<AsyncResult<JsonObject>> handler) {
+    Objects.requireNonNull(clazz);
+    Objects.requireNonNull(objectId);
+    Objects.requireNonNull(update);
+    Objects.requireNonNull(handler);
 
-  public void delete(String clazz, String objectId, JsonObject query, Handler<AsyncResult<JsonObject>> handler) {
+    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(this.routingContext);
+    classPermissionCheck(clazz, update, headers, ClassPermission.OP.UPDATE, response -> {
+      if (response.failed()) {
+        logger.warn("failed to check class permission. cause: " + response.cause().getMessage());
+        handler.handle(wrapErrorResult(new UnsupportedOperationException("Class permission check failed.")));
+      } else if (!response.result()) {
+        logger.debug("not allowed operation bcz of class permission.");
+        handler.handle(wrapErrorResult(new UnsupportedOperationException("Class permission check failed.")));
+      } else {
+        objectACLCheck(clazz, objectId, headers, ClassPermission.OP.UPDATE, res2 -> {
+          if (res2.failed()) {
+            logger.warn("failed to check object ACL. cause: " + res2.cause().getMessage());
+            handler.handle(wrapErrorResult(new UnsupportedOperationException("Object ACL permission check failed.")));
+          } else if (!res2.result()) {
+            logger.debug("not allowed operation bcz of object ACL.");
+            handler.handle(wrapErrorResult(new UnsupportedOperationException("Object ACL permission check failed.")));
+          } else {
+            sendUpdateOperation(clazz, objectId, query, update, returnNewDoc, handler);
+          }
+        });
+      }
+    });
+  }
+
+  private void sendDeleteOperation(String clazz, String objectId, JsonObject query, Handler<AsyncResult<JsonObject>> handler) {
     JsonObject headers = copyRequestHeaders(routingContext);
     this.hookProxy.call(clazz, HookType.BeforeDelete, query, headers, routingContext, res -> {
       if (res.failed()) {
@@ -102,6 +201,33 @@ public class ObjectModifyHandler extends CommonHandler {
             this.hookProxy.call(clazz, HookType.AfterDetele, query, headers, routingContext, any -> {
               // ignore it.
             });
+          }
+        });
+      }
+    });
+  }
+  public void deleteSingleObject(String clazz, String objectId, JsonObject query, Handler<AsyncResult<JsonObject>> handler) {
+    Objects.requireNonNull(clazz);
+    Objects.requireNonNull(objectId);
+    Objects.requireNonNull(handler);
+
+    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(this.routingContext);
+    classPermissionCheck(clazz, null, headers, ClassPermission.OP.DELETE, response -> {
+      if (response.failed()) {
+        logger.warn("failed to check class permission. cause: " + response.cause().getMessage());
+        handler.handle(wrapErrorResult(new UnsupportedOperationException("Class permission check failed.")));
+      } else if (!response.result()) {
+        handler.handle(wrapErrorResult(new UnsupportedOperationException("Class permission check failed.")));
+      } else {
+        objectACLCheck(clazz, objectId, headers, ClassPermission.OP.DELETE, res2 -> {
+          if (res2.failed()) {
+            logger.warn("failed to check object ACL. cause: " + res2.cause().getMessage());
+            handler.handle(wrapErrorResult(new UnsupportedOperationException("Object ACL permission check failed.")));
+          } else if (!res2.result()) {
+            logger.debug("not allowed operation bcz of object ACL.");
+            handler.handle(wrapErrorResult(new UnsupportedOperationException("Object ACL permission check failed.")));
+          } else {
+            sendDeleteOperation(clazz, objectId, query, handler);
           }
         });
       }
@@ -172,11 +298,11 @@ public class ObjectModifyHandler extends CommonHandler {
         String objectId = batchRequest.getObjectId();
         JsonObject body = batchRequest.getBody();
         if (RequestParse.OP_OBJECT_POST.equalsIgnoreCase(method)) {
-          create(clazz, body, false, response -> processBatchResult(response, tmp));
+          createSingleObject(clazz, body, false, response -> processBatchResult(response, tmp));
         } else if (RequestParse.OP_OBJECT_PUT.equalsIgnoreCase(method)) {
-          update(clazz, objectId, null, body, false, response -> processBatchResult(response, tmp));
+          updateSingleObject(clazz, objectId, null, body, false, response -> processBatchResult(response, tmp));
         } else if (RequestParse.OP_OBJECT_DELETE.equalsIgnoreCase(method)) {
-          delete(clazz, objectId, body, response -> processBatchResult(response, tmp));
+          deleteSingleObject(clazz, objectId, body, response -> processBatchResult(response, tmp));
         }
       }
       return tmp;

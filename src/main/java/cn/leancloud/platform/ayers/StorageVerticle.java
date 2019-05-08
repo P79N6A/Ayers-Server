@@ -3,6 +3,7 @@ package cn.leancloud.platform.ayers;
 import cn.leancloud.platform.ayers.handler.ObjectQueryHandler;
 import cn.leancloud.platform.ayers.handler.UserHandler;
 import cn.leancloud.platform.common.*;
+import cn.leancloud.platform.modules.ClassMetaData;
 import cn.leancloud.platform.modules.LeanObject;
 import cn.leancloud.platform.persistence.DataStore;
 import cn.leancloud.platform.persistence.DataStoreFactory;
@@ -74,7 +75,7 @@ public class StorageVerticle extends CommonVerticle {
                 message.fail(ErrorCodes.DATABASE_ERROR.getCode(), res.cause().getMessage());
               } else {
                 if (null == res.result()) {
-                  logger.debug("not found target user. create a new one.");
+                  logger.debug("not found target user. createSingleObject a new one.");
                   updateParam.put(LeanObject.ATTR_NAME_CREATED_TS, now);
                   updateParam.put(LeanObject.ATTR_NAME_UPDATED_TS, now);
                   if (authParseResult.isMainAccount) {
@@ -85,7 +86,7 @@ public class StorageVerticle extends CommonVerticle {
                   dataStore.insertWithOptions(clazz, updateParam, new DataStore.InsertOption().setReturnNewDocument(true), res1 -> {
                     dataStore.close();
                     if (res1.failed()) {
-                      logger.warn("failed to create new user. cause: " + res1.cause().getMessage());
+                      logger.warn("failed to createSingleObject new user. cause: " + res1.cause().getMessage());
                       message.fail(ErrorCodes.DATABASE_ERROR.getCode(), res1.cause().getMessage());
                     } else {
                       logger.debug("result user: " + res1.result());
@@ -121,6 +122,24 @@ public class StorageVerticle extends CommonVerticle {
     JsonObject now = LeanObject.getCurrentDate();
 
     switch (operation) {
+      case RequestParse.OP_CREATE_CLASS:
+        ClassMetaData metaData = new ClassMetaData(updateParam);
+        clazz = metaData.getName();
+        dataStore.createClass(clazz, respon -> {
+          if (respon.failed()) {
+            message.fail(ErrorCodes.INTERNAL_ERROR.getCode(), respon.cause().getMessage());
+          } else {
+            dataStore.insertWithOptions(metaData.getClassName(), updateParam, new DataStore.InsertOption().setReturnNewDocument(fetchWhenSave),
+                    res -> {
+              if (res.failed()) {
+                message.fail(ErrorCodes.INTERNAL_ERROR.getCode(), res.cause().getMessage());
+              } else {
+                message.reply(res.result());
+              }
+                    });
+          }
+        });
+        break;
       case RequestParse.OP_USER_SIGNIN:
         authData = updateParam.getJsonObject(UserHandler.PARAM_AUTH_DATA);
         if (null != authData && authData.size() > 0) {
@@ -275,7 +294,7 @@ public class StorageVerticle extends CommonVerticle {
           options.setSkip(skip);
           options.setSort(sortJson);
           options.setFields(fieldJson);
-          logger.debug("find clazz=" + clazz + ", condition=" + condition.toString() + ", options=" + options);
+          logger.debug("findMetaInfo clazz=" + clazz + ", condition=" + condition.toString() + ", options=" + options);
           dataStore.findWithOptions(clazz, condition, options, res->{
             dataStore.close();
             if (res.failed()) {

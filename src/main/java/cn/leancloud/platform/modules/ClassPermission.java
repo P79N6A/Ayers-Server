@@ -4,6 +4,7 @@ import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -59,6 +60,10 @@ public class ClassPermission {
     this.permissions = json;
   }
 
+  public static ClassPermission fromJson(JsonObject json) {
+    return new ClassPermission(json);
+  }
+
   public boolean checkOperation(OP op, String currentUser, List<String> userRoles) {
     if (null == this.permissions) {
       return false;
@@ -85,7 +90,8 @@ public class ClassPermission {
     Object users = opPermission.getValue(KEY_USERS);
     if (null != users && users instanceof String) {
       // users should be json array, just compatible with existed data.
-      if (currentUser.equals(users)) {
+      boolean found = Arrays.asList(((String) users).split(",")).stream().anyMatch(currentUser::equals);
+      if (found) {
         return true;
       }
     } else if (null != users && users instanceof JsonArray) {
@@ -99,11 +105,12 @@ public class ClassPermission {
       Object roles = opPermission.getValue(KEY_ROLES);
       if (null != roles && roles instanceof String) {
         // roles should be json array, just compatible with existed data.
-        return userRoles.stream().anyMatch(v -> v.equals(roles));
+        Set<String> roleSet = Arrays.asList(((String)roles).split(",")).stream().collect(Collectors.toSet());
+        return userRoles.stream().anyMatch(roleSet::contains);
       } else if (null != roles && roles instanceof JsonArray) {
         JsonArray roleArray = (JsonArray) roles;
         Set<Object> roleSet = null == roleArray? new HashSet<>() : roleArray.stream().collect(Collectors.toSet());
-        return userRoles.stream().anyMatch(v -> roleSet.contains(v));
+        return userRoles.stream().anyMatch(roleSet::contains);
       }
     }
     return false;

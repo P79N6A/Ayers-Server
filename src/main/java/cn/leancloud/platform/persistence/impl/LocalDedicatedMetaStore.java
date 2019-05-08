@@ -13,4 +13,7 @@ public class LocalDedicatedMetaStore implements MetaStore {
   public String getAllowOrigin(String appId) {
     return null;
   }
+  public Boolean enableCreateClassFromClient(String appId) {
+    return true;
+  }
 }

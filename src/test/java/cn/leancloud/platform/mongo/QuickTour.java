@@ -10,8 +10,8 @@ import java.util.concurrent.CountDownLatch;
 
 public class QuickTour {
   public static void main(final String[] args) throws InterruptedException {
-    String database = "uluru-test";
-    String collectionName = "test";
+    String database = "uluru-testSchema";
+    String collectionName = "testSchema";
     Vertx vertx = Vertx.vertx();
     MongoClient client = MongoClient.createShared(vertx,
             new JsonObject().put("host", "127.0.0.1").put("port", 27027).put("db_name", database));

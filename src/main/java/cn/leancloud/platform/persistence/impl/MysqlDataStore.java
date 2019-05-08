@@ -73,18 +73,19 @@ public class MysqlDataStore implements DataStore {
     return this;
   }
 
-  public DataStore findSchema(String clazz, Handler<AsyncResult<JsonObject>> resultHandler) {
+  public DataStore findMetaInfo(String clazz, Handler<AsyncResult<JsonObject>> resultHandler) {
     return this;
   }
-  public DataStore upsertSchema(String clazz, Schema schema, Handler<AsyncResult<JsonObject>> resultHandler) {
+  public DataStore upsertMetaInfo(String clazz, JsonObject metaInfo, Handler<AsyncResult<JsonObject>> resultHandler) {
     return this;
   }
-  public DataStore listSchemas(Handler<AsyncResult<List<JsonObject>>> resultHandler) {
+  public DataStore listClassMetaInfo(Handler<AsyncResult<List<JsonObject>>> resultHandler) {
     return this;
   }
-  public DataStore removeSchema(String clazz, Handler<AsyncResult<Long>> resultHandler) {
+  public DataStore removeMetaInfo(String clazz, Handler<AsyncResult<Long>> resultHandler) {
     return this;
   }
+
   public void close() {
     this.sqlClient.close();
   }

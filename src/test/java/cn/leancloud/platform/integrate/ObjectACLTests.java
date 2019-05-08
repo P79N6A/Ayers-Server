@@ -9,11 +9,11 @@ import java.util.Map;
 
 public class ObjectACLTests extends WebClientTests {
   private static Map<String, Object> authData = new HashMap<>();
-  private static final String PLATFORM = "weixinapp";
+  private static final String PLATFORM = "weixinapp-test";
   static {
-    authData.put("access_token", "weixin access token");
+    authData.put("access_token", "weixin access token from test");
     authData.put("expires_in", 3123321378374l);
-    authData.put("openid", "weixinopenid");
+    authData.put("openid", "weixinopenid from test");
     authData.put("platform", PLATFORM);
   }
 
@@ -29,7 +29,8 @@ public class ObjectACLTests extends WebClientTests {
   }
 
   public void testPrepareACL() throws Exception {
-    JsonObject roleQuery = new JsonObject().put("name", "Administrator");
+    final String adminRole = "Administrator_Test";
+    JsonObject roleQuery = new JsonObject().put("name", adminRole);
     get("/1.1/roles", roleQuery, response -> {
       if (response.failed()) {
         System.out.println("failed to query role. cause:" + response.cause().getMessage());
@@ -51,22 +52,77 @@ public class ObjectACLTests extends WebClientTests {
             return;
           }
           String userObjectId = userRes.result().getString("objectId");
-          // create Role
+          // createSingleObject Role
           JsonArray userObjects = new JsonArray();
           userObjects.add(new JsonObject().put("__type", "Pointer").put("className", "_User").put("objectId", userObjectId));
           JsonObject roleJson = new JsonObject();
-          roleJson.put("name", "Administrator");
+          roleJson.put("name", adminRole);
           roleJson.put("ACL", new JsonObject("{\"*\":{\"read\":true,\"write\":true}}"));
           roleJson.put("users", new JsonObject().put("__op", "AddRelation").put("objects", userObjects));
           post("/1.1/roles", roleJson, roleRes -> {
             if (roleRes.failed()) {
-              System.out.println("failed to create Role. cause:" + roleRes.cause().getMessage());
+              System.out.println("failed to createSingleObject Role. cause:" + roleRes.cause().getMessage());
               latch.countDown();
               return;
             }
             System.out.println(roleRes.result());
-            testSuccessed = true;
-            latch.countDown();
+
+            JsonObject classMetaJson = new JsonObject().put("class_type", "normal");
+            JsonObject publicRW = new JsonObject()
+                    .put("*", new JsonObject().put("read", true).put("write", true))
+                    .put("_owner", new JsonObject().put("read", true).put("write", true));
+            JsonObject ownerRW = new JsonObject()
+                    .put("*", new JsonObject().put("read", true).put("write", false))
+                    .put("_owner", new JsonObject().put("read", true).put("write", true));
+            JsonObject ownerStrictRW = new JsonObject()
+                    .put("*", new JsonObject().put("read", false).put("write", false))
+                    .put("_owner", new JsonObject().put("read", true).put("write", true));
+            JsonObject ownerOnlyR = new JsonObject()
+                    .put("*", new JsonObject().put("read", false).put("write", false))
+                    .put("_owner", new JsonObject().put("read", true).put("write", false));
+
+            classMetaJson.put("class_name", "PublicReadWrite");
+            classMetaJson.put("acl_template", publicRW);
+            post("/1.1/meta/classes", classMetaJson, classCreateRes1 -> {
+              if (classCreateRes1.failed()) {
+                System.out.println("failed to create class " + classMetaJson.getString("class_name")
+                        + ", cause: " + classCreateRes1.cause().getMessage());
+                latch.countDown();
+                return;
+              }
+              classMetaJson.put("class_name", "OnlyOwnerReadWrite");
+              classMetaJson.put("acl_template", ownerRW);
+              post("/1.1/meta/classes", classMetaJson, classCreateRes2 -> {
+                if (classCreateRes2.failed()) {
+                  System.out.println("failed to create class " + classMetaJson.getString("class_name")
+                          + ", cause: " + classCreateRes2.cause().getMessage());
+                  latch.countDown();
+                  return;
+                }
+                classMetaJson.put("class_name", "OwnerStrictReadWrite");
+                classMetaJson.put("acl_template", ownerStrictRW);
+                post("/1.1/meta/classes", classMetaJson, classCreateRes3 -> {
+                  if (classCreateRes3.failed()) {
+                    System.out.println("failed to create class " + classMetaJson.getString("class_name")
+                            + ", cause: " + classCreateRes3.cause().getMessage());
+                    latch.countDown();
+                    return;
+                  }
+                  classMetaJson.put("class_name", "StrictAllReadWrite");
+                  classMetaJson.put("acl_template", ownerOnlyR);
+                  post("/1.1/meta/classes", classMetaJson, classCreateRes4 -> {
+                    if (classCreateRes4.failed()) {
+                      System.out.println("failed to create class " + classMetaJson.getString("class_name")
+                              + ", cause: " + classCreateRes4.cause().getMessage());
+                      latch.countDown();
+                      return;
+                    }
+                    testSuccessed = true;
+                    latch.countDown();
+                  });
+                });
+              });
+            });
           });
         });
       }
@@ -80,7 +136,7 @@ public class ObjectACLTests extends WebClientTests {
     JsonObject publicRWObj = new JsonObject().put("content", "Automatic Tester").put("age", 20);
     post(classPath, publicRWObj, objRes -> {
       if (objRes.failed()) {
-        System.out.println("failed to create object. cause:" + objRes.cause().getMessage());
+        System.out.println("failed to createSingleObject object. cause:" + objRes.cause().getMessage());
         latch.countDown();
         return;
       }
@@ -94,13 +150,13 @@ public class ObjectACLTests extends WebClientTests {
         JsonObject updated = new JsonObject().put("age", 28);
         put(classPath + "/" + objectId, updated, updatedRes -> {
           if (updatedRes.failed()) {
-            System.out.println("failed to update object. cause:" + updatedRes.cause().getMessage());
+            System.out.println("failed to updateSingleObject object. cause:" + updatedRes.cause().getMessage());
             latch.countDown();
             return;
           }
           delete(classPath + "/" + objectId, null, deleteRes -> {
             if (deleteRes.failed()) {
-              System.out.println("failed to delete object. cause:" + deleteRes.cause().getMessage());
+              System.out.println("failed to deleteSingleObject object. cause:" + deleteRes.cause().getMessage());
               latch.countDown();
               return;
             }
@@ -120,7 +176,7 @@ public class ObjectACLTests extends WebClientTests {
     JsonObject publicRWObj = new JsonObject().put("content", "Automatic Tester").put("age", 20);
     post(classPath, publicRWObj, objRes -> {
       if (objRes.failed()) {
-        System.out.println("failed to create object. cause:" + objRes.cause().getMessage());
+        System.out.println("failed to createSingleObject object. cause:" + objRes.cause().getMessage());
         latch.countDown();
         return;
       }
@@ -130,13 +186,13 @@ public class ObjectACLTests extends WebClientTests {
           JsonObject updated = new JsonObject().put("age", 28);
           put(classPath + "/" + objectId, updated, updatedRes -> {
             if (updatedRes.succeeded()) {
-              System.out.println("succeed to update object. it is not expected bcz ACL should not allowed.");
+              System.out.println("succeed to updateSingleObject object. it is not expected bcz ACL should not allowed.");
               latch.countDown();
               return;
             }
             delete(classPath + "/" + objectId, null, deleteRes -> {
               if (deleteRes.succeeded()) {
-                System.out.println("succeed to delete object. it is not expected bcz ACL should not allowed.");
+                System.out.println("succeed to deleteSingleObject object. it is not expected bcz ACL should not allowed.");
                 latch.countDown();
                 return;
               }
@@ -160,7 +216,7 @@ public class ObjectACLTests extends WebClientTests {
     JsonObject publicRWObj = new JsonObject().put("content", "Automatic Tester").put("age", 20);
     post(classPath, publicRWObj, objRes -> {
       if (objRes.failed()) {
-        System.out.println("failed to create object. cause:" + objRes.cause().getMessage());
+        System.out.println("failed to createSingleObject object. cause:" + objRes.cause().getMessage());
         latch.countDown();
         return;
       }
@@ -175,13 +231,13 @@ public class ObjectACLTests extends WebClientTests {
         JsonObject updated = new JsonObject().put("age", 28);
         put(classPath + "/" + objectId, updated, updatedRes -> {
           if (updatedRes.succeeded()) {
-            System.out.println("succeed to update object. it is not expected bcz ACL should not allowed.");
+            System.out.println("succeed to updateSingleObject object. it is not expected bcz ACL should not allowed.");
             latch.countDown();
             return;
           }
           delete(classPath + "/" + objectId, null, deleteRes -> {
             if (deleteRes.succeeded()) {
-              System.out.println("succeed to delete object. it is not expected bcz ACL should not allowed.");
+              System.out.println("succeed to deleteSingleObject object. it is not expected bcz ACL should not allowed.");
               latch.countDown();
               return;
             }
@@ -200,7 +256,7 @@ public class ObjectACLTests extends WebClientTests {
     JsonObject publicRWObj = new JsonObject().put("content", "Automatic Tester").put("age", 20);
     post(classPath, publicRWObj, objRes -> {
       if (objRes.failed()) {
-        System.out.println("failed to create object. cause:" + objRes.cause().getMessage());
+        System.out.println("failed to createSingleObject object. cause:" + objRes.cause().getMessage());
         latch.countDown();
         return;
       }
@@ -215,13 +271,13 @@ public class ObjectACLTests extends WebClientTests {
         JsonObject updated = new JsonObject().put("age", 28);
         put(classPath + "/" + objectId, updated, updatedRes -> {
           if (updatedRes.succeeded()) {
-            System.out.println("succeed to update object. it is not expected bcz ACL should not allowed.");
+            System.out.println("succeed to updateSingleObject object. it is not expected bcz ACL should not allowed.");
             latch.countDown();
             return;
           }
           delete(classPath + "/" + objectId, null, deleteRes -> {
             if (deleteRes.succeeded()) {
-              System.out.println("succeed to delete object. it is not expected bcz ACL should not allowed.");
+              System.out.println("succeed to deleteSingleObject object. it is not expected bcz ACL should not allowed.");
               latch.countDown();
               return;
             }
@@ -252,7 +308,7 @@ public class ObjectACLTests extends WebClientTests {
       JsonObject publicRWObj = new JsonObject().put("content", "Automatic Tester").put("age", 20);
       post(classPath, publicRWObj, objRes -> {
         if (objRes.failed()) {
-          System.out.println("failed to create object. cause:" + objRes.cause().getMessage());
+          System.out.println("failed to createSingleObject object. cause:" + objRes.cause().getMessage());
           latch.countDown();
           return;
         }
@@ -266,13 +322,13 @@ public class ObjectACLTests extends WebClientTests {
           JsonObject updated = new JsonObject().put("age", 28);
           put(classPath + "/" + objectId, updated, updatedRes -> {
             if (updatedRes.failed()) {
-              System.out.println("failed to update object. cause:" + updatedRes.cause().getMessage());
+              System.out.println("failed to updateSingleObject object. cause:" + updatedRes.cause().getMessage());
               latch.countDown();
               return;
             }
             delete(classPath + "/" + objectId, null, deleteRes -> {
               if (deleteRes.failed()) {
-                System.out.println("failed to delete object. cause:" + deleteRes.cause().getMessage());
+                System.out.println("failed to deleteSingleObject object. cause:" + deleteRes.cause().getMessage());
                 latch.countDown();
                 return;
               }
@@ -304,7 +360,7 @@ public class ObjectACLTests extends WebClientTests {
       JsonObject publicRWObj = new JsonObject().put("content", "Automatic Tester").put("age", 20);
       post(classPath, publicRWObj, objRes -> {
         if (objRes.failed()) {
-          System.out.println("failed to create object. cause:" + objRes.cause().getMessage());
+          System.out.println("failed to createSingleObject object. cause:" + objRes.cause().getMessage());
           latch.countDown();
           return;
         }
@@ -318,13 +374,13 @@ public class ObjectACLTests extends WebClientTests {
           JsonObject updated = new JsonObject().put("age", 28);
           put(classPath + "/" + objectId, updated, updatedRes -> {
             if (updatedRes.failed()) {
-              System.out.println("failed to update object. cause:" + updatedRes.cause().getMessage());
+              System.out.println("failed to updateSingleObject object. cause:" + updatedRes.cause().getMessage());
               latch.countDown();
               return;
             }
             delete(classPath + "/" + objectId, null, deleteRes -> {
               if (deleteRes.failed()) {
-                System.out.println("failed to delete object. cause:" + deleteRes.cause().getMessage());
+                System.out.println("failed to deleteSingleObject object. cause:" + deleteRes.cause().getMessage());
                 latch.countDown();
                 return;
               }
@@ -356,7 +412,7 @@ public class ObjectACLTests extends WebClientTests {
       JsonObject publicRWObj = new JsonObject().put("content", "Automatic Tester").put("age", 20);
       post(classPath, publicRWObj, objRes -> {
         if (objRes.failed()) {
-          System.out.println("failed to create object. cause:" + objRes.cause().getMessage());
+          System.out.println("failed to createSingleObject object. cause:" + objRes.cause().getMessage());
           latch.countDown();
           return;
         }
@@ -370,13 +426,13 @@ public class ObjectACLTests extends WebClientTests {
           JsonObject updated = new JsonObject().put("age", 28);
           put(classPath + "/" + objectId, updated, updatedRes -> {
             if (updatedRes.succeeded()) {
-              System.out.println("succeed to update object. it is not expected bcz ACL should not allowed.");
+              System.out.println("succeed to updateSingleObject object. it is not expected bcz ACL should not allowed.");
               latch.countDown();
               return;
             }
             delete(classPath + "/" + objectId, null, deleteRes -> {
               if (deleteRes.succeeded()) {
-                System.out.println("succeed to delete object. it is not expected bcz ACL should not allowed.");
+                System.out.println("succeed to deleteSingleObject object. it is not expected bcz ACL should not allowed.");
                 latch.countDown();
                 return;
               }
@@ -409,7 +465,7 @@ public class ObjectACLTests extends WebClientTests {
       JsonObject publicRWObj = new JsonObject().put("content", "Automatic Tester").put("age", 20);
       post(classPath, publicRWObj, objRes -> {
         if (objRes.failed()) {
-          System.out.println("failed to create object. cause:" + objRes.cause().getMessage());
+          System.out.println("failed to createSingleObject object. cause:" + objRes.cause().getMessage());
           latch.countDown();
           return;
         }
@@ -424,13 +480,13 @@ public class ObjectACLTests extends WebClientTests {
           JsonObject updated = new JsonObject().put("age", 28);
           put(classPath + "/" + objectId, updated, updatedRes -> {
             if (updatedRes.succeeded()) {
-              System.out.println("succeed to update object. it is not expected bcz ACL should not allowed.");
+              System.out.println("succeed to updateSingleObject object. it is not expected bcz ACL should not allowed.");
               latch.countDown();
               return;
             }
             delete(classPath + "/" + objectId, null, deleteRes -> {
               if (deleteRes.succeeded()) {
-                System.out.println("succeed to delete object. it is not expected bcz ACL should not allowed.");
+                System.out.println("succeed to deleteSingleObject object. it is not expected bcz ACL should not allowed.");
                 latch.countDown();
                 return;
               }

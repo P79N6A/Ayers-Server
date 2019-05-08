@@ -20,7 +20,7 @@ public class Configure {
   private static Configure instance = null;
   private JsonObject settings = new JsonObject();
   private DataStoreFactory dataStoreFactory = null;
-  private InMemoryLRUCache<String, JsonObject> schemaCache;
+  private InMemoryLRUCache<String, JsonObject> classMetaDataCache;
 
   public static Configure getInstance() {
     if (null == instance) {
@@ -29,12 +29,12 @@ public class Configure {
     return instance;
   }
 
-  public InMemoryLRUCache<String, JsonObject> getSchemaCache() {
-    return schemaCache;
+  public InMemoryLRUCache<String, JsonObject> getClassMetaDataCache() {
+    return classMetaDataCache;
   }
 
-  public void setSchemaCache(InMemoryLRUCache<String, JsonObject> schemaCache) {
-    this.schemaCache = schemaCache;
+  public void setClassMetaDataCache(InMemoryLRUCache<String, JsonObject> classMetaDataCache) {
+    this.classMetaDataCache = classMetaDataCache;
   }
 
   public DataStoreFactory getDataStoreFactory() {

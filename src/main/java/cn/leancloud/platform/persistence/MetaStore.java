@@ -6,4 +6,5 @@ public interface MetaStore {
   Pair<String, String> getApplicationKey(String appId);
   String getFileBucket(String appId);
   String getAllowOrigin(String appId);
+  Boolean enableCreateClassFromClient(String appId);
 }

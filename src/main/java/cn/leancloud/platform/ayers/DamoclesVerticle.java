@@ -1,13 +1,10 @@
 package cn.leancloud.platform.ayers;
 
 import cn.leancloud.platform.cache.InMemoryLRUCache;
-import cn.leancloud.platform.common.ClassMetaData;
+import cn.leancloud.platform.modules.*;
 import cn.leancloud.platform.common.Configure;
 import cn.leancloud.platform.common.Constraints;
 import cn.leancloud.platform.common.ErrorCodes;
-import cn.leancloud.platform.modules.ConsistencyViolationException;
-import cn.leancloud.platform.modules.LeanObject;
-import cn.leancloud.platform.modules.Schema;
 import cn.leancloud.platform.persistence.DataStore;
 import cn.leancloud.platform.persistence.DataStoreFactory;
 import cn.leancloud.platform.utils.JsonFactory;
@@ -34,10 +31,13 @@ public class DamoclesVerticle extends CommonVerticle {
   private InMemoryLRUCache<String, JsonObject> classMetaCache;
   private DataStoreFactory dataStoreFactory = null;
 
-  private void saveSchema(String clazz, Schema schema, JsonArray indices) {
-    this.classMetaCache.put(clazz, new ClassMetaData(clazz, schema, indices));
+  private void saveSchema(String clazz, Schema schema, ClassMetaData classMetaData) {
+    Objects.requireNonNull(classMetaData);
+    Objects.requireNonNull(schema);
+    classMetaData.setSchema(schema);
+    this.classMetaCache.put(clazz, classMetaData);
     DataStore dataStore = dataStoreFactory.getStore();
-    dataStore.upsertSchema(clazz, schema, event -> {
+    dataStore.upsertMetaInfo(clazz, classMetaData, event -> {
       if (event.failed()) {
         logger.warn("failed to upsert class schema. cause: " + event.cause());
       } else {
@@ -45,7 +45,8 @@ public class DamoclesVerticle extends CommonVerticle {
       }
     });
 
-    final JsonArray newIndices = (null == indices)?new JsonArray():indices;
+    final JsonArray existedIndices = classMetaData.getIndices();
+    final JsonArray newIndices = new JsonArray();
 
     Future<Boolean> future = Future.succeededFuture(true);
     future.compose(res -> {
@@ -55,13 +56,13 @@ public class DamoclesVerticle extends CommonVerticle {
       if (StringUtils.notEmpty(geoPointAttrPath)) {
         JsonObject indexJson = new JsonObject().put(geoPointAttrPath, "2dsphere");
         DataStore.IndexOption indexOption = new DataStore.IndexOption().setSparse(true).setName(geoPointAttrPath);
-        makeSureIndexCreated(clazz, indexJson, indexOption, indices, dataStore, response -> {
+        makeSureIndexCreated(clazz, indexJson, indexOption, existedIndices, dataStore, response -> {
           if (response.failed()) {
-            logger.warn("failed to create index. attr=" + geoPointAttrPath + ". cause: " + response.cause());
+            logger.warn("failed to createSingleObject index. attr=" + geoPointAttrPath + ". cause: " + response.cause());
             future.fail(response.cause());
           } else {
             if (response.result()) {
-              logger.info("success to create index. attr=" + geoPointAttrPath);
+              logger.info("success to createSingleObject index. attr=" + geoPointAttrPath);
               newIndices.add(indexOption.toJson());
             }
             future.complete(response.result());
@@ -72,23 +73,23 @@ public class DamoclesVerticle extends CommonVerticle {
       }
       return sphereFuture;
     })
-    .compose(res -> makeSureDefaultIndex(clazz, LeanObject.ATTR_NAME_UPDATED_TS, false, indices, newIndices, dataStore))
-    .compose(res -> makeSureDefaultIndex(clazz, LeanObject.ATTR_NAME_CREATED_TS, false, indices, newIndices, dataStore))
+    .compose(res -> makeSureDefaultIndex(clazz, LeanObject.ATTR_NAME_UPDATED_TS, false, existedIndices, newIndices, dataStore))
+    .compose(res -> makeSureDefaultIndex(clazz, LeanObject.ATTR_NAME_CREATED_TS, false, existedIndices, newIndices, dataStore))
     .compose(res -> {
       if (Constraints.USER_CLASS.equals(clazz)) {
-        return makeSureDefaultIndex(clazz, LeanObject.BUILTIN_ATTR_EMAIL, true, indices, newIndices, dataStore);
+        return makeSureDefaultIndex(clazz, LeanObject.BUILTIN_ATTR_EMAIL, true, existedIndices, newIndices, dataStore);
       } else {
         return Future.succeededFuture(true);
       }
     }).compose(res -> {
         if (Constraints.USER_CLASS.equals(clazz)) {
-          return makeSureDefaultIndex(clazz, LeanObject.BUILTIN_ATTR_USERNAME, true, indices, newIndices, dataStore);
+          return makeSureDefaultIndex(clazz, LeanObject.BUILTIN_ATTR_USERNAME, true, existedIndices, newIndices, dataStore);
         } else {
           return Future.succeededFuture(true);
         }
     }).compose(res -> {
       if (Constraints.USER_CLASS.equals(clazz)) {
-        return makeSureDefaultIndex(clazz, LeanObject.BUILTIN_ATTR_MOBILEPHONE, true, indices, newIndices, dataStore);
+        return makeSureDefaultIndex(clazz, LeanObject.BUILTIN_ATTR_MOBILEPHONE, true, existedIndices, newIndices, dataStore);
       } else {
         return Future.succeededFuture(true);
       }
@@ -97,7 +98,7 @@ public class DamoclesVerticle extends CommonVerticle {
         List<String> authIndexPaths = schema.findAuthDataIndex();
         Future<Boolean> composedFuture = Future.succeededFuture(true);
         for (String attr : authIndexPaths) {
-          composedFuture = composedFuture.compose(r -> makeSureDefaultIndex(clazz, attr, true, indices, newIndices, dataStore));
+          composedFuture = composedFuture.compose(r -> makeSureDefaultIndex(clazz, attr, true, existedIndices, newIndices, dataStore));
         }
         return composedFuture;
       } else {
@@ -105,7 +106,12 @@ public class DamoclesVerticle extends CommonVerticle {
       }
     }).setHandler(response -> {
       dataStore.close();
-      this.classMetaCache.put(clazz, new ClassMetaData(clazz, schema, newIndices));
+      if (newIndices.size() > 0) {
+        if (null != existedIndices)
+          newIndices.addAll(existedIndices);
+        classMetaData.setIndices(newIndices);
+        this.classMetaCache.put(clazz, classMetaData);
+      }
     });
   }
 
@@ -119,11 +125,11 @@ public class DamoclesVerticle extends CommonVerticle {
     DataStore.IndexOption indexOption = new DataStore.IndexOption().setSparse(true).setUnique(isUnique).setName(attr);
     makeSureIndexCreated(clazz, indexJson, indexOption, existedIndex, dataStore, response -> {
       if (response.failed()) {
-        logger.warn("failed to create index. attr=" + attr + ". cause: " + response.cause());
+        logger.warn("failed to createSingleObject index. attr=" + attr + ". cause: " + response.cause());
         defaultFuture.fail(response.cause());
       } else {
         if (response.result()) {
-          logger.info("success to create index. attr=" + attr);
+          logger.info("success to createSingleObject index. attr=" + attr);
           newIndices.add(indexOption.toJson());
         }
         defaultFuture.complete(response.result());
@@ -203,7 +209,7 @@ public class DamoclesVerticle extends CommonVerticle {
             inputSchema = object.guessSchema();
             cachedData = (ClassMetaData)this.classMetaCache.get(clazz);
             if (null == cachedData || null == cachedData.getSchema()) {
-              saveSchema(clazz, inputSchema, null == cachedData? null : cachedData.getIndices());
+              saveSchema(clazz, inputSchema, null == cachedData? new ClassMetaData(clazz) : cachedData);
               message.reply(new JsonObject().put("result", true));
             } else {
               message.reply(new JsonObject().put("result", false));
@@ -237,19 +243,19 @@ public class DamoclesVerticle extends CommonVerticle {
               if (null != cachedData) {
                 Schema cachedSchema = new Schema(cachedData.getSchema());
                 Schema.CompatResult compatResult = inputSchema.compatibleWith(cachedSchema);
-                logger.debug("compatibility test. input=" + inputSchema + ", rule=" + cachedSchema + ", result=" + compatResult);
+                logger.debug("compatibility testSchema. input=" + inputSchema + ", rule=" + cachedSchema + ", result=" + compatResult);
                 if (compatResult == Schema.CompatResult.NOT_MATCHED) {
                   message.fail(INVALID_PARAMETER.getCode(), "data consistency violated.");
                 } else {
                   if (compatResult == Schema.CompatResult.OVER_MATCHED) {
-                    saveSchema(clazz, inputSchema, cachedData.getIndices());
+                    saveSchema(clazz, inputSchema, cachedData);
                   }
                   message.reply(new JsonObject().put("result", true));
                 }
               } else {
                 // first encounter, pass.
                 logger.info("no cached schema, maybe it's new clazz.");
-                saveSchema(clazz, inputSchema, new JsonArray());
+                saveSchema(clazz, inputSchema, new ClassMetaData(clazz));
                 message.reply(new JsonObject().put("result", true));
               }
             } catch (ConsistencyViolationException ex) {
@@ -267,18 +273,21 @@ public class DamoclesVerticle extends CommonVerticle {
     logger.info("start DamoclesVerticle...");
 
     dataStoreFactory = Configure.getInstance().getDataStoreFactory();
-    classMetaCache = Configure.getInstance().getSchemaCache();
+    classMetaCache = Configure.getInstance().getClassMetaDataCache();
     DataStore dataStore = dataStoreFactory.getStore();
-    dataStore.listSchemas(event -> {
+    dataStore.listClassMetaInfo(event -> {
       if (event.failed()) {
         logger.warn("failed to fetch schemas, cause: " + event.cause());
         dataStore.close();
       } else {
         event.result().forEach(object  -> {
-          String clazz = object.getString("class");
-          JsonObject schema = object.getJsonObject("schema");
-          if (StringUtils.notEmpty(clazz) && null != schema) {
-            logger.info("found class scheme. clazz=" + clazz + ", schema=" + schema);
+          if (null == object) {
+            return;
+          }
+          String clazz = object.getString("name");
+          ClassMetaData metaData = new ClassMetaData(object);
+          if (StringUtils.notEmpty(clazz)) {
+            logger.info("found class scheme. clazz=" + clazz + ", metaInfo=" + metaData);
             dataStore.listIndices(clazz, res-> {
               JsonArray indices = null;
               if (res.failed()) {
@@ -291,7 +300,8 @@ public class DamoclesVerticle extends CommonVerticle {
               if (null == indices) {
                 indices = new JsonArray();
               }
-              classMetaCache.putIfAbsent(clazz, new ClassMetaData(clazz, schema, indices));
+              metaData.setIndices(indices);
+              classMetaCache.putIfAbsent(clazz, metaData);
             });
           }
         });

@@ -3,7 +3,6 @@ package cn.leancloud.platform.ayers;
 import cn.leancloud.platform.auth.ApplicationAuthenticator;
 import cn.leancloud.platform.auth.SessionValidator;
 import cn.leancloud.platform.ayers.handler.*;
-import cn.leancloud.platform.cache.SimpleRedisClient;
 import cn.leancloud.platform.common.*;
 import cn.leancloud.platform.modules.LeanObject;
 import cn.leancloud.platform.modules.ObjectSpecifics;
@@ -39,7 +38,6 @@ import java.util.Optional;
 public class RestServerVerticle extends CommonVerticle {
   private static final Logger logger = LoggerFactory.getLogger(RestServerVerticle.class);
 
-  private SimpleRedisClient redisClient = new SimpleRedisClient();
   private HttpServer httpServer;
 
   private void serverDate(RoutingContext context) {
@@ -81,7 +79,7 @@ public class RestServerVerticle extends CommonVerticle {
       badRequest(context, new JsonObject().put("code", ErrorCodes.INVALID_PARAMETER.getCode()).put("error", "session token is required."));
     } else {
       UserHandler handler = new UserHandler(vertx, context);
-      handler.validateSessionToken(null, sessionToken, res -> {
+      handler.validateSessionToken( sessionToken, res -> {
         if (res.failed()) {
           internalServerError(context, ErrorCodes.DATABASE_ERROR.toJson());
         } else if (null == res.result() || res.result().size() < 1) {
@@ -203,7 +201,6 @@ public class RestServerVerticle extends CommonVerticle {
               if (res2.failed()) {
                 internalServerError(context, ErrorCodes.INTERNAL_ERROR.toJson());
               } else {
-                // TODO: add sessionToken - userObject to cache.
                 ok(context, res2.result());
               }
             });
@@ -215,7 +212,6 @@ public class RestServerVerticle extends CommonVerticle {
           if (res.failed()) {
             internalServerError(context, ErrorCodes.INTERNAL_ERROR.toJson());
           } else {
-            // TODO: add sessionToken - userObject to cache.
             ok(context, res.result());
           }
         });
@@ -246,7 +242,6 @@ public class RestServerVerticle extends CommonVerticle {
               } else if (null == res.result()) {
                 notFound(context, ErrorCodes.PASSWORD_WRONG.toJson());
               } else {
-                // TODO: add sessionToken - userObject to cache.
                 ok(context, res.result());
               }
             });
@@ -260,7 +255,6 @@ public class RestServerVerticle extends CommonVerticle {
           } else if (null == res.result()) {
             notFound(context, ErrorCodes.PASSWORD_WRONG.toJson());
           } else {
-            // TODO: add sessionToken - userObject to cache.
             ok(context, res.result());
           }
         });
@@ -298,12 +292,10 @@ public class RestServerVerticle extends CommonVerticle {
               if (res2.failed()) {
                 internalServerError(context, new JsonObject().put("error", res2.cause().getMessage()));
               } else {
-                // TODO: add sessionToken - userObject to cache.
                 ok(context, res2.result());
               }
             });
           } else {
-            // TODO: add sessionToken - userObject to cache.
             ok(context, res.result());
           }
         });
@@ -329,6 +321,7 @@ public class RestServerVerticle extends CommonVerticle {
 
     if ((HttpMethod.POST.equals(httpMethod) || HttpMethod.PUT.equals(httpMethod)) && null != body) {
       if (!ObjectSpecifics.validateObject(body)) {
+        logger.debug("invalid request body: " + body);
         badRequest(context, ErrorCodes.INVALID_PARAMETER.toJson());
         return;
       }
@@ -389,11 +382,11 @@ public class RestServerVerticle extends CommonVerticle {
     } else {
       ObjectModifyHandler modifyHandler = new ObjectModifyHandler(vertx, context);
       if (HttpMethod.POST.equals(httpMethod)) {
-        modifyHandler.create(clazz, body, returnNewObject, replayHandler);
+        modifyHandler.createSingleObject(clazz, body, returnNewObject, replayHandler);
       } else if (HttpMethod.PUT.equals(httpMethod)) {
-        modifyHandler.update(clazz, objectId, null, body, returnNewObject, replayHandler);
+        modifyHandler.updateSingleObject(clazz, objectId, null, body, returnNewObject, replayHandler);
       } else if (HttpMethod.DELETE.equals(httpMethod)){
-        modifyHandler.delete(clazz, objectId, null, replayHandler);
+        modifyHandler.deleteSingleObject(clazz, objectId, null, replayHandler);
       } else {
         logger.warn("not support http method: " + httpMethod);
         forbidden(context, new JsonObject().put("error", "not support HTTP Method - " + httpMethod));
@@ -424,6 +417,30 @@ public class RestServerVerticle extends CommonVerticle {
 
   private void crudCommonData(String clazz, RoutingContext context) {
     crudCommonDataEx(clazz, context, null);
+  }
+
+  private void createClazz(RoutingContext context) {
+    JsonObject body = parseRequestBody(context);
+    if (null == body) {
+      badRequest(context, ErrorCodes.INVALID_PARAMETER.toJson());
+      return;
+    }
+    JsonObject aclTemplate = body.getJsonObject("acl_template");
+    String classType = body.getString("class_type");
+    String clazz = body.getString("class_name");
+    if (!ObjectSpecifics.validateClassName(clazz)) {
+      logger.warn("invalid class name: " + clazz);
+      badRequest(context, ErrorCodes.INVALID_CLASSNAME.toJson());
+      return;
+    }
+    MetaDataHandler handler = new MetaDataHandler(vertx, context);
+    handler.createClass(clazz, classType, aclTemplate, response -> {
+      if (response.failed()) {
+        internalServerError(context, ErrorCodes.INTERNAL_ERROR.toJson());
+      } else {
+        ok(context, response.result());
+      }
+    });
   }
 
   private void healthcheck(RoutingContext context) {
@@ -521,6 +538,8 @@ public class RestServerVerticle extends CommonVerticle {
     router.post("/1.1/schemas/:clazz").handler(this::addSchemaIfAbsent);
     router.get("/1.1/schemas/:clazz").handler(this::listSchema);
 
+    router.post("/1.1/meta/classes").handler(this::createClazz);
+
     router.post("/1.1/indices/:clazz").handler(this::createIndex);
     router.get("/1.1/indices/:clazz").handler(this::listIndex);
     router.delete("/1.1/indices/:clazz/:name").handler(this::deleteIndex);
@@ -561,8 +580,8 @@ public class RestServerVerticle extends CommonVerticle {
     if (null == body || body.size() < 1) {
       badRequest(context, new JsonObject().put("error", "request body is required."));
     } else {
-      SchemaHandler handler = new SchemaHandler(vertx, context);
-      handler.test(clazz, body, res -> {
+      MetaDataHandler handler = new MetaDataHandler(vertx, context);
+      handler.testSchema(clazz, body, res -> {
         if (res.failed()) {
           internalServerError(context, new JsonObject().put("error", res.cause().getMessage()));
         } else {
@@ -578,8 +597,8 @@ public class RestServerVerticle extends CommonVerticle {
     if (null == body || body.size() < 1) {
       badRequest(context, new JsonObject().put("error", "request body is required."));
     } else {
-      SchemaHandler handler = new SchemaHandler(vertx, context);
-      handler.addIfAbsent(clazz, body, res -> {
+      MetaDataHandler handler = new MetaDataHandler(vertx, context);
+      handler.addSchemaIfAbsent(clazz, body, res -> {
         if (res.failed()) {
           internalServerError(context, new JsonObject().put("error", res.cause().getMessage()));
         } else {
@@ -591,8 +610,8 @@ public class RestServerVerticle extends CommonVerticle {
 
   private void listSchema(RoutingContext context) {
     String clazz = parseRequestClassname(context);
-    SchemaHandler handler = new SchemaHandler(vertx, context);
-    handler.find(clazz, res -> {
+    MetaDataHandler handler = new MetaDataHandler(vertx, context);
+    handler.findSchema(clazz, res -> {
       if (res.failed()) {
         internalServerError(context, new JsonObject().put("error", res.cause().getMessage()));
       } else {
@@ -680,18 +699,13 @@ public class RestServerVerticle extends CommonVerticle {
 
   @Override
   public void start(Future<Void> startFuture) throws Exception {
-    Configure configure = Configure.getInstance();
-    String hosts = configure.redisHosts();
-    String type = configure.redisHAType(); // ignore
-    String[] hostParts = hosts.split(":");
-    final int redisPort = (hostParts.length > 1)? Integer.valueOf(hostParts[1]) : 6379;
-    String redisHost = hostParts[0];
-
-    startHttpServer().compose(ar -> {
-      Future<Void> future = Future.future();
-      redisClient.connect(vertx, redisHost, redisPort, future);
-      return future;
-    }).setHandler(ar -> {
+//    Configure configure = Configure.getInstance();
+//    String hosts = configure.redisHosts();
+//    String type = configure.redisHAType(); // ignore
+//    String[] hostParts = hosts.split(":");
+//    final int redisPort = (hostParts.length > 1)? Integer.valueOf(hostParts[1]) : 6379;
+//    String redisHost = hostParts[0];
+    startHttpServer().setHandler(ar -> {
       logger.info("start RestServerVerticle...");
       startFuture.complete();
     });
@@ -700,7 +714,6 @@ public class RestServerVerticle extends CommonVerticle {
   @Override
   public void stop(Future<Void> stopFuture) throws Exception {
     httpServer.close();
-    redisClient.close();
     logger.info("stop RestServerVerticle...");
     stopFuture.complete();
   }
