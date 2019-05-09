@@ -65,6 +65,7 @@ public class RequestParse {
   public static final String OP_CREATE_INDEX = "CREATE_INDEX";
   public static final String OP_DELETE_INDEX = "DELETE_INDEX";
   public static final String OP_LIST_INDEX = "LIST_INDEX";
+
   public static final String OP_TEST_SCHEMA = "TEST_SCHEMA";
   public static final String OP_ADD_SCHEMA = "ADD_SCHEMA";
   public static final String OP_FIND_SCHEMA = "FIND_SCHEMA";

@@ -113,7 +113,8 @@ public class CommonHandler {
     if (Constraints.FILE_CLASS.equals(clazz)) {
       return false;
     }
-    if (RequestParse.OP_USER_SIGNIN.equals(operation)) {
+    if (RequestParse.OP_CREATE_INDEX.equals(operation) || RequestParse.OP_CREATE_CLASS.equals(operation)
+            || RequestParse.OP_DELETE_INDEX.equals(operation)|| RequestParse.OP_LIST_INDEX.equals(operation)) {
       return false;
     }
     return true;

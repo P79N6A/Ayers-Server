@@ -396,7 +396,26 @@ public class DamoclesVerticle extends CommonVerticle {
               message.reply(new JsonObject().put("result", false));
             }
             break;
-          default:
+          case RequestParse.OP_USER_SIGNIN:
+          case RequestParse.OP_USER_SIGNUP:
+            try {
+              inputSchema = object.guessSchema();
+              Schema cachedSchema = null == cachedData ? null : new Schema(cachedData.getSchema());
+              Schema.CompatResult compatResult = inputSchema.compatibleWith(cachedSchema);
+              message.reply(new JsonObject().put("result", false));
+              if (compatResult != Schema.CompatResult.MATCHED) {
+                saveSchema(clazz, inputSchema, cachedData);
+              }
+            } catch (ConsistencyViolationException ex) {
+              logger.warn("failed to parse object schema. cause: " + ex.getMessage());
+              message.fail(SCHEMA_VIOLATION.getCode(), ex.getMessage());
+              return;
+            }
+            break;
+          case RequestParse.OP_OBJECT_DELETE:
+          case RequestParse.OP_OBJECT_PUT:
+          case RequestParse.OP_OBJECT_POST:
+          case RequestParse.OP_OBJECT_GET:
             // object CRUD.
             final ClassPermission.OP op;
             boolean checkSchemaFirst = false;
@@ -445,6 +464,13 @@ public class DamoclesVerticle extends CommonVerticle {
                 }
               }
             });
+            break;
+          case RequestParse.OP_CREATE_INDEX:
+          case RequestParse.OP_CREATE_CLASS:
+          case RequestParse.OP_LIST_INDEX:
+          case RequestParse.OP_DELETE_INDEX:
+          default:
+            message.reply(new JsonObject().put("result", false));
             break;
         }
       }
