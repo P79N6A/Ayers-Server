@@ -27,20 +27,21 @@ Ayers is a structural data processing server based on Vertx.io and [Netty](https
 - bulk operation
 - let all components configurable.
 - signup/signin with third-party auth data
+- user login with mobilephone
 - support mongodb index api.
 - support schema api.
 - sms
-
-### in progress
-- user login with mobilephone, password-related operations.
-- leanengine hook
+- leanengine hook invocation
 - support include option for query operation.
 - ACL check for CRUD.
+
+### in progress
+- password-related operations.
+- leanengine hook watcher
 - add in-memory cache for session token(support up to 100k users, just work for standalone mode).
 
 ### todo
 - support class scan(low-priority, bcz it's just an alias for query)
-
 - managing mongodb collections.
 - support other mongodb commands.
 - support plugins
