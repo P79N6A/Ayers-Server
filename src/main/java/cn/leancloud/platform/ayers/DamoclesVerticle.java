@@ -1,6 +1,7 @@
 package cn.leancloud.platform.ayers;
 
 import cn.leancloud.platform.cache.InMemoryLRUCache;
+import cn.leancloud.platform.cache.UnifiedCache;
 import cn.leancloud.platform.modules.*;
 import cn.leancloud.platform.common.Configure;
 import cn.leancloud.platform.common.Constraints;
@@ -10,6 +11,7 @@ import cn.leancloud.platform.persistence.DataStoreFactory;
 import cn.leancloud.platform.utils.JsonFactory;
 import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.AsyncResult;
+import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.eventbus.Message;
@@ -18,10 +20,12 @@ import io.vertx.core.json.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-import static cn.leancloud.platform.common.ErrorCodes.INVALID_PARAMETER;
+import static cn.leancloud.platform.common.ErrorCodes.ACL_VIOLATION;
+import static cn.leancloud.platform.common.ErrorCodes.SCHEMA_VIOLATION;
 
 /**
  * Data consistency defender.
@@ -36,6 +40,7 @@ public class DamoclesVerticle extends CommonVerticle {
     Objects.requireNonNull(schema);
     classMetaData.setSchema(schema);
     this.classMetaCache.put(clazz, classMetaData);
+
     DataStore dataStore = dataStoreFactory.getStore();
     dataStore.upsertMetaInfo(clazz, classMetaData, event -> {
       if (event.failed()) {
@@ -179,23 +184,181 @@ public class DamoclesVerticle extends CommonVerticle {
     }
   }
 
+  protected Future<Boolean> classPermissionRoleCheck(List<String> roles, JsonObject currentUser) {
+    Future<Boolean> result = Future.failedFuture("can't check role, not implement yet...");
+    // TODO:
+    return result;
+  }
+
+  protected Future<Boolean> classPermissionCheck(String clazz, JsonObject body, RequestParse.RequestHeaders request, ClassPermission.OP op) {
+    Objects.requireNonNull(clazz);
+    Objects.requireNonNull(request);
+    Future<Boolean> result = Future.future();
+    if (request.isUseMasterKey()) {
+      result.complete(true);
+      return result;
+    }
+    JsonObject classMeta = Configure.getInstance().getClassMetaDataCache().get(clazz);
+    if (null == classMeta) {
+      // always allow create class.
+      result.complete(true);
+      return result;
+    }
+    ClassPermission classPermission = ClassPermission.fromJson(ClassMetaData.fromJson(classMeta).getClassPermissions());
+    // check public permission at first.
+    if (classPermission.checkOperation(op, null, null)) {
+      result.complete(true);
+      return result;
+    }
+    String sessionToken = request.getSessionToken();
+    if (StringUtils.isEmpty(sessionToken)) {
+      // unauth user.
+      result.fail("user isn't login.");
+      return result;
+    }
+    JsonObject user = UnifiedCache.getGlobalInstance().get(sessionToken);
+    if (null != user) {
+      boolean allowed = classPermission.checkOperation(op, user.getString(LeanObject.ATTR_NAME_OBJECTID), null);
+      if (allowed) {
+        result.complete(true);
+      } else {
+        List<String> roles = classPermission.getOperationRoles(op);
+        if (null == roles || roles.size() < 1) {
+          result.fail("no permission for current user.");
+        } else {
+          return classPermissionRoleCheck(roles, user);
+        }
+      }
+      return result;
+    }
+    DataStore dataStore = dataStoreFactory.getStore();
+    dataStore.findOne(Constraints.USER_CLASS, new JsonObject().put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, request.getSessionToken()),
+            null, response -> {
+      dataStore.close();
+      if (response.failed() || null == response.result()) {
+        result.fail("failed to fetch user with sessionToken:" + request.getSessionToken());
+      } else {
+        JsonObject newUser = response.result();
+        boolean allowed = classPermission.checkOperation(op, newUser.getString(LeanObject.ATTR_NAME_OBJECTID), null);
+        if (allowed) {
+          result.complete(true);
+        } else {
+          List<String> roles = classPermission.getOperationRoles(op);
+          if (null == roles || roles.size() < 1) {
+            result.fail("no permission for current user.");
+          } else {
+            classPermissionRoleCheck(roles, user).setHandler(res -> result.handle(res));
+          }
+        }
+      }
+    });
+    return result;
+  }
+
+  protected Future<Boolean> objectACLCheck(String clazz, String objectId, RequestParse.RequestHeaders request, ClassPermission.OP op) {
+    Objects.requireNonNull(clazz);
+    Objects.requireNonNull(objectId);
+    Objects.requireNonNull(request);
+
+    Future<Boolean> result = Future.future();
+
+    if (request.isUseMasterKey()) {
+      // for masterkey, any operation is allowed.
+      result.complete(true);
+      return result;
+    }
+
+    DataStore dataStore = dataStoreFactory.getStore();
+    dataStore.findOne(clazz, new JsonObject().put(LeanObject.ATTR_NAME_OBJECTID, objectId),
+            new JsonObject().put(LeanObject.BUILTIN_ATTR_ACL, 1), response -> {
+              if (response.failed()) {
+                // database error.
+                dataStore.close();
+                result.fail(response.cause().getMessage());
+                return;
+              } else if (null == response.result() || response.result().size() < 1) {
+                // not found.
+                dataStore.close();
+                result.complete(true);
+                return;
+              } else {
+                LeanObject targetObject = LeanObject.fromJson(clazz, response.result());
+                boolean isWriteOp = op.equals(ClassPermission.OP.UPDATE) || op.equals(ClassPermission.OP.DELETE);
+                String sessionToken = request.getSessionToken();
+                if (StringUtils.isEmpty(sessionToken)) {
+                  dataStore.close();
+                  boolean allowed = targetObject.checkOperationByACL(isWriteOp, null);
+                  if (allowed) {
+                    result.complete(true);
+                  } else {
+                    result.fail("user isn't login.");
+                  }
+                  return;
+                } else {
+                  JsonObject user = UnifiedCache.getGlobalInstance().get(sessionToken);
+                  if (null != user) {
+                    dataStore.close();
+                    boolean allowed = targetObject.checkOperationByACL(isWriteOp, user.getString(LeanObject.ATTR_NAME_OBJECTID));
+                    if (allowed) {
+                      result.complete(true);
+                    } else {
+                      List<String> roles = targetObject.getOperationRoles(isWriteOp);
+                      if (null == roles || roles.size() < 1) {
+                        result.fail("no permission for current user.");
+                      } else {
+                        classPermissionRoleCheck(roles, user).setHandler(result::handle);
+                      }
+                    }
+                    return;
+                  }
+                  dataStore.findOne(Constraints.USER_CLASS, new JsonObject().put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, request.getSessionToken()),
+                          null, res2 -> {
+                            dataStore.close();
+                            if (res2.failed()) {
+                              result.fail(res2.cause().getMessage());
+                              return;
+                            } else {
+                              JsonObject newUser = res2.result();
+                              String userObjectId = null == newUser ? null : newUser.getString(LeanObject.ATTR_NAME_OBJECTID);
+                              boolean allowed = targetObject.checkOperationByACL(isWriteOp, userObjectId);
+                              if (allowed) {
+                                result.complete(true);
+                              } else {
+                                List<String> roles = targetObject.getOperationRoles(isWriteOp);
+                                if (null == roles || roles.size() < 1) {
+                                  result.fail("no permission for current user.");
+                                } else {
+                                  classPermissionRoleCheck(roles, newUser).setHandler(result::handle);
+                                }
+                              }
+                              return;
+                            }
+                          });
+                }
+              }
+            });
+    return result;
+  }
+
   public void onMessage(Message<JsonObject> message) {
     JsonObject body = message.body();
     String clazz = body.getString(INTERNAL_MSG_ATTR_CLASS, "");
+    String objectId = body.getString(INTERNAL_MSG_ATTR_OBJECT_ID);
     JsonObject param = body.getJsonObject(INTERNAL_MSG_ATTR_UPDATE_PARAM);
+    JsonObject headers = body.getJsonObject(INTERNAL_MSG_ATTR_REQUESTHEADERS);
+    RequestParse.RequestHeaders requestHeaders = RequestParse.RequestHeaders.fromJson(headers);
 
     String operation = message.headers().get(INTERNAL_MSG_HEADER_OP).toUpperCase();
 
-    ClassMetaData cachedData;
+    final ClassMetaData cachedData = (ClassMetaData)this.classMetaCache.get(clazz);
     if (StringUtils.isEmpty(clazz)) {
       logger.warn("clazz name is empty, ignore schema check...");
       message.fail(ErrorCodes.INVALID_PARAMETER.getCode(), "className is required.");
     } else {
       LeanObject object = null != param? new LeanObject(param) : null;
-      Schema inputSchema;
+      final Schema inputSchema;
 
       if (RequestParse.OP_FIND_SCHEMA.equals(operation)) {
-        cachedData = (ClassMetaData) this.classMetaCache.get(clazz);
         if (null == cachedData) {
           message.reply(new JsonObject());
         } else {
@@ -207,7 +370,6 @@ public class DamoclesVerticle extends CommonVerticle {
         switch (operation) {
           case RequestParse.OP_ADD_SCHEMA:
             inputSchema = object.guessSchema();
-            cachedData = (ClassMetaData)this.classMetaCache.get(clazz);
             if (null == cachedData || null == cachedData.getSchema()) {
               saveSchema(clazz, inputSchema, null == cachedData? new ClassMetaData(clazz) : cachedData);
               message.reply(new JsonObject().put("result", true));
@@ -218,7 +380,6 @@ public class DamoclesVerticle extends CommonVerticle {
           case RequestParse.OP_TEST_SCHEMA:
             try {
               inputSchema = object.guessSchema();
-              cachedData = (ClassMetaData)this.classMetaCache.get(clazz);
               if (null != cachedData) {
                 Schema cachedSchema = new Schema(cachedData.getSchema());
                 Schema.CompatResult compatResult = inputSchema.compatibleWith(cachedSchema);
@@ -237,31 +398,53 @@ public class DamoclesVerticle extends CommonVerticle {
             break;
           default:
             // object CRUD.
-            try {
-              inputSchema = object.guessSchema();
-              cachedData = (ClassMetaData)this.classMetaCache.get(clazz);
-              if (null != cachedData) {
-                Schema cachedSchema = new Schema(cachedData.getSchema());
-                Schema.CompatResult compatResult = inputSchema.compatibleWith(cachedSchema);
-                logger.debug("compatibility testSchema. input=" + inputSchema + ", rule=" + cachedSchema + ", result=" + compatResult);
-                if (compatResult == Schema.CompatResult.NOT_MATCHED) {
-                  message.fail(INVALID_PARAMETER.getCode(), "data consistency violated.");
-                } else {
-                  if (compatResult == Schema.CompatResult.OVER_MATCHED) {
-                    saveSchema(clazz, inputSchema, cachedData);
-                  }
-                  message.reply(new JsonObject().put("result", true));
-                }
-              } else {
-                // first encounter, pass.
-                logger.info("no cached schema, maybe it's new clazz.");
-                saveSchema(clazz, inputSchema, new ClassMetaData(clazz));
-                message.reply(new JsonObject().put("result", true));
-              }
-            } catch (ConsistencyViolationException ex) {
-              logger.warn("failed to parse object schema. cause: " + ex.getMessage());
-              message.fail(INVALID_PARAMETER.getCode(), ex.getMessage());
+            final ClassPermission.OP op;
+            boolean checkSchemaFirst = false;
+            Schema.CompatResult compatResult = Schema.CompatResult.MATCHED;
+            if (RequestParse.OP_OBJECT_POST.equals(operation)) {
+              op = ClassPermission.OP.CREATE;
+              checkSchemaFirst = true;
+            } else if (RequestParse.OP_OBJECT_PUT.equals(operation)) {
+              op = ClassPermission.OP.UPDATE;
+              checkSchemaFirst = true;
+            } else if (RequestParse.OP_OBJECT_GET.equals(operation)) {
+              op = StringUtils.isEmpty(objectId)? ClassPermission.OP.FIND : ClassPermission.OP.GET;
+            } else if (RequestParse.OP_OBJECT_DELETE.equals(operation)) {
+              op = ClassPermission.OP.DELETE;
+            } else {
+              op = ClassPermission.OP.FIND;
             }
+            if (checkSchemaFirst) {
+              try {
+                inputSchema = object.guessSchema();
+                Schema cachedSchema = null == cachedData ? null : new Schema(cachedData.getSchema());
+                compatResult = inputSchema.compatibleWith(cachedSchema);
+              } catch (ConsistencyViolationException ex) {
+                logger.warn("failed to parse object schema. cause: " + ex.getMessage());
+                message.fail(SCHEMA_VIOLATION.getCode(), ex.getMessage());
+                return;
+              }
+            } else {
+              inputSchema = null;
+            }
+            final boolean needSaveSchema = (compatResult != Schema.CompatResult.MATCHED) && (null != inputSchema);
+            List<Future> futures = new ArrayList<>();
+            if (compatResult == Schema.CompatResult.OVER_MATCHED_ON_FIELD_LAYER) {
+              futures.add(classPermissionCheck(clazz, param, requestHeaders, ClassPermission.OP.ADD_FIELDS));
+            }
+            futures.add(classPermissionCheck(clazz, param, requestHeaders, op));
+            futures.add(objectACLCheck(clazz, objectId, requestHeaders, op));
+            CompositeFuture.all(futures).setHandler(response -> {
+              if (response.failed()) {
+                message.fail(ACL_VIOLATION.getCode(), response.cause().getMessage());
+              } else {
+                message.reply(new JsonObject().put("result", true));
+
+                if (needSaveSchema) {
+                  saveSchema(clazz, inputSchema, cachedData);
+                }
+              }
+            });
             break;
         }
       }

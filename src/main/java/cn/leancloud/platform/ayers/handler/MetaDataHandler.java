@@ -30,8 +30,7 @@ public class MetaDataHandler extends CommonHandler {
     ClassMetaData metaData = new ClassMetaData(clazz);
     metaData.setACLTemplate(aclTemplate);
     metaData.setClassType(classType);
-    sendDataOperationWithOption(metaData.getClassName(), null, RequestParse.OP_CREATE_CLASS, null, metaData,
-            true, response -> {
+    createClass(metaData, response -> {
       if (response.succeeded()) {
         Configure.getInstance().getClassMetaDataCache().putIfAbsent(clazz, response.result());
       }

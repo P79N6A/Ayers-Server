@@ -3,19 +3,15 @@ package cn.leancloud.platform.ayers.handler;
 import cn.leancloud.platform.ayers.CommonVerticle;
 import cn.leancloud.platform.ayers.RequestParse;
 import cn.leancloud.platform.cache.InMemoryLRUCache;
-import cn.leancloud.platform.cache.UnifiedCache;
 import cn.leancloud.platform.common.Configure;
 import cn.leancloud.platform.common.Constraints;
 import cn.leancloud.platform.common.ErrorCodes;
 import cn.leancloud.platform.modules.ClassMetaData;
-import cn.leancloud.platform.modules.ClassPermission;
-import cn.leancloud.platform.modules.LeanObject;
 import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.eventbus.DeliveryOptions;
-import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 import org.apache.commons.lang3.tuple.Pair;
@@ -25,7 +21,7 @@ import org.slf4j.LoggerFactory;
 import java.security.InvalidParameterException;
 import java.util.Objects;
 
-import static cn.leancloud.platform.ayers.handler.ObjectQueryHandler.QUERY_KEY_KEYS;
+import static cn.leancloud.platform.utils.HandlerUtils.wrapErrorResult;
 
 public class CommonHandler {
   private static final Logger logger = LoggerFactory.getLogger(CommonHandler.class);
@@ -38,54 +34,6 @@ public class CommonHandler {
     this.vertx = vertx;
     this.routingContext = context;
     this.classMetaCache = Configure.getInstance().getClassMetaDataCache();
-  }
-
-  protected static <T> AsyncResult<T> wrapActualResult(T value) {
-    return new AsyncResult<T>() {
-      @Override
-      public T result() {
-        return value;
-      }
-
-      @Override
-      public Throwable cause() {
-        return null;
-      }
-
-      @Override
-      public boolean succeeded() {
-        return true;
-      }
-
-      @Override
-      public boolean failed() {
-        return false;
-      }
-    };
-  }
-
-  protected static <T> AsyncResult wrapErrorResult(Throwable throwable) {
-    return new AsyncResult<T>() {
-      @Override
-      public T result() {
-        return null;
-      }
-
-      @Override
-      public Throwable cause() {
-        return throwable;
-      }
-
-      @Override
-      public boolean succeeded() {
-        return false;
-      }
-
-      @Override
-      public boolean failed() {
-        return true;
-      }
-    };
   }
 
   protected boolean assertNotNull(Object param, Handler<AsyncResult<JsonObject>> handler) {
@@ -107,108 +55,6 @@ public class CommonHandler {
       return false;
     }
     return true;
-  }
-
-  protected void classPermissionCheck(String clazz, JsonObject body, RequestParse.RequestHeaders request, ClassPermission.OP op,
-                                      Handler<AsyncResult<Boolean>> handler) {
-    Objects.requireNonNull(clazz);
-    Objects.requireNonNull(request);
-    Objects.requireNonNull(handler);
-    if (request.isUseMasterKey()) {
-      handler.handle(wrapActualResult(true));
-      return;
-    }
-    JsonObject classMeta = Configure.getInstance().getClassMetaDataCache().get(clazz);
-    if (null == classMeta) {
-      // always allow create class.
-      handler.handle(wrapActualResult(true));
-      return;
-    }
-    ClassPermission classPermission = ClassPermission.fromJson(ClassMetaData.fromJson(classMeta).getClassPermissions());
-    // check public permission at first.
-    if (classPermission.checkOperation(op, null, null)) {
-      handler.handle(wrapActualResult(true));
-      return;
-    }
-    String sessionToken = request.getSessionToken();
-    if (StringUtils.isEmpty(sessionToken)) {
-      // unauth user.
-      handler.handle(wrapActualResult(false));
-      return;
-    }
-    // FIXME: maybe we need to fetch user's roles.
-    JsonObject user = UnifiedCache.getGlobalInstance().get(sessionToken);
-    if (null != user) {
-      boolean allowed = classPermission.checkOperation(op, user.getString(LeanObject.ATTR_NAME_OBJECTID), null);
-      handler.handle(wrapActualResult(allowed));
-      return;
-    }
-    UserHandler userHandler = new UserHandler(this.vertx, this.routingContext);
-    userHandler.validateSessionToken(sessionToken, response -> {
-      if (response.failed() || null == response.result()) {
-        handler.handle(wrapActualResult(false));
-      } else {
-        JsonObject newUser = response.result();
-        boolean allowed = classPermission.checkOperation(op, newUser.getString(LeanObject.ATTR_NAME_OBJECTID), null);
-        handler.handle(wrapActualResult(allowed));
-        return;
-      }
-    });
-  }
-
-  protected void objectACLCheck(String clazz, String objectId, RequestParse.RequestHeaders request, ClassPermission.OP op,
-                                Handler<AsyncResult<Boolean>> handler) {
-    Objects.requireNonNull(clazz);
-    Objects.requireNonNull(objectId);
-    Objects.requireNonNull(request);
-    Objects.requireNonNull(handler);
-    if (request.isUseMasterKey()) {
-      // for masterkey, any operation is allowed.
-      handler.handle(wrapActualResult(true));
-      return;
-    }
-    ObjectQueryHandler queryHandler = new ObjectQueryHandler(this.vertx, this.routingContext);
-    queryHandler.query(clazz, objectId, new JsonObject().put(QUERY_KEY_KEYS, LeanObject.BUILTIN_ATTR_ACL), response -> {
-      if (response.failed()) {
-        // database error.
-        handler.handle(wrapErrorResult(response.cause()));
-        return;
-      } else if (null == response.result() || response.result().size() < 1) {
-        // not found.
-        handler.handle(wrapActualResult(false));
-        return;
-      } else {
-        LeanObject targetObject = LeanObject.fromJson(clazz, response.result());
-        boolean isWriteOp = op.equals(ClassPermission.OP.UPDATE) || op.equals(ClassPermission.OP.DELETE);
-        String sessionToken = request.getSessionToken();
-        if (StringUtils.isEmpty(sessionToken)) {
-          boolean allowed = targetObject.checkOperationByACL(isWriteOp, null, null);
-          handler.handle(wrapActualResult(allowed));
-          return;
-        } else {
-          // FIXME: maybe we need to fetch user's roles.
-          JsonObject user = UnifiedCache.getGlobalInstance().get(sessionToken);
-          if (null != user) {
-            boolean allowed = targetObject.checkOperationByACL(isWriteOp, user.getString(LeanObject.ATTR_NAME_OBJECTID), null);
-            handler.handle(wrapActualResult(allowed));
-            return;
-          }
-          UserHandler userHandler = new UserHandler(this.vertx, this.routingContext);
-          userHandler.validateSessionToken(sessionToken, response2 -> {
-            if (response2.failed()) {
-              handler.handle(wrapErrorResult(response2.cause()));
-              return;
-            } else {
-              JsonObject newUser = response2.result();
-              String userObjectId = null == newUser ? null : newUser.getString(LeanObject.ATTR_NAME_OBJECTID);
-              boolean allowed = targetObject.checkOperationByACL(isWriteOp, userObjectId, null);
-              handler.handle(wrapActualResult(allowed));
-              return;
-            }
-          });
-        }
-      }
-    });
   }
 
   // path examples:
@@ -263,14 +109,33 @@ public class CommonHandler {
     return false;
   }
 
-  protected boolean shouldChangeSchema(String clazz, String operation) {
-    return HttpMethod.POST.toString().equals(operation) || HttpMethod.PUT.toString().equals(operation)
-            || RequestParse.OP_USER_SIGNUP.equals(operation) || RequestParse.OP_USER_SIGNIN.equals(operation);
+  protected boolean needCheckPermissionAndSchema(String clazz, String operation) {
+    if (Constraints.FILE_CLASS.equals(clazz)) {
+      return false;
+    }
+    if (RequestParse.OP_USER_SIGNIN.equals(operation)) {
+      return false;
+    }
+    return true;
+  }
+
+  protected void createClass(ClassMetaData metaData, Handler<AsyncResult<JsonObject>> handler) {
+    Objects.requireNonNull(metaData);
+    Objects.requireNonNull(handler);
+    final String clazz = metaData.getClassName();
+    sendDataOperationWithOption(clazz, null, RequestParse.OP_CREATE_CLASS, null, metaData,
+            true, null, response -> {
+              if (response.succeeded()) {
+                classMetaCache.putIfAbsent(clazz, response.result());
+              }
+              handler.handle(response);
+            });
   }
 
   protected void sendDataOperation(String clazz, String objectId, String operation,
-                                   JsonObject query, JsonObject update, final Handler<AsyncResult<JsonObject>> handler) {
-    sendDataOperationWithOption(clazz, objectId, operation, query, update, false, handler);
+                                   JsonObject query, JsonObject update, RequestParse.RequestHeaders headers,
+                                   final Handler<AsyncResult<JsonObject>> handler) {
+    sendDataOperationWithOption(clazz, objectId, operation, query, update, false, headers, handler);
   }
 
   protected void sendSchemaOperation(String clazz, String operation, JsonObject data,
@@ -293,7 +158,14 @@ public class CommonHandler {
 
   protected JsonObject copyRequestHeaders(RoutingContext context) {
     RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(context);
-    JsonObject headerJson = headers.toHeaders()
+    JsonObject headerJson = headers.toJson()
+            .put(RequestParse.HEADER_CONTENT_TYPE, RequestParse.CONTENT_TYPE_JSON)
+            .put("Accept", RequestParse.CONTENT_TYPE_JSON);
+    return headerJson;
+  }
+
+  protected JsonObject copyRequestHeaders(RequestParse.RequestHeaders headers) {
+    JsonObject headerJson = headers.toJson()
             .put(RequestParse.HEADER_CONTENT_TYPE, RequestParse.CONTENT_TYPE_JSON)
             .put("Accept", RequestParse.CONTENT_TYPE_JSON);
     return headerJson;
@@ -301,6 +173,7 @@ public class CommonHandler {
 
   protected void sendDataOperationWithOption(String clazz, String objectId, String operation,
                                              JsonObject query, JsonObject update, boolean returnNewDocument,
+                                             RequestParse.RequestHeaders headers,
                                              final Handler<AsyncResult<JsonObject>> handler) {
     JsonObject request = new JsonObject().put(CommonVerticle.INTERNAL_MSG_ATTR_RETURNNEWDOC, returnNewDocument);
     if (!StringUtils.isEmpty(clazz)) {
@@ -315,10 +188,15 @@ public class CommonHandler {
     if (null != update) {
       request.put(CommonVerticle.INTERNAL_MSG_ATTR_UPDATE_PARAM, update);
     }
+    if (null != headers) {
+      request.put(CommonVerticle.INTERNAL_MSG_ATTR_REQUESTHEADERS, headers.toJson());
+    }
+
     String upperOperation = operation.toUpperCase();
     DeliveryOptions options = new DeliveryOptions().addHeader(CommonVerticle.INTERNAL_MSG_HEADER_OP, upperOperation);
-    if (shouldChangeSchema(clazz, upperOperation)) {
+    if (needCheckPermissionAndSchema(clazz, upperOperation)) {
       logger.debug("send to damocles for scheme checking...");
+
       vertx.eventBus().send(Configure.MAIL_ADDRESS_DAMOCLES_QUEUE, request, options, response -> {
         if (response.failed()) {
           logger.warn("failed to check schema by damocles.");

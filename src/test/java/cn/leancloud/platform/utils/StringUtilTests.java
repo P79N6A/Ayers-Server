@@ -27,11 +27,12 @@ public class StringUtilTests extends TestCase {
 
   public void testPathValidator() {
     String[] paths = new String[]{"/1.1/classes/Post", "/1.1/classeses/Post", "/api/1.1/classes/Post", "/1.1/classes/", "/1.1/classes", "/1.1/classes/Post/fhei"};
-    boolean[] expected = new boolean[]{true, false, false, false, false, true};
+    boolean[] expected = new boolean[]{true, false, false, false, true, true};
 
     for (int i = 0; i < paths.length; i++) {
       boolean ret = ObjectSpecifics.validateRequestPath(paths[i]);
       assertTrue(ret == expected[i]);
+      System.out.println("passed " + paths[i]);
     }
   }
 

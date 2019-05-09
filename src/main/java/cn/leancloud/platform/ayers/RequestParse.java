@@ -59,7 +59,6 @@ public class RequestParse {
 
   public static final String OP_USER_SIGNIN = "LOGIN";
   public static final String OP_USER_SIGNUP = "SIGNUP";
-  //public static final String OP_USER_AUTH_LOGIN = "AUTH_LOGIN";
 
   public static final String OP_CREATE_CLASS = "CREATE_CLASS";
 
@@ -137,7 +136,19 @@ public class RequestParse {
       return this;
     }
 
-    public JsonObject toHeaders() {
+    public static RequestHeaders fromJson(JsonObject data) {
+      RequestHeaders result = new RequestHeaders();
+      if (null != data) {
+        result.setAppId(data.getString(HEADER_LC_APPID));
+        result.setAppKey(data.getString(HEADER_LC_APPKEY));
+        result.setSessionToken(data.getString(HEADER_LC_SESSION_TOKEN));
+        result.setRequestSign(data.getString(HEADER_LC_REQUEST_SIGN));
+        result.setUseMasterKey(data.getBoolean("useMasterKey", false));
+      }
+      return result;
+    }
+
+    public JsonObject toJson() {
       JsonObject result = new JsonObject();
       if (StringUtils.notEmpty(this.appId)) {
         result.put(HEADER_LC_APPID, this.appId);
@@ -151,6 +162,7 @@ public class RequestParse {
       if (StringUtils.notEmpty(this.sessionToken)) {
         result.put(HEADER_LC_SESSION_TOKEN, this.sessionToken);
       }
+      result.put("useMasterKey", useMasterKey);
       return result;
     }
   }

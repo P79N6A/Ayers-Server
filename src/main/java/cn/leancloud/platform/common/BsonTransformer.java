@@ -20,7 +20,7 @@ public class BsonTransformer {
   public static final String REST_OP_BITOR = "bitor";
   public static final String REST_OP_BITXOR = "bitxor";
   public static final String REST_OP_ADD = "add";
-  public static final String REST_OP_DELETE = "deleteSingleObject";
+  public static final String REST_OP_DELETE = "delete";
   public static final String REST_OP_ADD_UNIQUE = "addunique";
   public static final String REST_OP_REMOVE = "remove";
   public static final String REST_OP_SETONINSERT = "setoninsert";

@@ -5,6 +5,7 @@ import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class ACL {
@@ -172,6 +173,11 @@ public class ACL {
     }
     boolean readPermission = getReadAccess(userId);
     return setPermissionsIfNonEmpty(userId, readPermission, allowed);
+  }
+
+  public List<String> getRoleList(boolean isWriteAccess) {
+    // TODO:
+    return null;
   }
 
   /**

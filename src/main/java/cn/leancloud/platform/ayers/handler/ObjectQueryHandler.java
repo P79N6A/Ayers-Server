@@ -18,6 +18,9 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static cn.leancloud.platform.utils.HandlerUtils.wrapActualResult;
+import static cn.leancloud.platform.utils.HandlerUtils.wrapErrorResult;
+
 public class ObjectQueryHandler extends CommonHandler {
   private static final Logger logger = LoggerFactory.getLogger(ObjectQueryHandler.class);
 
@@ -165,35 +168,7 @@ public class ObjectQueryHandler extends CommonHandler {
     Objects.requireNonNull(queryParam);
     Objects.requireNonNull(handler);
 
-    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(this.routingContext);
-    ClassPermission.OP op = ClassPermission.OP.FIND;
-    if (StringUtils.notEmpty(objectId)) {
-      op = ClassPermission.OP.GET;
-    }
-    classPermissionCheck(clazz, null, headers, op, response -> {
-      if (response.failed()) {
-        logger.warn("failed to check class permission. cause: " + response.cause().getMessage());
-        handler.handle(wrapErrorResult(new UnsupportedOperationException("Class permission check failed.")));
-      } if (!response.result()) {
-        handler.handle(wrapErrorResult(new UnsupportedOperationException("Class permission check failed.")));
-      } else {
-        if (StringUtils.notEmpty(objectId)) {
-          objectACLCheck(clazz, objectId, headers, ClassPermission.OP.GET, res2 -> {
-            if (res2.failed()) {
-              logger.warn("failed to check object ACL. cause: " + res2.cause().getMessage());
-              handler.handle(wrapErrorResult(new UnsupportedOperationException("Object ACL permission check failed.")));
-            } else if (!res2.result()){
-              logger.debug("not allowed operation bcz of object ACL.");
-              handler.handle(wrapErrorResult(new UnsupportedOperationException("Object ACL permission check failed.")));
-            } else {
-              queryWithCondition(clazz, objectId, queryParam, handler);
-            }
-          });
-        } else {
-          queryWithCondition(clazz, objectId, queryParam, handler);
-        }
-      }
-    });
+    queryWithCondition(clazz, objectId, queryParam, handler);
   }
 
   private void queryWithCondition(String clazz, String objectId, JsonObject queryParam, Handler<AsyncResult<JsonObject>> handler) {
@@ -236,7 +211,7 @@ public class ObjectQueryHandler extends CommonHandler {
 
           logger.debug("begin to execute actual queryParam option: " + queryOptions.toJson());
 
-          execute(clazz, queryOptions.toJson(), includeArray, response -> {
+          execute(clazz, objectId, queryOptions.toJson(), includeArray, response -> {
             if (response.failed()) {
               logger.warn("query failed: " + response.cause().getMessage());
               handler.handle(response);
@@ -287,7 +262,7 @@ public class ObjectQueryHandler extends CommonHandler {
                       subQueryOptions.setWhere(subWhere).setLimit(resultCount);
 //                      logger.debug("include query options: " + subQueryOptions.toJson());
 
-                      execute(className, subQueryOptions.toJson(), null, any -> {
+                      execute(className, null, subQueryOptions.toJson(), null, any -> {
                         if (any.failed()) {
                           logger.warn("failed to execute include query. cause: " + any.cause().getMessage());
                           future1Attr.fail(any.cause());
@@ -348,9 +323,10 @@ public class ObjectQueryHandler extends CommonHandler {
    * @param includeArray reserved for call aggregate api in future.
    * @param handler      callback handler.
    */
-  private void execute(String clazz, JsonObject options, List<String> includeArray,
+  private void execute(String clazz, String objectId, JsonObject options, List<String> includeArray,
                        Handler<AsyncResult<JsonObject>> handler) {
-    sendDataOperation(clazz, null, HttpMethod.GET.toString(), options, null, handler);
+    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(routingContext);
+    sendDataOperation(clazz, objectId, HttpMethod.GET.toString(), options, null, headers, handler);
   }
 
   private Future<Boolean> resolveSubQuery(JsonObject condition) {
@@ -366,7 +342,7 @@ public class ObjectQueryHandler extends CommonHandler {
             String clazz = options.getString(QUERY_KEY_CLASSNAME);
             String attrName = options.getString(QUERY_KEY_SUBQUERY_PROJECT);
             Future<Boolean> subQueryFuture = Future.future();
-            execute(clazz, options, null, any -> {
+            execute(clazz, null, options, null, any -> {
               if (any.failed()) {
                 logger.warn("failed to execute subQuery:" + options + ". cause: " + any.cause().getMessage());
                 condition.put(key, new JsonObject().put("$in", new JsonArray()));

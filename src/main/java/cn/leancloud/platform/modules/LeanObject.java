@@ -89,7 +89,17 @@ public class LeanObject extends JsonObject{
     this.className = className;
   }
 
-  public boolean checkOperationByACL(boolean isWrite, String userId, List<String> userRoles) {
+  public List<String> getOperationRoles(boolean isWrite) {
+    JsonObject aclJson = getJsonObject(BUILTIN_ATTR_ACL);
+    if (null == aclJson) {
+      // always enable if non acl.
+      return null;
+    }
+    ACL acl = new ACL(aclJson);
+    return acl.getRoleList(isWrite);
+  }
+
+  public boolean checkOperationByACL(boolean isWrite, String userId) {
     JsonObject aclJson = getJsonObject(BUILTIN_ATTR_ACL);
     if (null == aclJson) {
       // always enable if non acl.

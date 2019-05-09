@@ -1,5 +1,6 @@
 package cn.leancloud.platform.ayers.handler;
 
+import cn.leancloud.platform.ayers.RequestParse;
 import cn.leancloud.platform.common.Configure;
 import cn.leancloud.platform.common.Constraints;
 import cn.leancloud.platform.modules.LeanObject;
@@ -45,7 +46,10 @@ public class FileHandler extends CommonHandler {
             .put(LeanObject.BUILTIN_ATTR_FILE_PROVIDER,configure.fileProvideName())
             .put(LeanObject.BUILTIN_ATTR_FILE_BUCKET, bucketName);
 
-    sendDataOperationWithOption(Constraints.FILE_CLASS, null, httpMethod.toString(), null, body, true, res -> {
+    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(this.routingContext);
+
+    sendDataOperationWithOption(Constraints.FILE_CLASS, null, httpMethod.toString(), null, body,
+            true, headers, res -> {
       handler.handle(res.map(file -> file.mergeIn(body).put(PARAM_FILE_TOKEN, token).put(PARAM_FILE_UPLOAD_URL, configure.fileUploadHost())));
     });
   }

@@ -7,6 +7,8 @@ public enum ErrorCodes {
 
   INTERNAL_ERROR(1, "Internal server error. No information available."),
   INVALID_PARAMETER(2, "Invalid request parameter."),
+  SCHEMA_VIOLATION(10, "Object Schema violated."),
+  ACL_VIOLATION(11, "ACL or class permission violated."),
 
   INVALID_GEOPOINT(302, "Invalid GeoPoint values."),
   INVALID_LINKED_SESSION(251, "Invalid linked session."),

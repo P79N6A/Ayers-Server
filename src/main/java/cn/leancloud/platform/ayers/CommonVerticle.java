@@ -26,6 +26,8 @@ public class CommonVerticle extends AbstractVerticle {
   public static final String INTERNAL_MSG_ATTR_CLASS = "class";
   public static final String INTERNAL_MSG_ATTR_OBJECT_ID = "objectId";
   public static final String INTERNAL_MSG_ATTR_UPDATE_PARAM = "param";
+  public static final String INTERNAL_MSG_ATTR_SCHEMA = "schema";
+  public static final String INTERNAL_MSG_ATTR_REQUESTHEADERS = "headers";
   public static final String INTERNAL_MSG_ATTR_QUERY = "query";
   public static final String INTERNAL_MSG_HEADER_OP = "operation";
   public static final String INTERNAL_MSG_ATTR_RETURNNEWDOC = "returnNewDoc";

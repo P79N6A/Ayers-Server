@@ -197,6 +197,7 @@ public class TransformerTest extends TestCase {
     assertTrue(newObj.getString("familyName").equals("Stark"));
 
     System.out.println("try to convert for Update...");
+    paramObj = new JsonObject(param);
     JsonObject updateObj = BsonTransformer.encode2BsonRequest(paramObj, BsonTransformer.REQUEST_OP.UPDATE);
     System.out.println(updateObj.toString());
     assertTrue(updateObj.getJsonObject("$unset").getString("nickname").length() == 0);

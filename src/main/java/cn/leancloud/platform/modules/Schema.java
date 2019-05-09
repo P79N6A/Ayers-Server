@@ -25,8 +25,9 @@ public class Schema extends JsonObject {
   public static final String SCHEMA_KEY_REF = "reference";
 
   public enum CompatResult {
-    OVER_MATCHED,
-    FULLY_MATCHED,
+    OVER_MATCHED_ON_FIELD_LAYER, // overmatched on first layer, for add_field operation.
+    OVER_MATCHED, // overmatched for Object field.
+    MATCHED,      // all matched.
     NOT_MATCHED
   }
 
@@ -101,19 +102,20 @@ public class Schema extends JsonObject {
     return result;
   }
 
-  public CompatResult compatibleWith(Schema other) throws ConsistencyViolationException {
+  private CompatResult compatibilityTest(Schema other, boolean first) throws ConsistencyViolationException {
     if (null == other) {
-      return OVER_MATCHED;
+      return first ? OVER_MATCHED_ON_FIELD_LAYER : OVER_MATCHED;
     }
     boolean foundNewAttr = false;
     for (String key : this.fieldNames()) {
       if (!other.containsKey(key)) {
+        // new field found.
         foundNewAttr = true;
         continue;
       }
       JsonObject value = this.getJsonObject(key);
       JsonObject otherValue = other.getJsonObject(key);
-      if (null != value && otherValue != null) {
+      if (null != value && null != otherValue) {
         String myType = value.getString(SCHEMA_KEY_TYPE);
         String otherType = otherValue.getString(SCHEMA_KEY_TYPE);
         if (DATA_TYPE_ANY.equalsIgnoreCase(otherType)) {
@@ -131,16 +133,30 @@ public class Schema extends JsonObject {
         } else if (DATA_TYPE_OBJECT.equals(myType)) {
           Schema mySchema = new Schema(value.getJsonObject(SCHEMA_KEY_SCHEMA));
           Schema otherSchema = new Schema(otherValue.getJsonObject(SCHEMA_KEY_SCHEMA));
-          CompatResult tmpResult = mySchema.compatibleWith(otherSchema);
-          if (tmpResult == NOT_MATCHED) {
-            return NOT_MATCHED;
-          } else if (tmpResult == OVER_MATCHED) {
+          CompatResult tmpResult = mySchema.compatibilityTest(otherSchema, false);
+          if (tmpResult == OVER_MATCHED) {
             foundNewAttr = true;
           }
         }
+      } else {
+        // ignore invalid schema.
       }
     }
+    if (!foundNewAttr) {
+      return MATCHED;
+    }
+    if (!first) {
+      return OVER_MATCHED;
+    }
+    boolean hasNewFields = other.fieldNames().containsAll(this.fieldNames());
+    if (!hasNewFields) {
+      return OVER_MATCHED_ON_FIELD_LAYER;
+    } else {
+      return OVER_MATCHED;
+    }
+  }
 
-    return foundNewAttr? OVER_MATCHED : FULLY_MATCHED;
+  public CompatResult compatibleWith(Schema other) throws ConsistencyViolationException {
+    return compatibilityTest(other, true);
   }
 }

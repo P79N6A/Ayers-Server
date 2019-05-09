@@ -25,14 +25,17 @@ public class IndexHandler extends CommonHandler {
       indexName = options.getString(RequestParse.REQUEST_INDEX_OPTION_NAME);
       options.remove(RequestParse.REQUEST_INDEX_OPTION_NAME);
     }
-    sendDataOperation(clazz, indexName, RequestParse.OP_CREATE_INDEX, options, keys, handler);
+    sendDataOperation(clazz, indexName, RequestParse.OP_CREATE_INDEX, options, keys,
+            RequestParse.extractRequestHeaders(routingContext), handler);
   }
 
   public void list(String clazz, Handler<AsyncResult<JsonObject>> handler) {
-    sendDataOperation(clazz, null, RequestParse.OP_LIST_INDEX, null, null, handler);
+    sendDataOperation(clazz, null, RequestParse.OP_LIST_INDEX, null, null,
+            RequestParse.extractRequestHeaders(routingContext), handler);
   }
 
   public void delete(String clazz, String indexName, Handler<AsyncResult<JsonObject>> handler) {
-    sendDataOperation(clazz, indexName, RequestParse.OP_DELETE_INDEX, null, null, handler);
+    sendDataOperation(clazz, indexName, RequestParse.OP_DELETE_INDEX, null, null,
+            RequestParse.extractRequestHeaders(routingContext), handler);
   }
 }

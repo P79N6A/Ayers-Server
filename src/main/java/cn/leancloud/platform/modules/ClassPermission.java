@@ -64,6 +64,24 @@ public class ClassPermission {
     return new ClassPermission(json);
   }
 
+  public List<String> getOperationRoles(OP op) {
+    JsonObject opPermission = this.permissions.getJsonObject(op.getName());
+    if (null == opPermission) {
+      return null;
+    }
+    Object roles = opPermission.getValue(KEY_ROLES);
+    if (null == roles) {
+      return null;
+    }
+    if (roles instanceof String) {
+      return Arrays.asList(((String) roles).split(","));
+    }
+    if (roles instanceof JsonArray) {
+      return ((JsonArray)roles).stream().map(String::valueOf).collect(Collectors.toList());
+    }
+    return null;
+  }
+
   public boolean checkOperation(OP op, String currentUser, List<String> userRoles) {
     if (null == this.permissions) {
       return false;

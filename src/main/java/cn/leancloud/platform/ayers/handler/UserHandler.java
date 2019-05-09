@@ -157,7 +157,8 @@ public class UserHandler extends CommonHandler {
 
   public void signup(JsonObject param, Handler<AsyncResult<JsonObject>> handler) {
     String operation = RequestParse.OP_USER_SIGNUP;
-    sendDataOperationWithOption(Constraints.USER_CLASS, null, operation, null, param, true, res -> {
+    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(this.routingContext);
+    sendDataOperationWithOption(Constraints.USER_CLASS, null, operation, null, param, true, headers, res -> {
       if (res.succeeded() && null != res.result()) {
         JsonObject user = res.result();
         UnifiedCache.getGlobalInstance().put(user.getString(LeanObject.BUILTIN_ATTR_SESSION_TOKEN), user);
@@ -168,7 +169,8 @@ public class UserHandler extends CommonHandler {
 
   public void signin(JsonObject param, Handler<AsyncResult<JsonObject>> handler) {
     String operation = RequestParse.OP_USER_SIGNIN;
-    sendDataOperationWithOption(Constraints.USER_CLASS, null, operation, null, param, true, res -> {
+    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(this.routingContext);
+    sendDataOperationWithOption(Constraints.USER_CLASS, null, operation, null, param, true, headers, res -> {
       if (res.succeeded() && null != res.result()) {
         JsonObject user = res.result();
         UnifiedCache.getGlobalInstance().put(user.getString(LeanObject.BUILTIN_ATTR_SESSION_TOKEN), user);
@@ -179,7 +181,8 @@ public class UserHandler extends CommonHandler {
 
   public void validateSessionToken(String sessionToken, Handler<AsyncResult<JsonObject>> handler) {
     JsonObject body = new JsonObject().put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, sessionToken);
-    sendDataOperation(Constraints.USER_CLASS, null, HttpMethod.GET.toString(), body, null, res -> {
+    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(this.routingContext);
+    sendDataOperation(Constraints.USER_CLASS, null, HttpMethod.GET.toString(), body, null, headers, res -> {
       if (res.succeeded() && null != res.result()) {
         JsonObject user = res.result();
         UnifiedCache.getGlobalInstance().put(user.getString(LeanObject.BUILTIN_ATTR_SESSION_TOKEN), user);
@@ -192,7 +195,9 @@ public class UserHandler extends CommonHandler {
     // findMetaInfo and updateSingleObject.
     JsonObject query = new JsonObject().put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, sessionToken).put(LeanObject.ATTR_NAME_OBJECTID, objectId);
     JsonObject update = new JsonObject().put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, newSessionToken);
-    sendDataOperationWithOption(Constraints.USER_CLASS, objectId, HttpMethod.PUT.toString(), query, update, true, res -> {
+    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(this.routingContext);
+
+    sendDataOperationWithOption(Constraints.USER_CLASS, objectId, HttpMethod.PUT.toString(), query, update, true, headers, res -> {
       if (res.succeeded() && null != res.result()) {
         JsonObject user = res.result();
         UnifiedCache.getGlobalInstance().put(user.getString(LeanObject.BUILTIN_ATTR_SESSION_TOKEN), user);
