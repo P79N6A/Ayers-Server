@@ -567,7 +567,7 @@ public class RestServerVerticle extends CommonVerticle {
         logger.error("could not start a http server, cause: ", ar.cause());
         future.fail(ar.cause());
       } else {
-        logger.info("http server running on port 8080");
+        logger.info("http server running on port " + portNumber);
         future.complete();
       }
     });

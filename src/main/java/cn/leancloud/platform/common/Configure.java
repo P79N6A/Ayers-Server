@@ -49,6 +49,14 @@ public class Configure {
     return settings.getInteger("server.listenPort");
   }
 
+  /**
+   * add for test.
+   * @param port
+   */
+  public void setListenPort(int port) {
+    settings.put("server.listenPort", port);
+  }
+
   public String getBaseHost() {
     return settings.getString("server.baseHost", "http://127.0.0.1");
   }
