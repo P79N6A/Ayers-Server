@@ -110,7 +110,8 @@ public class CommonHandler {
   }
 
   protected boolean needCheckPermissionAndSchema(String clazz, String operation) {
-    if (Constraints.FILE_CLASS.equals(clazz)) {
+    if (Constraints.FILE_CLASS.equals(clazz) || Constraints.METADATA_CLASS.equals(clazz)
+      /*Constraints.ROLE_CLASS.equals(clazz) || Constraints.INSTALLATION_CLASS.equals(clazz)*/) {
       return false;
     }
     if (RequestParse.OP_CREATE_INDEX.equals(operation) || RequestParse.OP_CREATE_CLASS.equals(operation)
@@ -158,7 +159,7 @@ public class CommonHandler {
   }
 
   protected JsonObject copyRequestHeaders(RoutingContext context) {
-    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(context);
+    RequestParse.RequestHeaders headers = RequestParse.extractLCHeaders(context);
     JsonObject headerJson = headers.toJson()
             .put(RequestParse.HEADER_CONTENT_TYPE, RequestParse.CONTENT_TYPE_JSON)
             .put("Accept", RequestParse.CONTENT_TYPE_JSON);
@@ -196,14 +197,14 @@ public class CommonHandler {
     String upperOperation = operation.toUpperCase();
     DeliveryOptions options = new DeliveryOptions().addHeader(CommonVerticle.INTERNAL_MSG_HEADER_OP, upperOperation);
     if (needCheckPermissionAndSchema(clazz, upperOperation)) {
-      logger.debug("send to damocles for scheme checking...");
+      logger.debug("send to damocles verticle for permission / scheme checking...");
 
       vertx.eventBus().send(Configure.MAIL_ADDRESS_DAMOCLES_QUEUE, request, options, response -> {
         if (response.failed()) {
-          logger.warn("failed to check schema by damocles.");
+          logger.warn("failed to check permission / schema by damocles.");
           handler.handle(response.map(v -> (JsonObject)v.body()));
         } else {
-          logger.debug("pass schema check, send to storage verticle.");
+          logger.debug("pass permission / schema check, send to storage verticle then.");
           vertx.eventBus().send(Configure.MAIL_ADDRESS_DATASTORE_QUEUE, request, options,
                   res2 -> handler.handle(res2.map(v -> (JsonObject)v.body())));
         }

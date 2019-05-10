@@ -69,8 +69,8 @@ public class ClassMetaData extends LeanObject {
     this.put(ATTR_NAME, name);
   }
 
-  public JsonObject getSchema() {
-    return this.getJsonObject(ATTR_SCHEMA);
+  public Schema getSchema() {
+    return new Schema(this.getJsonObject(ATTR_SCHEMA));
   }
   public void setSchema(JsonObject schema) {
     this.put(ATTR_SCHEMA, schema);

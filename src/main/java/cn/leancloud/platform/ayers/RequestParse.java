@@ -168,7 +168,7 @@ public class RequestParse {
     }
   }
 
-  public static RequestHeaders extractRequestHeaders(RoutingContext context) {
+  public static RequestHeaders extractLCHeaders(RoutingContext context) {
     if (null == context) {
       return null;
     }
@@ -215,18 +215,4 @@ public class RequestParse {
   public static String getSessionToken(RoutingContext context) {
     return getHeader(context, HEADER_LC_SESSION_TOKEN, HEADER_AVOS_SESSION_TOKEN, HEADER_LC_SESSION_TOKEN);
   }
-
-//  public static String getCookie(RoutingContext context) {
-//    Cookie cookie = context.getCookie(COOKIE_USER_NAME);
-//    if (null != cookie) {
-//      try {
-//        return URLDecoder.decode(cookie.getValue(), "UTF-8");
-//      } catch (UnsupportedEncodingException ex) {
-//        logger.warn("failed to decode cookie, cause: ", ex);
-//        return null;
-//      }
-//    } else {
-//      return null;
-//    }
-//  }
 }

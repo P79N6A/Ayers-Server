@@ -69,6 +69,22 @@ public class Configure {
     return settings.getInteger("server.datastoreVerticles", 1);
   }
 
+  public String getUluruAPIHost() {
+    return settings.getString("server.uluru_api.host", "api.leancloud.cn");
+  }
+
+  public int getUluruAPIPort() {
+    return settings.getInteger("server.uluru_api.port", 80);
+  }
+
+  public String getUluruEngineHost() {
+    return settings.getString("server.uluru_engine.host", "api.leancloud.cn");
+  }
+
+  public int getUluruEnginePort() {
+    return settings.getInteger("server.uluru_engine.port", 80);
+  }
+
   public String mysqlHosts() {
     return settings.getString("mysql.hosts");
   }

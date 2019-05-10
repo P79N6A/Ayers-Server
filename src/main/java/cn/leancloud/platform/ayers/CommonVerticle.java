@@ -23,6 +23,11 @@ public class CommonVerticle extends AbstractVerticle {
   protected static final String REQUEST_PARAM_CLAZZ = "clazz";
   protected static final String REQUEST_PARAM_NAME = "name";
 
+  protected static final String REQUEST_PARAM_ACL_TEMPLATE = "acl_template";
+  protected static final String REQUEST_PARAM_CLASS_TYPE = "class_type";
+  protected static final String REQUEST_PARAM_CLASS_NAME = "class_name";
+  protected static final String REQUEST_PARAM_FETCH_WHEN_SAVE = "fetchWhenSave";
+
   public static final String INTERNAL_MSG_ATTR_CLASS = "class";
   public static final String INTERNAL_MSG_ATTR_OBJECT_ID = "objectId";
   public static final String INTERNAL_MSG_ATTR_UPDATE_PARAM = "param";

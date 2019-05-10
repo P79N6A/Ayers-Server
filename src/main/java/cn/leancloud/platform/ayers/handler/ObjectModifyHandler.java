@@ -94,7 +94,7 @@ public class ObjectModifyHandler extends CommonHandler {
     Objects.requireNonNull(body);
     Objects.requireNonNull(handler);
 
-    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(routingContext);
+    RequestParse.RequestHeaders headers = RequestParse.extractLCHeaders(routingContext);
 
     //make sure class existed.
     ClassMetaData classMetaData = (ClassMetaData) this.classMetaCache.get(clazz);
@@ -158,7 +158,7 @@ public class ObjectModifyHandler extends CommonHandler {
     Objects.requireNonNull(update);
     Objects.requireNonNull(handler);
 
-    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(this.routingContext);
+    RequestParse.RequestHeaders headers = RequestParse.extractLCHeaders(this.routingContext);
     executeUpdateOperation(clazz, objectId, query, update, returnNewDoc, headers, handler);
   }
 
@@ -188,7 +188,7 @@ public class ObjectModifyHandler extends CommonHandler {
     Objects.requireNonNull(objectId);
     Objects.requireNonNull(handler);
 
-    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(this.routingContext);
+    RequestParse.RequestHeaders headers = RequestParse.extractLCHeaders(this.routingContext);
 
     executeDeleteOperation(clazz, objectId, query, headers, handler);
   }

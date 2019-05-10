@@ -46,7 +46,7 @@ public class FileHandler extends CommonHandler {
             .put(LeanObject.BUILTIN_ATTR_FILE_PROVIDER,configure.fileProvideName())
             .put(LeanObject.BUILTIN_ATTR_FILE_BUCKET, bucketName);
 
-    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(this.routingContext);
+    RequestParse.RequestHeaders headers = RequestParse.extractLCHeaders(this.routingContext);
 
     sendDataOperationWithOption(Constraints.FILE_CLASS, null, httpMethod.toString(), null, body,
             true, headers, res -> {

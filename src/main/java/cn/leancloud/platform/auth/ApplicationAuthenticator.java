@@ -22,7 +22,7 @@ public class ApplicationAuthenticator implements CustomValidator {
     if (context.request().method() == HttpMethod.OPTIONS) {
       return;
     }
-    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(context);
+    RequestParse.RequestHeaders headers = RequestParse.extractLCHeaders(context);
     if (null == headers) {
       throw new ValidationException("application authentication data not found in request header.");
     }

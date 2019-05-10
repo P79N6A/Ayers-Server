@@ -28,7 +28,8 @@ import static cn.leancloud.platform.common.ErrorCodes.ACL_VIOLATION;
 import static cn.leancloud.platform.common.ErrorCodes.SCHEMA_VIOLATION;
 
 /**
- * Data consistency defender.
+ * Class permission / Object ACL rule / Data consistency defender.
+ *
  */
 public class DamoclesVerticle extends CommonVerticle {
   private static final Logger logger = LoggerFactory.getLogger(DamoclesVerticle.class);
@@ -184,38 +185,44 @@ public class DamoclesVerticle extends CommonVerticle {
     }
   }
 
-  protected Future<Boolean> classPermissionRoleCheck(List<String> roles, JsonObject currentUser) {
+  protected Future<Boolean> checkRolePermission(List<String> roles, JsonObject currentUser) {
+    // TODO: finish me.
     Future<Boolean> result = Future.failedFuture("can't check role, not implement yet...");
-    // TODO:
     return result;
   }
 
-  protected Future<Boolean> classPermissionCheck(String clazz, JsonObject body, RequestParse.RequestHeaders request, ClassPermission.OP op) {
+  protected Future<Boolean> checkClassPermission(String clazz, JsonObject body, RequestParse.RequestHeaders request, ClassPermission.OP op) {
     Objects.requireNonNull(clazz);
     Objects.requireNonNull(request);
+
     Future<Boolean> result = Future.future();
     if (request.isUseMasterKey()) {
+      // master key is GOD
       result.complete(true);
       return result;
     }
+
     JsonObject classMeta = Configure.getInstance().getClassMetaDataCache().get(clazz);
     if (null == classMeta) {
       // always allow create class.
       result.complete(true);
       return result;
     }
+
     ClassPermission classPermission = ClassPermission.fromJson(ClassMetaData.fromJson(classMeta).getClassPermissions());
     // check public permission at first.
     if (classPermission.checkOperation(op, null, null)) {
       result.complete(true);
       return result;
     }
+
     String sessionToken = request.getSessionToken();
     if (StringUtils.isEmpty(sessionToken)) {
       // unauth user.
       result.fail("user isn't login.");
       return result;
     }
+
     JsonObject user = UnifiedCache.getGlobalInstance().get(sessionToken);
     if (null != user) {
       boolean allowed = classPermission.checkOperation(op, user.getString(LeanObject.ATTR_NAME_OBJECTID), null);
@@ -226,7 +233,7 @@ public class DamoclesVerticle extends CommonVerticle {
         if (null == roles || roles.size() < 1) {
           result.fail("no permission for current user.");
         } else {
-          return classPermissionRoleCheck(roles, user);
+          return checkRolePermission(roles, user);
         }
       }
       return result;
@@ -247,7 +254,7 @@ public class DamoclesVerticle extends CommonVerticle {
           if (null == roles || roles.size() < 1) {
             result.fail("no permission for current user.");
           } else {
-            classPermissionRoleCheck(roles, user).setHandler(res -> result.handle(res));
+            checkRolePermission(roles, user).setHandler(res -> result.handle(res));
           }
         }
       }
@@ -255,7 +262,7 @@ public class DamoclesVerticle extends CommonVerticle {
     return result;
   }
 
-  protected Future<Boolean> objectACLCheck(String clazz, String objectId, RequestParse.RequestHeaders request, ClassPermission.OP op) {
+  protected Future<Boolean> checkObjectACL(String clazz, String objectId, RequestParse.RequestHeaders request, ClassPermission.OP op) {
     Objects.requireNonNull(clazz);
     Objects.requireNonNull(objectId);
     Objects.requireNonNull(request);
@@ -269,8 +276,9 @@ public class DamoclesVerticle extends CommonVerticle {
     }
 
     DataStore dataStore = dataStoreFactory.getStore();
-    dataStore.findOne(clazz, new JsonObject().put(LeanObject.ATTR_NAME_OBJECTID, objectId),
-            new JsonObject().put(LeanObject.BUILTIN_ATTR_ACL, 1), response -> {
+    JsonObject query = new JsonObject().put(LeanObject.ATTR_NAME_OBJECTID, objectId);
+    JsonObject field = new JsonObject().put(LeanObject.BUILTIN_ATTR_ACL, 1);
+    dataStore.findOne(clazz, query, field, response -> {
               if (response.failed()) {
                 // database error.
                 dataStore.close();
@@ -306,110 +314,123 @@ public class DamoclesVerticle extends CommonVerticle {
                       if (null == roles || roles.size() < 1) {
                         result.fail("no permission for current user.");
                       } else {
-                        classPermissionRoleCheck(roles, user).setHandler(result::handle);
+                        checkRolePermission(roles, user).setHandler(result::handle);
                       }
                     }
                     return;
-                  }
-                  dataStore.findOne(Constraints.USER_CLASS, new JsonObject().put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, request.getSessionToken()),
-                          null, res2 -> {
-                            dataStore.close();
-                            if (res2.failed()) {
-                              result.fail(res2.cause().getMessage());
-                              return;
-                            } else {
-                              JsonObject newUser = res2.result();
-                              String userObjectId = null == newUser ? null : newUser.getString(LeanObject.ATTR_NAME_OBJECTID);
-                              boolean allowed = targetObject.checkOperationByACL(isWriteOp, userObjectId);
-                              if (allowed) {
-                                result.complete(true);
+                  } else {
+                    dataStore.findOne(Constraints.USER_CLASS, new JsonObject().put(LeanObject.BUILTIN_ATTR_SESSION_TOKEN, sessionToken),
+                            null, res2 -> {
+                              dataStore.close();
+                              if (res2.failed()) {
+                                result.fail(res2.cause().getMessage());
+                                return;
                               } else {
-                                List<String> roles = targetObject.getOperationRoles(isWriteOp);
-                                if (null == roles || roles.size() < 1) {
-                                  result.fail("no permission for current user.");
-                                } else {
-                                  classPermissionRoleCheck(roles, newUser).setHandler(result::handle);
+                                JsonObject newUser = res2.result();
+                                if (null != newUser) {
+                                  UnifiedCache.getGlobalInstance().put(sessionToken, newUser);
                                 }
+                                String userObjectId = null == newUser ? null : newUser.getString(LeanObject.ATTR_NAME_OBJECTID);
+                                boolean allowed = targetObject.checkOperationByACL(isWriteOp, userObjectId);
+                                if (allowed) {
+                                  result.complete(true);
+                                } else {
+                                  List<String> roles = targetObject.getOperationRoles(isWriteOp);
+                                  if (null == roles || roles.size() < 1) {
+                                    result.fail("no permission for current user.");
+                                  } else {
+                                    checkRolePermission(roles, newUser).setHandler(result::handle);
+                                  }
+                                }
+                                return;
                               }
-                              return;
-                            }
-                          });
+                            });
+                  }
                 }
               }
             });
     return result;
   }
 
+  /**
+   * main process loop
+   * @param message
+   */
   public void onMessage(Message<JsonObject> message) {
-    JsonObject body = message.body();
-    String clazz = body.getString(INTERNAL_MSG_ATTR_CLASS, "");
-    String objectId = body.getString(INTERNAL_MSG_ATTR_OBJECT_ID);
-    JsonObject param = body.getJsonObject(INTERNAL_MSG_ATTR_UPDATE_PARAM);
-    JsonObject headers = body.getJsonObject(INTERNAL_MSG_ATTR_REQUESTHEADERS);
-    RequestParse.RequestHeaders requestHeaders = RequestParse.RequestHeaders.fromJson(headers);
+    JsonObject messageBody = message.body();
+    String clazz = messageBody.getString(INTERNAL_MSG_ATTR_CLASS, "");
+    String objectId = messageBody.getString(INTERNAL_MSG_ATTR_OBJECT_ID);
+    JsonObject param = messageBody.getJsonObject(INTERNAL_MSG_ATTR_UPDATE_PARAM);
+    RequestParse.RequestHeaders requestHeaders = RequestParse.RequestHeaders.fromJson(messageBody.getJsonObject(INTERNAL_MSG_ATTR_REQUESTHEADERS));
 
-    String operation = message.headers().get(INTERNAL_MSG_HEADER_OP).toUpperCase();
-
-    final ClassMetaData cachedData = (ClassMetaData)this.classMetaCache.get(clazz);
     if (StringUtils.isEmpty(clazz)) {
       logger.warn("clazz name is empty, ignore schema check...");
       message.fail(ErrorCodes.INVALID_PARAMETER.getCode(), "className is required.");
     } else {
+      String operation = message.headers().get(INTERNAL_MSG_HEADER_OP).toUpperCase();
+      final ClassMetaData cachedClassMetaData = (ClassMetaData)this.classMetaCache.get(clazz);
+
       LeanObject object = null != param? new LeanObject(param) : null;
-      final Schema inputSchema;
 
       if (RequestParse.OP_FIND_SCHEMA.equals(operation)) {
-        if (null == cachedData) {
+        if (null == cachedClassMetaData) {
           message.reply(new JsonObject());
         } else {
-          message.reply(cachedData.getSchema());
+          message.reply(cachedClassMetaData.getSchema());
         }
+        return;
       } else if (null == object) {
-        message.fail(ErrorCodes.INVALID_PARAMETER.getCode(), "param json is required.");
+        message.fail(ErrorCodes.INVALID_PARAMETER.getCode(), "json param is required.");
+        return;
       } else {
+        final Schema inputSchema;
         switch (operation) {
           case RequestParse.OP_ADD_SCHEMA:
             inputSchema = object.guessSchema();
-            if (null == cachedData || null == cachedData.getSchema()) {
-              saveSchema(clazz, inputSchema, null == cachedData? new ClassMetaData(clazz) : cachedData);
+            if (inputSchema.size() < 1) {
+              // can't add empty schema.
+              message.reply(new JsonObject().put("result", false));
+            } else if (null == cachedClassMetaData || null == cachedClassMetaData.getSchema()) {
+              // schema not existed.
+              saveSchema(clazz, inputSchema, null == cachedClassMetaData? new ClassMetaData(clazz) : cachedClassMetaData);
               message.reply(new JsonObject().put("result", true));
             } else {
+              // schema has existed, failed to add again.
               message.reply(new JsonObject().put("result", false));
             }
             break;
           case RequestParse.OP_TEST_SCHEMA:
-            try {
-              inputSchema = object.guessSchema();
-              if (null != cachedData) {
-                Schema cachedSchema = new Schema(cachedData.getSchema());
+            inputSchema = object.guessSchema();
+            if (null != cachedClassMetaData) {
+              Schema cachedSchema = cachedClassMetaData.getSchema();
+              try {
                 Schema.CompatResult compatResult = inputSchema.compatibleWith(cachedSchema);
                 if (compatResult == Schema.CompatResult.NOT_MATCHED) {
                   message.reply(new JsonObject().put("result", false));
                 } else {
                   message.reply(new JsonObject().put("result", true));
                 }
-              } else {
-                // anything is matched if first occurring.
-                message.reply(new JsonObject().put("result", true));
+              } catch (ConsistencyViolationException ex) {
+                message.reply(new JsonObject().put("result", false));
               }
-            } catch (ConsistencyViolationException ex) {
-              message.reply(new JsonObject().put("result", false));
+            } else {
+              // anything is matched if first occurring.
+              message.reply(new JsonObject().put("result", true));
             }
             break;
           case RequestParse.OP_USER_SIGNIN:
           case RequestParse.OP_USER_SIGNUP:
+            inputSchema = object.guessSchema();
+            Schema cachedSchema = null == cachedClassMetaData ? null : cachedClassMetaData.getSchema();
             try {
-              inputSchema = object.guessSchema();
-              Schema cachedSchema = null == cachedData ? null : new Schema(cachedData.getSchema());
               Schema.CompatResult compatResult = inputSchema.compatibleWith(cachedSchema);
-              message.reply(new JsonObject().put("result", false));
               if (compatResult != Schema.CompatResult.MATCHED) {
-                saveSchema(clazz, inputSchema, cachedData);
+                saveSchema(clazz, inputSchema, cachedClassMetaData);
               }
+              message.reply(new JsonObject().put("result", true));
             } catch (ConsistencyViolationException ex) {
               logger.warn("failed to parse object schema. cause: " + ex.getMessage());
               message.fail(SCHEMA_VIOLATION.getCode(), ex.getMessage());
-              return;
             }
             break;
           case RequestParse.OP_OBJECT_DELETE:
@@ -419,10 +440,13 @@ public class DamoclesVerticle extends CommonVerticle {
             // object CRUD.
             final ClassPermission.OP op;
             boolean checkSchemaFirst = false;
+            boolean dontCheckACL = false;
+
             Schema.CompatResult compatResult = Schema.CompatResult.MATCHED;
             if (RequestParse.OP_OBJECT_POST.equals(operation)) {
               op = ClassPermission.OP.CREATE;
               checkSchemaFirst = true;
+              dontCheckACL = true;
             } else if (RequestParse.OP_OBJECT_PUT.equals(operation)) {
               op = ClassPermission.OP.UPDATE;
               checkSchemaFirst = true;
@@ -436,8 +460,8 @@ public class DamoclesVerticle extends CommonVerticle {
             if (checkSchemaFirst) {
               try {
                 inputSchema = object.guessSchema();
-                Schema cachedSchema = null == cachedData ? null : new Schema(cachedData.getSchema());
-                compatResult = inputSchema.compatibleWith(cachedSchema);
+                Schema existedSchema = null == cachedClassMetaData ? null : cachedClassMetaData.getSchema();
+                compatResult = inputSchema.compatibleWith(existedSchema);
               } catch (ConsistencyViolationException ex) {
                 logger.warn("failed to parse object schema. cause: " + ex.getMessage());
                 message.fail(SCHEMA_VIOLATION.getCode(), ex.getMessage());
@@ -447,12 +471,20 @@ public class DamoclesVerticle extends CommonVerticle {
               inputSchema = null;
             }
             final boolean needSaveSchema = (compatResult != Schema.CompatResult.MATCHED) && (null != inputSchema);
+
             List<Future> futures = new ArrayList<>();
             if (compatResult == Schema.CompatResult.OVER_MATCHED_ON_FIELD_LAYER) {
-              futures.add(classPermissionCheck(clazz, param, requestHeaders, ClassPermission.OP.ADD_FIELDS));
+              // check add_field permission at first.
+              futures.add(checkClassPermission(clazz, param, requestHeaders, ClassPermission.OP.ADD_FIELDS));
             }
-            futures.add(classPermissionCheck(clazz, param, requestHeaders, op));
-            futures.add(objectACLCheck(clazz, objectId, requestHeaders, op));
+            // check class permissions.
+            futures.add(checkClassPermission(clazz, param, requestHeaders, op));
+
+            // check object ACL
+            if (!dontCheckACL) {
+              futures.add(checkObjectACL(clazz, objectId, requestHeaders, op));
+            }
+
             CompositeFuture.all(futures).setHandler(response -> {
               if (response.failed()) {
                 message.fail(ACL_VIOLATION.getCode(), response.cause().getMessage());
@@ -460,15 +492,11 @@ public class DamoclesVerticle extends CommonVerticle {
                 message.reply(new JsonObject().put("result", true));
 
                 if (needSaveSchema) {
-                  saveSchema(clazz, inputSchema, cachedData);
+                  saveSchema(clazz, inputSchema, cachedClassMetaData);
                 }
               }
             });
             break;
-          case RequestParse.OP_CREATE_INDEX:
-          case RequestParse.OP_CREATE_CLASS:
-          case RequestParse.OP_LIST_INDEX:
-          case RequestParse.OP_DELETE_INDEX:
           default:
             message.reply(new JsonObject().put("result", false));
             break;
@@ -479,28 +507,30 @@ public class DamoclesVerticle extends CommonVerticle {
 
   @Override
   public void start(Future<Void> startFuture) throws Exception {
-    logger.info("start DamoclesVerticle...");
+    logger.info("start Damocles Verticle...");
 
     dataStoreFactory = Configure.getInstance().getDataStoreFactory();
     classMetaCache = Configure.getInstance().getClassMetaDataCache();
     DataStore dataStore = dataStoreFactory.getStore();
     dataStore.listClassMetaInfo(event -> {
       if (event.failed()) {
-        logger.warn("failed to fetch schemas, cause: " + event.cause());
+        logger.warn("failed to fetch class meta info, cause: " + event.cause());
         dataStore.close();
       } else {
         event.result().forEach(object  -> {
           if (null == object) {
             return;
           }
-          String clazz = object.getString("name");
-          ClassMetaData metaData = new ClassMetaData(object);
-          if (StringUtils.notEmpty(clazz)) {
-            logger.info("found class scheme. clazz=" + clazz + ", metaInfo=" + metaData);
+          ClassMetaData metaData = ClassMetaData.fromJson(object);
+          String clazz = metaData.getName();
+          if (StringUtils.isEmpty(clazz)) {
+            logger.warn("found invalid class meta data. " + object);
+          } else {
+            logger.info("found class meta data. clazz=" + clazz + ", metaInfo=" + metaData);
             dataStore.listIndices(clazz, res-> {
               JsonArray indices = null;
               if (res.failed()) {
-                logger.warn("failed to load indices. cause: " + res.cause());
+                logger.warn("failed to load indices for class:" + clazz + ", cause: " + res.cause());
               } else {
                 indices = res.result().stream().filter(json -> !((JsonObject)json).getString("name").equals("_id_"))
                         .collect(JsonFactory.toJsonArray());
@@ -515,15 +545,17 @@ public class DamoclesVerticle extends CommonVerticle {
           }
         });
       }
-      vertx.eventBus().consumer(Configure.MAIL_ADDRESS_DAMOCLES_QUEUE, this::onMessage);
+
       logger.info("begin to consume address: " + Configure.MAIL_ADDRESS_DAMOCLES_QUEUE);
+      vertx.eventBus().consumer(Configure.MAIL_ADDRESS_DAMOCLES_QUEUE, this::onMessage);
+
       startFuture.complete();
     });
   }
 
   @Override
   public void stop(Future<Void> stopFuture) throws Exception {
-    logger.info("stop DamoclesVerticle...");
+    logger.info("stop Damocles Verticle...");
     stopFuture.complete();
   }
 }

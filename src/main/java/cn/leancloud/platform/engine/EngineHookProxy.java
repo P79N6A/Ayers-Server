@@ -51,21 +51,21 @@ public class EngineHookProxy extends CommonWebClient {
     };
   }
 
-  public void call(String clazz, HookType type, JsonObject param, JsonObject headers, RoutingContext context, Handler<AsyncResult<JsonObject>> handler) {
+  public void call(String clazz, HookType type, JsonObject param, JsonObject headers,
+                   RoutingContext context, Handler<AsyncResult<JsonObject>> handler) {
     // TODO: rememeber to process ignoreHook flag, avoid dead-loop.
 
     EngineMetaStore engineMetaStore = EngineMetaStore.getInstance();
     String funcPath = engineMetaStore.getHookFunctionPath(clazz, type);
     if (StringUtils.isEmpty(funcPath)) {
-//      logger.debug("not found hook function for class:" + clazz + ", type:" + type.getName());
       handler.handle(wrapAsyncResult(param));
     } else {
       logger.debug("try to call hook function for class:" + clazz + ", type:" + type.getName() + "，param:" + param);
-      String leanengineHost = engineMetaStore.getEngineHost();
-      int leanenginePort = engineMetaStore.getEnginePort();
+      String engineHost = engineMetaStore.getEngineHost();
+      int enginePort = engineMetaStore.getEnginePort();
 
       // TODO: why need to wrap {object:json}?
-      postWithFallback(leanengineHost, leanenginePort, funcPath, headers, new JsonObject().put(LEAN_ENGINE_WRAP_ATTR, param),
+      postWithFallback(engineHost, enginePort, funcPath, headers, new JsonObject().put(LEAN_ENGINE_WRAP_ATTR, param),
               response -> handler.handle(response.map(obj -> obj.getJsonObject(LEAN_ENGINE_WRAP_ATTR))),
               throwable -> {
                 logger.warn("failed to call lean engine. cause: " + throwable);

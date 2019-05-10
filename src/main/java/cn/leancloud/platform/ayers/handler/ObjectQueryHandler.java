@@ -1,7 +1,6 @@
 package cn.leancloud.platform.ayers.handler;
 
 import cn.leancloud.platform.ayers.RequestParse;
-import cn.leancloud.platform.modules.ClassPermission;
 import cn.leancloud.platform.modules.LeanObject;
 import cn.leancloud.platform.utils.JsonFactory;
 import cn.leancloud.platform.utils.JsonUtils;
@@ -40,7 +39,6 @@ public class ObjectQueryHandler extends CommonHandler {
   public static final String QUERY_KEY_SUBQUERY_QUERY = "query";
 
   public static final String OP_SELECT = "$select";
-  public static final String OP_INQUERY = "$inQuery"; // not use yet.
 
   private static final String[] ALWAYS_PROJECT_KEYS = {"_id", "createdAt", "updatedAt", "ACL"};
 
@@ -325,7 +323,7 @@ public class ObjectQueryHandler extends CommonHandler {
    */
   private void execute(String clazz, String objectId, JsonObject options, List<String> includeArray,
                        Handler<AsyncResult<JsonObject>> handler) {
-    RequestParse.RequestHeaders headers = RequestParse.extractRequestHeaders(routingContext);
+    RequestParse.RequestHeaders headers = RequestParse.extractLCHeaders(routingContext);
     sendDataOperation(clazz, objectId, HttpMethod.GET.toString(), options, null, headers, handler);
   }
 

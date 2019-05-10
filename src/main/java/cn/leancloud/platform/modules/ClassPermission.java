@@ -91,20 +91,24 @@ public class ClassPermission {
       // invalid op
       return false;
     }
+
     boolean publicEnable = opPermission.getBoolean(KEY_PUBLIC, false);
     if (publicEnable) {
       // public enable
       return true;
     }
+
     if (StringUtils.isEmpty(currentUser)) {
       // user not signin
       return false;
     }
+
     boolean signinUserEnable = opPermission.getBoolean(KEY_SIGNIN_USERS, false);
     if (signinUserEnable) {
-      // enable for all signin users.
+      // enable for all authenticated users.
       return true;
     }
+
     Object users = opPermission.getValue(KEY_USERS);
     if (null != users && users instanceof String) {
       // users should be json array, just compatible with existed data.
@@ -114,12 +118,14 @@ public class ClassPermission {
       }
     } else if (null != users && users instanceof JsonArray) {
       JsonArray userArray = (JsonArray) users;
-      if (userArray.stream().collect(Collectors.toSet()).contains(currentUser)) {
+      boolean found = userArray.stream().collect(Collectors.toSet()).contains(currentUser);
+      if (found) {
         return true;
       }
     }
 
     if (null != userRoles && userRoles.size() > 0) {
+      // continue to check roles.
       Object roles = opPermission.getValue(KEY_ROLES);
       if (null != roles && roles instanceof String) {
         // roles should be json array, just compatible with existed data.

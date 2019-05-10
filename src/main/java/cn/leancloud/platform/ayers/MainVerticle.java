@@ -2,6 +2,7 @@ package cn.leancloud.platform.ayers;
 
 import cn.leancloud.platform.cache.InMemoryLRUCache;
 import cn.leancloud.platform.common.Configure;
+import cn.leancloud.platform.common.Constraints;
 import cn.leancloud.platform.engine.EngineMetaStore;
 import cn.leancloud.platform.persistence.DataStoreFactory;
 import io.vertx.core.DeploymentOptions;
@@ -10,27 +11,33 @@ import io.vertx.core.json.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * startup verticle
+ */
 public class MainVerticle extends CommonVerticle {
   private static final Logger logger = LoggerFactory.getLogger(MainVerticle.class);
   private static final String DATASTORE_MONGO = "mongo";
+  private static final int DEFAULT_MONGO_PORT = 27017;
+  private static final int DEFAULT_MYSQL_PORT = 3306;
 
   @Override
   public void start(Future<Void> startFuture) throws Exception {
     final Configure configure = Configure.getInstance();
 
-    EngineMetaStore.getInstance().initialize();
-
+    // init configure
     Future<JsonObject> configFuture = Future.future();
     configure.initialize(vertx, configFuture);
     configFuture.compose(response -> {
-      boolean useMongoDB = DATASTORE_MONGO.equalsIgnoreCase(configure.dataStoreType());
+      // init engine meta info
+      EngineMetaStore.getInstance().initialize();
 
-      // initialize mongo data store factory.
+      // init data store.
+      boolean useMongoDB = DATASTORE_MONGO.equalsIgnoreCase(configure.dataStoreType());
       DataStoreFactory dataStoreFactory = null;
       if (useMongoDB) {
         String hosts = configure.mongoHosts();
         String[] hostParts = hosts.split(":");
-        int port = 27017;
+        int port = DEFAULT_MONGO_PORT;
         if (hostParts.length > 1) {
           port = Integer.valueOf(hostParts[1]);
         }
@@ -54,7 +61,7 @@ public class MainVerticle extends CommonVerticle {
       } else {
         String hosts = configure.mysqlHosts();
         String[] hostParts = hosts.split(":");
-        int port = 3306;
+        int port = DEFAULT_MYSQL_PORT;
         if (hostParts.length > 1) {
           port = Integer.valueOf(hostParts[1]);
         }
@@ -76,25 +83,26 @@ public class MainVerticle extends CommonVerticle {
                 .build(vertx);
       }
       configure.setDataStoreFactory(dataStoreFactory);
-      configure.setClassMetaDataCache(new InMemoryLRUCache<>(1000));
+      configure.setClassMetaDataCache(new InMemoryLRUCache<>(Constraints.MAX_CLASS_COUNT * 2));
 
-      Future<String> httpVerticleDeployment = Future.future();
-      vertx.deployVerticle(new RestServerVerticle(), httpVerticleDeployment);
-      return httpVerticleDeployment;
-    }).compose(id1 -> {
       logger.info("try to deploy damocles verticles.");
       Future<String> damoclesVerticleDeployment = Future.future();
       vertx.deployVerticle(DamoclesVerticle.class,
               new DeploymentOptions().setInstances(1),
               damoclesVerticleDeployment);
       return damoclesVerticleDeployment;
-    }).compose(id2 -> {
+    }).compose(id1 -> {
       logger.info("try to deploy "+ configure.datastoreVerticleCount() + " dataStore verticles.");
       Future<String> datastoreVerticleDeployment = Future.future();
       vertx.deployVerticle(StorageVerticle.class,
               new DeploymentOptions().setInstances(configure.datastoreVerticleCount()),
               datastoreVerticleDeployment);
       return datastoreVerticleDeployment;
+    }).compose(id2 -> {
+      logger.info("try to deploy RestServer verticles.");
+      Future<String> httpVerticleDeployment = Future.future();
+      vertx.deployVerticle(new RestServerVerticle(), httpVerticleDeployment);
+      return httpVerticleDeployment;
     }).setHandler(arr -> {
       if (arr.succeeded()) {
         logger.info("main verticle start!");
