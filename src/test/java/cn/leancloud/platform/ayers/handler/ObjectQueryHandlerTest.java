@@ -6,7 +6,7 @@ import junit.framework.TestCase;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ObjectQueryHandlerTests extends TestCase {
+public class ObjectQueryHandlerTest extends TestCase {
   @Override
   protected void setUp() throws Exception {
   }

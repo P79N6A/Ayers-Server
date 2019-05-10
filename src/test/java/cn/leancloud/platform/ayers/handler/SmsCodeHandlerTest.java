@@ -2,7 +2,7 @@ package cn.leancloud.platform.ayers.handler;
 
 import junit.framework.TestCase;
 
-public class SmsCodeHandlerTests extends TestCase {
+public class SmsCodeHandlerTest extends TestCase {
   @Override
   protected void setUp() throws Exception {
   }

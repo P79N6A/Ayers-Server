@@ -9,7 +9,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Stream;
 
-public class JsonFactoryTests extends TestCase {
+public class JsonFactoryTest extends TestCase {
   @Override
   protected void setUp() throws Exception {
   }

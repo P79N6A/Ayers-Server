@@ -5,7 +5,7 @@ import junit.framework.TestCase;
 
 import java.time.LocalTime;
 
-public class StreamTests extends TestCase {
+public class StreamTest extends TestCase {
   public void testJsonStreamParallel() throws Exception {
     JsonObject json = new JsonObject();
     for (int i = 0; i < 100; i++) {

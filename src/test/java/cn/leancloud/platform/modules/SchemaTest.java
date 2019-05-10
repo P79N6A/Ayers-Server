@@ -6,7 +6,7 @@ import junit.framework.TestCase;
 
 import java.util.List;
 
-public class SchemaTests extends TestCase {
+public class SchemaTest extends TestCase {
   @Override
   protected void setUp() throws Exception {
   }

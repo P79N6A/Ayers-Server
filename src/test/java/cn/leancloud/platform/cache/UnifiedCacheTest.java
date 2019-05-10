@@ -3,7 +3,7 @@ package cn.leancloud.platform.cache;
 import io.vertx.core.json.JsonObject;
 import junit.framework.TestCase;
 
-public class UnifiedCacheTests extends TestCase {
+public class UnifiedCacheTest extends TestCase {
   @Override
   protected void setUp() throws Exception {
   }

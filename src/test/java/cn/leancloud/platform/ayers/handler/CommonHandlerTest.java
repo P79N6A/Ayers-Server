@@ -3,7 +3,7 @@ package cn.leancloud.platform.ayers.handler;
 import junit.framework.TestCase;
 import org.apache.commons.lang3.tuple.Pair;
 
-public class CommonHandlerTests extends TestCase {
+public class CommonHandlerTest extends TestCase {
   @Override
   protected void setUp() throws Exception {
   }

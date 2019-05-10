@@ -5,7 +5,7 @@ import junit.framework.TestCase;
 
 import java.util.Arrays;
 
-public class ClassPermissionTests extends TestCase {
+public class ClassPermissionTest extends TestCase {
   @Override
   protected void setUp() throws Exception {
   }

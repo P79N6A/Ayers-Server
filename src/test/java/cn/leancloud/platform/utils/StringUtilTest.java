@@ -8,7 +8,7 @@ import junit.framework.TestCase;
 import java.util.Arrays;
 import java.util.Date;
 
-public class StringUtilTests extends TestCase {
+public class StringUtilTest extends TestCase {
   @Override
   protected void setUp() throws Exception {
   }

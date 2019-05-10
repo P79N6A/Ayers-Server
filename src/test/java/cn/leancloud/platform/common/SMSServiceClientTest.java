@@ -6,7 +6,7 @@ import junit.framework.TestCase;
 
 import java.util.concurrent.CountDownLatch;
 
-public class SMSServiceClientTests extends TestCase {
+public class SMSServiceClientTest extends TestCase {
   @Override
   protected void setUp() throws Exception {
 //    System.setProperty("sun.net.spi.nameservice.nameservers", "8.8.8.8");

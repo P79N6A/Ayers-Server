@@ -3,7 +3,7 @@ package cn.leancloud.platform.modules;
 import io.vertx.core.json.JsonObject;
 import junit.framework.TestCase;
 
-public class ACLTests extends TestCase {
+public class ACLTest extends TestCase {
   @Override
   protected void setUp() throws Exception {
   }

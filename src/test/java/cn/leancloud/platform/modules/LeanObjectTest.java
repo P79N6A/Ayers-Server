@@ -9,7 +9,7 @@ import java.util.Arrays;
 
 import cn.leancloud.platform.modules.Schema.CompatResult;
 
-public class LeanObjectTests extends TestCase {
+public class LeanObjectTest extends TestCase {
   @Override
   protected void setUp() throws Exception {
   }

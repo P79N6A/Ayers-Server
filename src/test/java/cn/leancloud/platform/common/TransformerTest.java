@@ -3,7 +3,6 @@ package cn.leancloud.platform.common;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
 import junit.framework.TestCase;
-import scala.collection.immutable.Stream;
 
 public class TransformerTest extends TestCase {
 

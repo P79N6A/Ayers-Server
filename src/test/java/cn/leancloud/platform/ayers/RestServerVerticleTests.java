@@ -1,7 +1,10 @@
 package cn.leancloud.platform.ayers;
 
+import cn.leancloud.platform.cache.InMemoryLRUCache;
 import cn.leancloud.platform.common.Configure;
+import cn.leancloud.platform.persistence.DataStoreFactory;
 import io.vertx.core.DeploymentOptions;
+import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
@@ -24,27 +27,63 @@ public class RestServerVerticleTests {
   public void setUp(TestContext context) throws Exception {
     vertx = Vertx.vertx();
 
-    Configure.getInstance().initialize(vertx, res -> {});
-
-    // Let's configure the verticle to listen on the 'test' port (randomly picked).
-    // We create deployment options and set the _configuration_ json object:
     ServerSocket socket = new ServerSocket(0);
     port = socket.getLocalPort();
     socket.close();
 
-    Configure.getInstance().setListenPort(port);
-
-    DeploymentOptions options = new DeploymentOptions()
-            .setConfig(new JsonObject().put("http.port", port)
-            );
-
-    // We pass the options as the second parameter of the deployVerticle method.
-    vertx.deployVerticle(RestServerVerticle.class.getName(), options, context.asyncAssertSuccess());
+    Future<JsonObject> configFuture = Future.future();
+    Configure.getInstance().initialize(vertx, configFuture);
+    configFuture.compose(response -> {
+      JsonObject mongoConfig = new JsonObject()
+              .put("host", "localhost")
+              .put("port", 27027)
+              .put("db_name", "uluru-test")
+              .put("maxPoolSize", 10)
+              .put("minPoolSize", 1)
+              .put("maxIdleTimeMS", 10000)
+              .put("maxLifeTimeMS", 30000)
+              .put("waitQueueMultiple", 10)
+              .put("waitQueueTimeoutMS", 5000)
+              .put("serverSelectionTimeoutMS", 5000)
+              .put("keepAlive", true);
+      DataStoreFactory dataStoreFactory = new DataStoreFactory.Builder().setType(DataStoreFactory.SUPPORT_DATA_SOURCE_MONGO)
+              .setOptions(mongoConfig)
+              .setSourceName("MongoPool")
+              .build(vertx);
+      Configure.getInstance().setListenPort(port);
+      Configure.getInstance().setDataStoreFactory(dataStoreFactory);
+      Configure.getInstance().setClassMetaDataCache(new InMemoryLRUCache<>(1000));
+      Future<String> httpVerticleDeployment = Future.future();
+      vertx.deployVerticle(new RestServerVerticle(), httpVerticleDeployment);
+      return httpVerticleDeployment;
+    }).compose(id1 -> {
+      Future<String> damoclesVerticleDeployment = Future.future();
+      vertx.deployVerticle(DamoclesVerticle.class,
+              new DeploymentOptions().setInstances(1),
+              damoclesVerticleDeployment);
+      return damoclesVerticleDeployment;
+    }).compose(id2 -> {
+      Future<String> datastoreVerticleDeployment = Future.future();
+      vertx.deployVerticle(StorageVerticle.class,
+              new DeploymentOptions().setInstances(1),
+              datastoreVerticleDeployment);
+      return datastoreVerticleDeployment;
+    }).setHandler(arr -> {
+      System.out.println("setUp finished.");
+      if (arr.succeeded()) {
+        context.asyncAssertSuccess();
+      } else {
+        context.asyncAssertFailure();
+      }
+    });
   }
 
   @After
   public void tearDown(TestContext context) {
-    vertx.close(context.asyncAssertSuccess());
+    vertx.close(res -> {
+      System.out.println("tearDown and invoke vertx.close()");
+      context.asyncAssertSuccess();
+    });
   }
 
   @Test
@@ -65,7 +104,7 @@ public class RestServerVerticleTests {
   }
 
   @Test
-  public void checkThatWeCanAdd(TestContext context) {
+  public void testCurrentDate(TestContext context) {
     Async async = context.async();
     final String json = Json.encodePrettily(new JsonObject().put("Jameson", "Ireland"));
     vertx.createHttpClient().get(port, "localhost", "/1.1/date")

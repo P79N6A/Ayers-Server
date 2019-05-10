@@ -3,7 +3,7 @@ package cn.leancloud.platform.modules;
 import io.vertx.core.json.JsonObject;
 import junit.framework.TestCase;
 
-public class ObjectSpecificsTests extends TestCase {
+public class ObjectSpecificsTest extends TestCase {
   @Override
   protected void setUp() throws Exception {
   }
@@ -18,7 +18,7 @@ public class ObjectSpecificsTests extends TestCase {
             "/1.1/files/feifahie", "/1.1/files/fhaiefhe?afhie", "/1.1/roles", "/1.1/roles/hfiaeaihfhh?",
     "/1.1/class/fehia", "1.1/classes/testSchema", "/1.1/testSchema", "/1.1/classesfe/Post"};
     boolean[] expecteds = new boolean[]{true, true, true, true,
-        true, true, true, true,
+        true, true, false, true,
         true, true, true, true,
         false, false, false, false};
     for (int i = 0; i < paths.length; i++) {
