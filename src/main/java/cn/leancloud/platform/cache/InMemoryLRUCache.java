@@ -2,10 +2,12 @@ package cn.leancloud.platform.cache;
 
 import com.googlecode.concurrentlinkedhashmap.ConcurrentLinkedHashMap;
 
+import java.util.Set;
+
 public class InMemoryLRUCache<K, V> {
   private ConcurrentLinkedHashMap<K, V> cache;
 
-  public InMemoryLRUCache(int capacity) {
+  public InMemoryLRUCache(long capacity) {
     cache = new ConcurrentLinkedHashMap.Builder<K, V>()
             .maximumWeightedCapacity(capacity)
             .build();
@@ -43,7 +45,19 @@ public class InMemoryLRUCache<K, V> {
     return this.cache.size();
   }
 
+  public long weightedSize() {
+    return this.cache.weightedSize();
+  }
+
   public boolean isFull() {
     return size() >= capacity();
+  }
+
+  public Set<K> keySet() {
+    return this.cache.keySet();
+  }
+
+  public void clear() {
+    this.cache.clear();
   }
 }

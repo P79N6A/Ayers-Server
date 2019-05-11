@@ -17,7 +17,6 @@ public class ObjectACLTests extends WebClientTests {
     authData.put("platform", PLATFORM);
   }
 
-
   @Override
   protected void setUp() throws Exception {
     super.setUp();
