@@ -6,6 +6,7 @@ public class Constraints {
   public static final String USER_CLASS = "_User";
   public static final String FILE_CLASS = "_File";
   public static final String ROLE_CLASS = "_Role";
+  public static final String CONVERSATION_CLASS = "_Conversation";
   public static final String FOLLOWSHIP_CLASS = "_Follow";
   public static final String METADATA_CLASS = "_Class";
 

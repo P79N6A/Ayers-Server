@@ -308,12 +308,12 @@ public class MongoDBDataStore implements DataStore {
   }
 
   public DataStore findMetaInfo(String clazz, Handler<AsyncResult<JsonObject>> resultHandler) {
-    JsonObject query = new JsonObject().put("class", clazz);
+    JsonObject query = new JsonObject().put("name", clazz);
     return this.findOne(Constraints.METADATA_CLASS, query, null, resultHandler);
   }
 
   public DataStore upsertMetaInfo(String clazz, JsonObject update, Handler<AsyncResult<JsonObject>> resultHandler) {
-    JsonObject query = new JsonObject().put("class", clazz);
+    JsonObject query = new JsonObject().put("name", clazz);
     QueryOption queryOption = new QueryOption();
     UpdateOption option = new UpdateOption().setUpsert(true).setReturnNewDocument(true);
     return this.findOneAndUpdateWithOptions(Constraints.METADATA_CLASS, query, update, queryOption, option, resultHandler);
@@ -324,7 +324,7 @@ public class MongoDBDataStore implements DataStore {
   }
 
   public DataStore removeMetaInfo(String clazz, Handler<AsyncResult<Long>> resultHandler) {
-    JsonObject query = new JsonObject().put("class", clazz);
+    JsonObject query = new JsonObject().put("name", clazz);
     return this.remove(Constraints.METADATA_CLASS, query, resultHandler);
   }
 

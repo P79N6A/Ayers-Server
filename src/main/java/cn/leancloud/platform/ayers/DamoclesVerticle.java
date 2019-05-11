@@ -9,6 +9,7 @@ import cn.leancloud.platform.common.ErrorCodes;
 import cn.leancloud.platform.persistence.DataStore;
 import cn.leancloud.platform.persistence.DataStoreFactory;
 import cn.leancloud.platform.utils.JsonFactory;
+import cn.leancloud.platform.utils.JsonUtils;
 import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.CompositeFuture;
@@ -23,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 import static cn.leancloud.platform.common.ErrorCodes.ACL_VIOLATION;
 import static cn.leancloud.platform.common.ErrorCodes.SCHEMA_VIOLATION;
@@ -39,7 +41,11 @@ public class DamoclesVerticle extends CommonVerticle {
   private void saveSchema(String clazz, Schema schema, ClassMetaData classMetaData) {
     Objects.requireNonNull(classMetaData);
     Objects.requireNonNull(schema);
-    classMetaData.setSchema(schema);
+
+    JsonObject existedSchema = classMetaData.getSchema();
+    JsonUtils.deepMergeIn(existedSchema, schema);
+    classMetaData.setSchema(existedSchema);
+
     this.classMetaCache.put(clazz, classMetaData);
 
     DataStore dataStore = dataStoreFactory.getStore();
@@ -368,31 +374,34 @@ public class DamoclesVerticle extends CommonVerticle {
       message.fail(ErrorCodes.INVALID_PARAMETER.getCode(), "className is required.");
     } else {
       String operation = message.headers().get(INTERNAL_MSG_HEADER_OP).toUpperCase();
-      final ClassMetaData cachedClassMetaData = (ClassMetaData)this.classMetaCache.get(clazz);
+      final boolean encounterNewClazz = null == this.classMetaCache.get(clazz);
+      final ClassMetaData cachedClassMetaData = encounterNewClazz ? new ClassMetaData(clazz) : (ClassMetaData)this.classMetaCache.get(clazz);
 
       LeanObject object = null != param? new LeanObject(param) : null;
 
       if (RequestParse.OP_FIND_SCHEMA.equals(operation)) {
-        if (null == cachedClassMetaData) {
+        if (encounterNewClazz) {
           message.reply(new JsonObject());
         } else {
           message.reply(cachedClassMetaData.getSchema());
         }
         return;
-      } else if (null == object) {
+      } else if (null == object && !RequestParse.OP_OBJECT_GET.equals(operation) && !RequestParse.OP_OBJECT_DELETE.equals(operation)) {
         message.fail(ErrorCodes.INVALID_PARAMETER.getCode(), "json param is required.");
         return;
       } else {
-        final Schema inputSchema;
+        final Schema inputSchema;// maybe we need to check query operation.
+        Schema cachedSchema = cachedClassMetaData.getSchema();
+
         switch (operation) {
           case RequestParse.OP_ADD_SCHEMA:
             inputSchema = object.guessSchema();
             if (inputSchema.size() < 1) {
               // can't add empty schema.
               message.reply(new JsonObject().put("result", false));
-            } else if (null == cachedClassMetaData || null == cachedClassMetaData.getSchema()) {
+            } else if (encounterNewClazz) {
               // schema not existed.
-              saveSchema(clazz, inputSchema, null == cachedClassMetaData? new ClassMetaData(clazz) : cachedClassMetaData);
+              saveSchema(clazz, inputSchema, cachedClassMetaData);
               message.reply(new JsonObject().put("result", true));
             } else {
               // schema has existed, failed to add again.
@@ -401,27 +410,20 @@ public class DamoclesVerticle extends CommonVerticle {
             break;
           case RequestParse.OP_TEST_SCHEMA:
             inputSchema = object.guessSchema();
-            if (null != cachedClassMetaData) {
-              Schema cachedSchema = cachedClassMetaData.getSchema();
-              try {
-                Schema.CompatResult compatResult = inputSchema.compatibleWith(cachedSchema);
-                if (compatResult == Schema.CompatResult.NOT_MATCHED) {
-                  message.reply(new JsonObject().put("result", false));
-                } else {
-                  message.reply(new JsonObject().put("result", true));
-                }
-              } catch (ConsistencyViolationException ex) {
+            try {
+              Schema.CompatResult compatResult = inputSchema.compatibleWith(cachedSchema);
+              if (compatResult == Schema.CompatResult.NOT_MATCHED) {
                 message.reply(new JsonObject().put("result", false));
+              } else {
+                message.reply(new JsonObject().put("result", true));
               }
-            } else {
-              // anything is matched if first occurring.
-              message.reply(new JsonObject().put("result", true));
+            } catch (ConsistencyViolationException ex) {
+              message.reply(new JsonObject().put("result", false));
             }
             break;
           case RequestParse.OP_USER_SIGNIN:
           case RequestParse.OP_USER_SIGNUP:
             inputSchema = object.guessSchema();
-            Schema cachedSchema = null == cachedClassMetaData ? null : cachedClassMetaData.getSchema();
             try {
               Schema.CompatResult compatResult = inputSchema.compatibleWith(cachedSchema);
               if (compatResult != Schema.CompatResult.MATCHED) {
@@ -444,24 +446,26 @@ public class DamoclesVerticle extends CommonVerticle {
 
             Schema.CompatResult compatResult = Schema.CompatResult.MATCHED;
             if (RequestParse.OP_OBJECT_POST.equals(operation)) {
+              // need check object schema, class permission
               op = ClassPermission.OP.CREATE;
               checkSchemaFirst = true;
               dontCheckACL = true;
             } else if (RequestParse.OP_OBJECT_PUT.equals(operation)) {
+              // need check object schema, class permission and object acl
               op = ClassPermission.OP.UPDATE;
               checkSchemaFirst = true;
             } else if (RequestParse.OP_OBJECT_GET.equals(operation)) {
+              // need check class permission and acl(for GET)
               op = StringUtils.isEmpty(objectId)? ClassPermission.OP.FIND : ClassPermission.OP.GET;
-            } else if (RequestParse.OP_OBJECT_DELETE.equals(operation)) {
-              op = ClassPermission.OP.DELETE;
+              dontCheckACL = StringUtils.isEmpty(objectId);
             } else {
-              op = ClassPermission.OP.FIND;
+              // need check class permission and acl
+              op = ClassPermission.OP.DELETE;
             }
             if (checkSchemaFirst) {
               try {
                 inputSchema = object.guessSchema();
-                Schema existedSchema = null == cachedClassMetaData ? null : cachedClassMetaData.getSchema();
-                compatResult = inputSchema.compatibleWith(existedSchema);
+                compatResult = inputSchema.compatibleWith(cachedSchema);
               } catch (ConsistencyViolationException ex) {
                 logger.warn("failed to parse object schema. cause: " + ex.getMessage());
                 message.fail(SCHEMA_VIOLATION.getCode(), ex.getMessage());
@@ -470,8 +474,7 @@ public class DamoclesVerticle extends CommonVerticle {
             } else {
               inputSchema = null;
             }
-            final boolean needSaveSchema = (compatResult != Schema.CompatResult.MATCHED) && (null != inputSchema);
-
+            final boolean needSaveSchema = encounterNewClazz || (compatResult != Schema.CompatResult.MATCHED);
             List<Future> futures = new ArrayList<>();
             if (compatResult == Schema.CompatResult.OVER_MATCHED_ON_FIELD_LAYER) {
               // check add_field permission at first.
@@ -517,33 +520,47 @@ public class DamoclesVerticle extends CommonVerticle {
         logger.warn("failed to fetch class meta info, cause: " + event.cause());
         dataStore.close();
       } else {
-        event.result().forEach(object  -> {
-          if (null == object) {
-            return;
-          }
-          ClassMetaData metaData = ClassMetaData.fromJson(object);
-          String clazz = metaData.getName();
-          if (StringUtils.isEmpty(clazz)) {
-            logger.warn("found invalid class meta data. " + object);
-          } else {
-            logger.info("found class meta data. clazz=" + clazz + ", metaInfo=" + metaData);
-            dataStore.listIndices(clazz, res-> {
-              JsonArray indices = null;
-              if (res.failed()) {
-                logger.warn("failed to load indices for class:" + clazz + ", cause: " + res.cause());
+        if (event.result().size() < 1) {
+          // FIXME!
+          ClassMetaData metaClassMeta = new ClassMetaData(Constraints.METADATA_CLASS);
+          dataStore.upsertMetaInfo(Constraints.METADATA_CLASS, metaClassMeta, res -> {
+            dataStore.close();
+          });
+        } else {
+          List<Future> futures = event.result().stream().map(obj -> {
+            Future future = Future.future();
+            if (null == obj) {
+              future.complete();
+            } else {
+              ClassMetaData metaData = ClassMetaData.fromJson(obj);
+              String clazz = metaData.getName();
+              if (StringUtils.isEmpty(clazz)) {
+                logger.warn("found invalid class meta data. " + obj);
+                future.complete();
               } else {
-                indices = res.result().stream().filter(json -> !((JsonObject)json).getString("name").equals("_id_"))
-                        .collect(JsonFactory.toJsonArray());
-                logger.info("found indices. clazz=" + clazz + ", indices=" + indices.toString());
+                logger.info("found class meta data. clazz=" + clazz + ", metaInfo=" + metaData);
+                dataStore.listIndices(clazz, res-> {
+                  JsonArray indices = null;
+                  if (res.failed()) {
+                    logger.warn("failed to load indices for class:" + clazz + ", cause: " + res.cause());
+                  } else {
+                    indices = res.result().stream().filter(json -> !((JsonObject)json).getString("name").equals("_id_"))
+                            .collect(JsonFactory.toJsonArray());
+                    logger.info("found indices. clazz=" + clazz + ", indices=" + indices.toString());
+                  }
+                  if (null == indices) {
+                    indices = new JsonArray();
+                  }
+                  metaData.setIndices(indices);
+                  classMetaCache.putIfAbsent(clazz, metaData);
+                  future.complete();
+                });
               }
-              if (null == indices) {
-                indices = new JsonArray();
-              }
-              metaData.setIndices(indices);
-              classMetaCache.putIfAbsent(clazz, metaData);
-            });
-          }
-        });
+            }
+            return future;
+          }).collect(Collectors.toList());
+          CompositeFuture.all(futures).setHandler(res -> dataStore.close());
+        }
       }
 
       logger.info("begin to consume address: " + Configure.MAIL_ADDRESS_DAMOCLES_QUEUE);

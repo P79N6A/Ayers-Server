@@ -32,12 +32,31 @@ public class ClassMetaData extends LeanObject {
   private static final JsonObject defaultSchema = new JsonObject("{\"objectId\":{\"type\":\"String\"}," +
           "\"ACL\":{\"type\":\"ACL\"},\"createdAt\":{\"type\":\"Date\"},\"updatedAt\":{\"type\":\"Date\"}}");
 
+  private static final JsonObject defaultFileSchema = new JsonObject("{\"mime_type\":{\"type\":\"String\"},\"ACL\":{\"type\":\"ACL\"}," +
+          "\"updatedAt\":{\"type\":\"Date\"},\"key\":{\"type\":\"String\"},\"name\":{\"type\":\"String\"}," +
+          "\"objectId\":{\"type\":\"String\"},\"createdAt\":{\"type\":\"Date\"},\"url\":{\"type\":\"String\"}," +
+          "\"provider\":{\"type\":\"String\"},\"metaData\":{\"type\":\"Object\"},\"bucket\":{\"type\":\"String\"}}");
+
+  private static final JsonObject defaultUserSchema = new JsonObject("{\"salt\":{\"type\":\"String\"}," +
+          "\"email\":{\"type\":\"String\"},\"sessionToken\":{\"type\":\"String\"},\"updatedAt\":{\"type\":\"Date\"}," +
+          "\"password\":{\"type\":\"String\"},\"name\":{\"type\":\"String\"},\"objectId\":{\"type\":\"String\"}," +
+          "\"username\":{\"type\":\"String\"},\"createdAt\":{\"type\":\"Date\"},\"emailVerified\":{\"type\":\"Boolean\"}," +
+          "\"mobilePhoneNumber\":{\"type\":\"String\"},\"authData\":{\"type\":\"Object\",\"hidden\":true}," +
+          "\"mobilePhoneVerified\":{\"type\":\"Boolean\"}, \"ACL\":{\"type\":\"ACL\"}}");
+  private static final JsonObject defaultConversationSchema = new JsonObject("{\"unique\":{\"type\":\"Boolean\"}," +
+          "\"updatedAt\":{\"type\":\"Date\"},\"name\":{\"type\":\"String\"},\"objectId\":{\"type\":\"String\"}," +
+          "\"m\":{\"type\":\"Array\"},\"tr\":{\"type\":\"Boolean\"},\"createdAt\":{\"type\":\"Date\"},\"ACL\":{\"type\":\"ACL\"}," +
+          "\"lm\":{\"type\":\"Date\"},\"uniqueId\":{\"type\":\"String\"},\"mu\":{\"type\":\"Array\"},\"sys\":{\"type\":\"Boolean\"}}");
+
   public ClassMetaData(JsonObject data) {
     super(Constraints.METADATA_CLASS, data);
   }
 
   public static ClassMetaData fromJson(JsonObject data) {
     return new ClassMetaData(data);
+  }
+  public static Schema getDefaultSchema() {
+    return new Schema(defaultSchema);
   }
 
   public ClassMetaData() {
@@ -53,12 +72,19 @@ public class ClassMetaData extends LeanObject {
     setName(className);
     if (Constraints.USER_CLASS.equals(className)) {
       put(ATTR_CLASS_PERMISSIONS, defaultUserClassPermissions);
+      put(ATTR_SCHEMA, defaultUserSchema);
+    } else if (Constraints.FILE_CLASS.equals(className)) {
+      put(ATTR_SCHEMA, defaultFileSchema);
+    } else if (Constraints.CONVERSATION_CLASS.equals(className)) {
+      put(ATTR_SCHEMA, defaultConversationSchema);
     }
   }
 
   public ClassMetaData(String className, JsonObject schema, JsonArray indices) {
     this(className);
-    setSchema(schema);
+    if (null != schema) {
+      setSchema(schema);
+    }
     setIndices(indices);
   }
 

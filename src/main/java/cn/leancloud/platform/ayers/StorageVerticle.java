@@ -15,6 +15,7 @@ import io.vertx.core.json.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Optional;
 import java.util.stream.Stream;
 
 import static cn.leancloud.platform.modules.User.parseAuthData;
@@ -294,19 +295,23 @@ public class StorageVerticle extends CommonVerticle {
           options.setSkip(skip);
           options.setSort(sortJson);
           options.setFields(fieldJson);
-          logger.debug("findMetaInfo clazz=" + clazz + ", condition=" + condition.toString() + ", options=" + options);
+          logger.debug("query info: clazz=" + clazz + ", condition=" + condition.toString() + ", options=" + options);
           dataStore.findWithOptions(clazz, condition, options, res->{
             dataStore.close();
             if (res.failed()) {
               reportDatabaseError(message, res.cause());
             } else {
-              Stream<JsonObject> resultStream = res.result().stream().map(BsonTransformer::decodeBsonObject);
-              if (StringUtils.isEmpty(objectId)) {
-                JsonArray results = resultStream.collect(toJsonArray());
-                message.reply(new JsonObject().put("results", results));
-              } else {
-                message.reply(resultStream.findFirst().orElseGet(dummyJsonGenerator));
-              }
+              logger.debug("query result: " + res.result());
+              JsonArray results = res.result().stream().map(BsonTransformer::decodeBsonObject).collect(toJsonArray());
+              message.reply(new JsonObject().put("results", results));
+//              if (StringUtils.isEmpty(objectId)) {
+//                JsonArray results = resultStream.collect(toJsonArray());
+//
+//              } else {
+//                Optional firstResult = resultStream.findFirst();
+//                logger.debug("first object: " + firstResult);
+//                message.reply(firstResult.orElseGet(dummyJsonGenerator));
+//              }
             }
           });
         }
