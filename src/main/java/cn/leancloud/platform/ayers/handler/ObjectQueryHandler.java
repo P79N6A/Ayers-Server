@@ -39,6 +39,9 @@ public class ObjectQueryHandler extends CommonHandler {
   public static final String QUERY_KEY_SUBQUERY_QUERY = "query";
 
   public static final String OP_SELECT = "$select";
+  public static final String OP_DONT_SELECT = "$dontSelect";
+  public static final String OP_IN_QUERY = "$inQuery";
+  public static final String OP_NOTIN_QUERY = "$notInQuery";
 
   private static final String[] ALWAYS_PROJECT_KEYS = {"_id", "createdAt", "updatedAt", "ACL"};
 
@@ -355,6 +358,27 @@ public class ObjectQueryHandler extends CommonHandler {
             });
             return subQueryFuture;
           });
+        } else if (jsonValue.containsKey(OP_DONT_SELECT)) {
+          future = future.compose(res -> {
+            JsonObject options = jsonValue.getJsonObject(OP_DONT_SELECT);
+            String clazz = options.getString(QUERY_KEY_CLASSNAME);
+            String attrName = options.getString(QUERY_KEY_SUBQUERY_PROJECT);
+            Future<Boolean> subQueryFuture = Future.future();
+            execute(clazz, null, options, null, any -> {
+              if (any.failed()) {
+                logger.warn("failed to execute subQuery:" + options + ". cause: " + any.cause().getMessage());
+                condition.put(key, new JsonObject().put("$nin", new JsonArray()));
+                subQueryFuture.fail(any.cause());
+              } else {
+                JsonArray actualValues = any.result().getJsonArray("results").stream()
+                        .map(obj -> ((JsonObject) obj).getValue(attrName))
+                        .collect(JsonFactory.toJsonArray());
+                condition.put(key, new JsonObject().put("$nin", actualValues));
+                subQueryFuture.complete(true);
+              }
+            });
+            return subQueryFuture;
+          });
         } else {
           future = future.compose(j -> resolveSubQuery(jsonValue));
         }
@@ -450,6 +474,14 @@ public class ObjectQueryHandler extends CommonHandler {
             throw new IllegalArgumentException("invalid subQuery clause for key:" + entry.getKey());
           }
           return new AbstractMap.SimpleEntry<String, Object>(entry.getKey(), new JsonObject().put(OP_SELECT, options.toJson()));
+        } else if (tmpValue.containsKey(OP_DONT_SELECT)) {
+          JsonObject select = tmpValue.getJsonObject(OP_DONT_SELECT);
+          QueryOptions options = validateSubQuery(select);
+          if (null == options) {
+            logger.warn("invalid subQuery clause for key:" + entry.getKey());
+            throw new IllegalArgumentException("invalid subQuery clause for key:" + entry.getKey());
+          }
+          return new AbstractMap.SimpleEntry<String, Object>(entry.getKey(), new JsonObject().put(OP_DONT_SELECT, options.toJson()));
         } else {
           return new AbstractMap.SimpleEntry<String, Object>(entry.getKey(), transformSubQuery(tmpValue));
         }
