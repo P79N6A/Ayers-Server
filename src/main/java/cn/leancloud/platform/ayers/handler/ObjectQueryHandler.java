@@ -337,43 +337,51 @@ public class ObjectQueryHandler extends CommonHandler {
       String key = entry.getKey();
       if (null != value && value instanceof JsonObject) {
         JsonObject jsonValue = (JsonObject) value;
-        if (jsonValue.containsKey(OP_SELECT)) {
+        if (jsonValue.containsKey(OP_SELECT) || jsonValue.containsKey(OP_DONT_SELECT)) {
           future = future.compose(res -> {
-            JsonObject options = jsonValue.getJsonObject(OP_SELECT);
+            boolean isSelect = jsonValue.containsKey(OP_SELECT);
+            final String mongoOperator = isSelect ? "$in" : "$nin";
+            JsonObject options = isSelect ? jsonValue.getJsonObject(OP_SELECT) : jsonValue.getJsonObject(OP_DONT_SELECT);
             String clazz = options.getString(QUERY_KEY_CLASSNAME);
             String attrName = options.getString(QUERY_KEY_SUBQUERY_PROJECT);
             Future<Boolean> subQueryFuture = Future.future();
             execute(clazz, null, options, null, any -> {
               if (any.failed()) {
                 logger.warn("failed to execute subQuery:" + options + ". cause: " + any.cause().getMessage());
-                condition.put(key, new JsonObject().put("$in", new JsonArray()));
+                condition.put(key, new JsonObject().put(mongoOperator, new JsonArray()));
                 subQueryFuture.fail(any.cause());
               } else {
                 JsonArray actualValues = any.result().getJsonArray("results").stream()
                         .map(obj -> ((JsonObject) obj).getValue(attrName))
                         .collect(JsonFactory.toJsonArray());
-                condition.put(key, new JsonObject().put("$in", actualValues));
+                condition.put(key, new JsonObject().put(mongoOperator, actualValues));
                 subQueryFuture.complete(true);
               }
             });
             return subQueryFuture;
           });
-        } else if (jsonValue.containsKey(OP_DONT_SELECT)) {
+        } else if (jsonValue.containsKey(OP_IN_QUERY) || jsonValue.containsKey(OP_NOTIN_QUERY)) {
           future = future.compose(res -> {
-            JsonObject options = jsonValue.getJsonObject(OP_DONT_SELECT);
+            boolean isInQuery = jsonValue.containsKey(OP_IN_QUERY);
+            final String mongoOperator = isInQuery ? "$in" : "$nin";
+            JsonObject options = isInQuery ? jsonValue.getJsonObject(OP_IN_QUERY) : jsonValue.getJsonObject(OP_NOTIN_QUERY);
             String clazz = options.getString(QUERY_KEY_CLASSNAME);
-            String attrName = options.getString(QUERY_KEY_SUBQUERY_PROJECT);
+            String attrName = options.getJsonObject(QUERY_KEY_KEYS).fieldNames().iterator().next();
+            options.getString(QUERY_KEY_SUBQUERY_PROJECT);
+            logger.debug("attrName:" + attrName);
             Future<Boolean> subQueryFuture = Future.future();
             execute(clazz, null, options, null, any -> {
               if (any.failed()) {
                 logger.warn("failed to execute subQuery:" + options + ". cause: " + any.cause().getMessage());
-                condition.put(key, new JsonObject().put("$nin", new JsonArray()));
+                condition.put(key, new JsonObject().put(mongoOperator, new JsonArray()));
                 subQueryFuture.fail(any.cause());
               } else {
+                // TODO: need to convert to $id?
+                logger.debug("subQuery result:" + any.result().getJsonArray("results"));
                 JsonArray actualValues = any.result().getJsonArray("results").stream()
                         .map(obj -> ((JsonObject) obj).getValue(attrName))
                         .collect(JsonFactory.toJsonArray());
-                condition.put(key, new JsonObject().put("$nin", actualValues));
+                condition.put(key, new JsonObject().put(mongoOperator, actualValues));
                 subQueryFuture.complete(true);
               }
             });
@@ -427,7 +435,7 @@ public class ObjectQueryHandler extends CommonHandler {
   //        },
   //        "key":"followee"
   //      }
-  private QueryOptions validateSubQuery(JsonObject selectClause) {
+  private QueryOptions validateSelectClause(JsonObject selectClause) {
     if (null == selectClause) {
       return null;
     }
@@ -435,8 +443,30 @@ public class ObjectQueryHandler extends CommonHandler {
       return null;
     }
     String projectField = selectClause.getString(QUERY_KEY_SUBQUERY_PROJECT);
+    if (StringUtils.isEmpty(projectField)) {
+      return null;
+    }
     JsonObject queryClause = selectClause.getJsonObject(QUERY_KEY_SUBQUERY_QUERY);
-    if (StringUtils.isEmpty(projectField) || null == queryClause || !queryClause.containsKey(QUERY_KEY_CLASSNAME) || !queryClause.containsKey(QUERY_KEY_WHERE)) {
+    QueryOptions subQuery = validateQueryClause(queryClause);
+    if (null == subQuery) {
+      return null;
+    }
+    subQuery.setKeys(new JsonObject().put(projectField, 1));
+    return subQuery;
+  }
+
+  //        "$inQuery": {
+  //          "className":"_Followee",
+  //           "where": {
+  //             "user":{
+  //               "__type": "Pointer",
+  //               "className": "_User",
+  //               "objectId": "55a39634e4b0ed48f0c1845c"
+  //             }
+  //           }
+  //        }
+  private QueryOptions validateQueryClause(JsonObject queryClause) {
+    if (null == queryClause || !queryClause.containsKey(QUERY_KEY_CLASSNAME) || !queryClause.containsKey(QUERY_KEY_WHERE)) {
       return null;
     }
     String className = queryClause.getString(QUERY_KEY_CLASSNAME);
@@ -444,7 +474,7 @@ public class ObjectQueryHandler extends CommonHandler {
     if (StringUtils.isEmpty(className) || null == whereClause || whereClause.size() < 1) {
       return null;
     }
-    QueryOptions subQuery = new QueryOptions().setClassName(className).setWhere(whereClause).setKeys(new JsonObject().put(projectField, 1));
+    QueryOptions subQuery = new QueryOptions().setClassName(className).setWhere(whereClause);
     if (queryClause.containsKey(QUERY_KEY_SKIP)) {
       subQuery.setSkip(queryClause.getInteger(QUERY_KEY_SKIP));
     }
@@ -465,23 +495,28 @@ public class ObjectQueryHandler extends CommonHandler {
       Object value = entry.getValue();
       if (null != value && value instanceof JsonObject) {
         JsonObject tmpValue = (JsonObject) value;
-        if (tmpValue.containsKey(OP_SELECT)) {
-          JsonObject select = tmpValue.getJsonObject(OP_SELECT);
+        if (tmpValue.containsKey(OP_SELECT) || tmpValue.containsKey(OP_DONT_SELECT)) {
+          boolean isSelect = tmpValue.containsKey(OP_SELECT);
+          String operator = isSelect ? OP_SELECT : OP_DONT_SELECT;
+          JsonObject select = isSelect ? tmpValue.getJsonObject(OP_SELECT) : tmpValue.getJsonObject(OP_DONT_SELECT);
 
-          QueryOptions options = validateSubQuery(select);
+          QueryOptions options = validateSelectClause(select);
           if (null == options) {
             logger.warn("invalid subQuery clause for key:" + entry.getKey());
             throw new IllegalArgumentException("invalid subQuery clause for key:" + entry.getKey());
           }
-          return new AbstractMap.SimpleEntry<String, Object>(entry.getKey(), new JsonObject().put(OP_SELECT, options.toJson()));
-        } else if (tmpValue.containsKey(OP_DONT_SELECT)) {
-          JsonObject select = tmpValue.getJsonObject(OP_DONT_SELECT);
-          QueryOptions options = validateSubQuery(select);
+          return new AbstractMap.SimpleEntry<String, Object>(entry.getKey(), new JsonObject().put(operator, options.toJson()));
+        } else if (tmpValue.containsKey(OP_IN_QUERY) || tmpValue.containsKey(OP_NOTIN_QUERY)) {
+          boolean isInQuery = tmpValue.containsKey(OP_IN_QUERY);
+          String operator = isInQuery ? OP_IN_QUERY : OP_NOTIN_QUERY;
+          JsonObject query = isInQuery ? tmpValue.getJsonObject(OP_IN_QUERY) : tmpValue.getJsonObject(OP_NOTIN_QUERY);
+          QueryOptions options = validateQueryClause(query);
           if (null == options) {
             logger.warn("invalid subQuery clause for key:" + entry.getKey());
             throw new IllegalArgumentException("invalid subQuery clause for key:" + entry.getKey());
           }
-          return new AbstractMap.SimpleEntry<String, Object>(entry.getKey(), new JsonObject().put(OP_DONT_SELECT, options.toJson()));
+          options.setKeys(new JsonObject().put("objectId", 1));
+          return new AbstractMap.SimpleEntry<String, Object>(entry.getKey(), new JsonObject().put(operator, options.toJson()));
         } else {
           return new AbstractMap.SimpleEntry<String, Object>(entry.getKey(), transformSubQuery(tmpValue));
         }
