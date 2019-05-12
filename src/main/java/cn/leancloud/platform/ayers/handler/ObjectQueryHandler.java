@@ -2,6 +2,7 @@ package cn.leancloud.platform.ayers.handler;
 
 import cn.leancloud.platform.ayers.RequestParse;
 import cn.leancloud.platform.modules.LeanObject;
+import cn.leancloud.platform.modules.Schema;
 import cn.leancloud.platform.utils.JsonFactory;
 import cn.leancloud.platform.utils.JsonUtils;
 import cn.leancloud.platform.utils.StringUtils;
@@ -351,9 +352,20 @@ public class ObjectQueryHandler extends CommonHandler {
                 condition.put(key, new JsonObject().put(mongoOperator, new JsonArray()));
                 subQueryFuture.fail(any.cause());
               } else {
-                JsonArray actualValues = any.result().getJsonArray("results").stream()
-                        .map(obj -> ((JsonObject) obj).getValue(attrName))
-                        .collect(JsonFactory.toJsonArray());
+                JsonArray actualValues;
+                if (LeanObject.ATTR_NAME_OBJECTID.equals(attrName)) {
+                  actualValues = any.result().getJsonArray("results").stream()
+                          .map(obj -> {
+                            String objectId = ((JsonObject) obj).getString(attrName);
+                            return new JsonObject().put(LeanObject.ATTR_NAME_TYPE, Schema.DATA_TYPE_POINTER)
+                                    .put(LeanObject.ATTR_NAME_CLASSNAME, clazz)
+                                    .put(LeanObject.ATTR_NAME_OBJECTID, objectId);
+                          }).collect(JsonFactory.toJsonArray());
+                } else {
+                  actualValues = any.result().getJsonArray("results").stream()
+                          .map(obj -> ((JsonObject) obj).getValue(attrName))
+                          .collect(JsonFactory.toJsonArray());
+                }
                 condition.put(key, new JsonObject().put(mongoOperator, actualValues));
                 subQueryFuture.complete(true);
               }
@@ -376,11 +388,21 @@ public class ObjectQueryHandler extends CommonHandler {
                 condition.put(key, new JsonObject().put(mongoOperator, new JsonArray()));
                 subQueryFuture.fail(any.cause());
               } else {
-                // TODO: need to convert to $id?
                 logger.debug("subQuery result:" + any.result().getJsonArray("results"));
-                JsonArray actualValues = any.result().getJsonArray("results").stream()
-                        .map(obj -> ((JsonObject) obj).getValue(attrName))
-                        .collect(JsonFactory.toJsonArray());
+                JsonArray actualValues;
+                if (LeanObject.ATTR_NAME_OBJECTID.equals(attrName)) {
+                  actualValues = any.result().getJsonArray("results").stream()
+                          .map(obj -> {
+                            String objectId = ((JsonObject) obj).getString(attrName);
+                            return new JsonObject().put(LeanObject.ATTR_NAME_TYPE, Schema.DATA_TYPE_POINTER)
+                                    .put(LeanObject.ATTR_NAME_CLASSNAME, clazz)
+                                    .put(LeanObject.ATTR_NAME_OBJECTID, objectId);
+                          }).collect(JsonFactory.toJsonArray());
+                } else {
+                  actualValues = any.result().getJsonArray("results").stream()
+                          .map(obj -> ((JsonObject) obj).getValue(attrName))
+                          .collect(JsonFactory.toJsonArray());
+                }
                 condition.put(key, new JsonObject().put(mongoOperator, actualValues));
                 subQueryFuture.complete(true);
               }

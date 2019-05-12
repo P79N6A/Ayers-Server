@@ -139,7 +139,7 @@ public class ObjectTests extends WebClientTests {
     assertTrue(testSuccessed);
   }
 
-  public void testPreIncludeQuery() throws Exception {
+  public void prepareIncludeQuery() throws Exception {
     Random rand = new Random(System.currentTimeMillis());
     String ReviewerFormat = "{\"name\":\"review no. %d\", \"tags\":[\"%s\", \"%s\"]}";
     String[] tags = new String[]{"designs", "read", "story", "web", "best", "comments", "Dragon Ball",
@@ -234,6 +234,9 @@ public class ObjectTests extends WebClientTests {
   }
 
   public void testIncludeQuery() throws Exception {
+    prepareIncludeQuery();
+    tearDown();
+    setUp();
     JsonObject where = new JsonObject().put("author", new JsonObject().put("$exists", true));
     JsonObject queryParam = new JsonObject();
     queryParam.put("limit", "5");
@@ -261,7 +264,7 @@ public class ObjectTests extends WebClientTests {
   }
 
 
-  public void testPreInQuery() throws Exception {
+  public void prepareDataForInQuery() throws Exception {
     Random rand = new Random(System.currentTimeMillis());
     String ReviewerFormat = "{\"name\":\"review no. %d\", \"tags\":[\"%s\", \"%s\"]}";
     String[] tags = new String[]{"designs", "read", "story", "web", "best", "comments", "Dragon Ball",
@@ -339,6 +342,9 @@ public class ObjectTests extends WebClientTests {
   }
 
   public void testInQuery() throws Exception {
+    prepareDataForInQuery();
+    tearDown();
+    setUp();
     JsonObject subWhere = new JsonObject().put("name", new JsonObject().put("$exists", true));
 
     JsonObject subQuery = new JsonObject().put("where", subWhere).put("className", "Reviewer");
@@ -347,6 +353,7 @@ public class ObjectTests extends WebClientTests {
     queryParam.put("limit", "5");
     queryParam.put("where", where.toString());
     queryParam.put("keys", "content, publisher");
+    queryParam.put("include", "publisher");
     queryParam.put("order", "updatedAt");
     get("/1.1/classes/Comment", queryParam, res -> {
       if (res.failed()) {
