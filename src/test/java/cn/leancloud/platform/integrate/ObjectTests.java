@@ -1,12 +1,16 @@
 package cn.leancloud.platform.integrate;
 
+import cn.leancloud.platform.modules.LeanObject;
+import cn.leancloud.platform.modules.Schema;
 import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
@@ -368,6 +372,70 @@ public class ObjectTests extends WebClientTests {
     });
     latch.await();
     assertTrue(testSuccessed);
+  }
 
+  public void testPrepareDataForRelationQuery() throws Exception {
+    String authString = "{\n" +
+            "  \"authData\": {\n" +
+            "    \"weibo\": {\n" +
+            "      \"uid\": \"123456789\",\n" +
+            "      \"access_token\": \"2.00vs3XtCI5FevCff4981adb5jj1lXE\",\n" +
+            "      \"expiration_in\": \"36000\"\n" +
+            "    }\n" +
+            "  }\n" +
+            "}";
+    JsonObject authRequest = new JsonObject(authString);
+    post("/1.1/users", authRequest, response -> {
+      if (response.failed()) {
+        System.out.println("failed to login with authData. cause:" + response.cause().getMessage());
+        latch.countDown();
+      } else {
+        JsonObject resultUser = response.result();
+        System.out.println(resultUser);
+        if (resultUser.containsKey("objectId") && resultUser.containsKey("sessionToken") && resultUser.containsKey("updatedAt")) {
+          String userId = resultUser.getString("objectId");
+          JsonObject userObject = new JsonObject().put(LeanObject.ATTR_NAME_TYPE, Schema.DATA_TYPE_POINTER)
+                  .put(LeanObject.ATTR_NAME_CLASSNAME, "_User").put(LeanObject.ATTR_NAME_OBJECTID, userId);
+          JsonObject data = new JsonObject().put("content", "每个 Java 程序员必备的 8 个开发工具")
+                  .put("pubUser", "LeanCloud官方客服").put("pubTimestamp", Instant.now().toEpochMilli())
+                  .put("likes", new JsonObject().put("__op", "AddRelation").put("objects", Arrays.asList(userObject)));
+          post("/1.1/classes/Post", data, res -> {
+            if (res.failed()) {
+              System.out.println("failed to create Post. cause:" + res.cause().getMessage());
+              latch.countDown();
+            } else {
+              System.out.println("create Post: " + res.result());
+              testSuccessed = true;
+              latch.countDown();
+            }
+          });
+        } else {
+          System.out.println("user login result is invalid, lack of objectId/sessionToken/updatedAt");
+          latch.countDown();
+        }
+      }
+    });
+    latch.await();
+    assertTrue(testSuccessed);
+  }
+
+  public void testRelationQuery() throws Exception {
+    JsonObject where = new JsonObject("{\"$relatedTo\":" +
+            "{\"object\":{\"__type\":\"Pointer\",\"className\":\"Post\",\"objectId\":\"558e20cbe4b060308e3eb36c\"}," +
+            "\"key\":\"likes\"}}");
+    JsonObject queryParam = new JsonObject();
+    queryParam.put("limit", "5");
+    queryParam.put("where", where.toString());
+    get("/1.1/users", queryParam, res -> {
+      if (res.failed()) {
+        System.out.println(res.cause().getMessage());
+        latch.countDown();
+      } else {
+        testSuccessed = null != res.result() && res.result().size() > 0;
+        latch.countDown();
+      }
+    });
+    latch.await();
+    assertTrue(testSuccessed);
   }
 }

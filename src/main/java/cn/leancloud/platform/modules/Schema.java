@@ -17,6 +17,7 @@ public class Schema extends JsonObject {
   public static final String DATA_TYPE_DATE = "Date";
   public static final String DATA_TYPE_ANY = "Any";
   public static final String DATA_TYPE_NUMBER = "Number";
+  public static final String DATA_TYPE_RELATION = "Relation";
   public static final String DATA_TYPE_STRING = "String";
   public static final String DATA_TYPE_BOOLEAN = "Boolean";
 

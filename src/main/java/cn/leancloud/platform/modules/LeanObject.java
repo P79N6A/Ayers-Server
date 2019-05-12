@@ -121,7 +121,7 @@ public class LeanObject extends JsonObject{
     if (null == value) {
       return null;
     }
-    if (value instanceof Integer || value instanceof Float || value instanceof Double) {
+    if (value instanceof Integer || value instanceof Float || value instanceof Double || value instanceof Long) {
       return new JsonObject().put(Schema.SCHEMA_KEY_TYPE, Number.class.getSimpleName());
     } else if (value instanceof JsonObject) {
       JsonObject newValue = (JsonObject) value;
@@ -144,10 +144,11 @@ public class LeanObject extends JsonObject{
       } else if (newValue.containsKey(ATTR_NAME_OP)) {
         String operation = newValue.getString(ATTR_NAME_OP);
         switch (operation.toLowerCase()) {
-          case BsonTransformer.REST_OP_ADD:
           case BsonTransformer.REST_OP_ADD_RELATION:
-          case BsonTransformer.REST_OP_ADD_UNIQUE:
           case BsonTransformer.REST_OP_REMOVE_RELATION:
+            return new JsonObject().put(Schema.SCHEMA_KEY_TYPE, Schema.DATA_TYPE_RELATION);
+          case BsonTransformer.REST_OP_ADD:
+          case BsonTransformer.REST_OP_ADD_UNIQUE:
           case BsonTransformer.REST_OP_REMOVE:
             return new JsonObject().put(Schema.SCHEMA_KEY_TYPE, Schema.DATA_TYPE_ARRAY);
           case BsonTransformer.REST_OP_BITAND:
