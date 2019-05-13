@@ -26,6 +26,7 @@ import io.vertx.ext.web.api.validation.HTTPRequestValidationHandler;
 import io.vertx.ext.web.api.validation.ValidationException;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CorsHandler;
+import io.vertx.ext.web.handler.LoggerHandler;
 import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -646,7 +647,9 @@ public class RestServerVerticle extends CommonVerticle {
 
     router.get("/ping").handler(this::healthcheck);
 
-    router.route("/1.1/*").handler(appKeyValidationHandler).handler(BodyHandler.create().setBodyLimit(1024*1024))
+    router.route("/1.1/*").handler(appKeyValidationHandler)
+            .handler(BodyHandler.create().setBodyLimit(2*1024*1024))
+            .handler(LoggerHandler.create())
             .handler(CorsHandler.create("*")
                     .allowedMethod(HttpMethod.GET).allowedMethod(HttpMethod.POST).allowedMethod(HttpMethod.PUT)
                     .allowedMethod(HttpMethod.DELETE).allowedMethod(HttpMethod.OPTIONS).allowedMethod(HttpMethod.HEAD)
