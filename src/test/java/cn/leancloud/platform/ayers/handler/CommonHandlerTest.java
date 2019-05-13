@@ -1,7 +1,13 @@
 package cn.leancloud.platform.ayers.handler;
 
+import io.vertx.core.*;
+import io.vertx.core.buffer.Buffer;
+import io.vertx.core.json.JsonObject;
+import io.vertx.ext.web.templ.handlebars.HandlebarsTemplateEngine;
 import junit.framework.TestCase;
 import org.apache.commons.lang3.tuple.Pair;
+
+import java.util.concurrent.CountDownLatch;
 
 public class CommonHandlerTest extends TestCase {
   @Override
@@ -36,5 +42,22 @@ public class CommonHandlerTest extends TestCase {
       System.out.println("testSchema " + paths[i] + "||| pair: " + p.getLeft() + "," + p.getRight());
       assertTrue(expecteds[i] == p.getLeft().length() > 0);
     }
+  }
+
+  public void testTemplateRendering() throws Exception {
+    CountDownLatch latch = new CountDownLatch(1);
+    io.vertx.ext.web.templ.handlebars.HandlebarsTemplateEngine engine = HandlebarsTemplateEngine.create(Vertx.vertx());
+    JsonObject data = new JsonObject().put("appname", "LeanCloud").put("username", "sama")
+            .put("email", "app.leanapp.cn").put("link", "https://weibo.com/r/23132");
+    engine.render(data, "templates/verify_email.hbs", response -> {
+      if (response.failed()) {
+        System.out.println("failed to render template. cause:" + response.cause().getMessage());
+      } else {
+        Buffer buffer = response.result();
+        System.out.println(buffer.toString());
+      }
+      latch.countDown();
+    });
+    latch.await();
   }
 }

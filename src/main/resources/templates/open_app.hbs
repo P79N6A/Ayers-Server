@@ -1,0 +1,38 @@
+<html lang="en">
+<title>正在打开 {{applinks.app_name}}&hellip;</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimal-ui">
+
+<script type="text/javascript" src="https://lc-avoscloud.cn-n1.lcfile.com/statics/jquery.min.js"></script>
+
+{{#if openapp}}
+<script>
+  $(document).ready(function(){
+    var applink = '{{app_uri}}';
+    var href = '{{render_uri}}';
+
+    if (navigator.userAgent.match(/Android/i) && !navigator.userAgent.match(/Chrome/i)) {
+      // Older Android browser,use iframe...
+      var iframe = document.createElement("iframe");
+      iframe.style.border = "none";
+      iframe.style.width = "1px";
+      iframe.style.height = "1px";
+      var t = setTimeout(function() {
+            window.location = href;
+      }, 100);
+      iframe.onload = function () { clearTimeout(t) };
+      iframe.src = applink;
+      document.body.appendChild(iframe);
+     } else {
+      // Others
+     setTimeout(function() {
+        if (!document.webkitHidden)
+            window.location = href;
+     }, 100);
+    window.location = applink;
+     }
+  });
+</script>
+{{/if}}
+
+{{content}}
