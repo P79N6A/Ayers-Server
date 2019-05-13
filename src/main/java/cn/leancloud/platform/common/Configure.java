@@ -74,7 +74,7 @@ public class Configure {
   }
 
   public int getUluruAPIPort() {
-    return settings.getInteger("server.uluru_api.port", 80);
+    return settings.getInteger("server.uluru_api.port", 443);
   }
 
   public String getUluruEngineHost() {

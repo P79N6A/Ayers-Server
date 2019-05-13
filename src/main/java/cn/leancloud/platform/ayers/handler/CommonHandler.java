@@ -163,6 +163,7 @@ public class CommonHandler {
     JsonObject headerJson = headers.toJson()
             .put(RequestParse.HEADER_CONTENT_TYPE, RequestParse.CONTENT_TYPE_JSON)
             .put("Accept", RequestParse.CONTENT_TYPE_JSON);
+    headerJson.remove("useMasterKey");
     return headerJson;
   }
 
@@ -170,6 +171,7 @@ public class CommonHandler {
     JsonObject headerJson = headers.toJson()
             .put(RequestParse.HEADER_CONTENT_TYPE, RequestParse.CONTENT_TYPE_JSON)
             .put("Accept", RequestParse.CONTENT_TYPE_JSON);
+    headerJson.remove("useMasterKey");
     return headerJson;
   }
 

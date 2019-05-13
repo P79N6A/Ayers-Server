@@ -75,6 +75,8 @@ public class RequestParse {
   public static final String REQUEST_INDEX_OPTION_SPARSE = "sparse";
   public static final String REQUEST_INDEX_OPTION_NAME = "indexName";
 
+  public static final String CONTEXT_REQUEST_DATA = "LC_REQUEST_DATA";
+
   public static class RequestHeaders {
     private String appId;
     private String appKey;
@@ -171,6 +173,11 @@ public class RequestParse {
   public static RequestHeaders extractLCHeaders(RoutingContext context) {
     if (null == context) {
       return null;
+    }
+    RequestHeaders cachedResult = context.get(CONTEXT_REQUEST_DATA);
+    if (null != cachedResult) {
+//      logger.debug("return with cached Request Headers.");
+      return cachedResult;
     }
     String appId = getHeader(context, HEADER_LC_APPID, HEADER_ULURU_APPID, HEADER_AVOS_APPID);
     String appKey = getHeader(context, HEADER_LC_APPKEY, HEADER_ULURU_APPKEY, HEADER_AVOS_APPKEY);

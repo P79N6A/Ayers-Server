@@ -646,7 +646,7 @@ public class RestServerVerticle extends CommonVerticle {
 
     router.get("/ping").handler(this::healthcheck);
 
-    router.route("/1.1/*").handler(appKeyValidationHandler).handler(BodyHandler.create())
+    router.route("/1.1/*").handler(appKeyValidationHandler).handler(BodyHandler.create().setBodyLimit(1024*1024))
             .handler(CorsHandler.create("*")
                     .allowedMethod(HttpMethod.GET).allowedMethod(HttpMethod.POST).allowedMethod(HttpMethod.PUT)
                     .allowedMethod(HttpMethod.DELETE).allowedMethod(HttpMethod.OPTIONS).allowedMethod(HttpMethod.HEAD)

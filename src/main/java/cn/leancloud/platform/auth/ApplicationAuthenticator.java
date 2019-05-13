@@ -34,5 +34,7 @@ public class ApplicationAuthenticator implements CustomValidator {
       logger.warn("request. appId=" + appId + ", appKey=" + appKey + ", useMasterKey=" + useMasterKey + ", sign=" + requestSign);
       throw new ValidationException("invalid application authentication.");
     }
+//    logger.debug("save request headers into RoutingConntext.");
+    context.put(RequestParse.CONTEXT_REQUEST_DATA, headers);
   }
 }
