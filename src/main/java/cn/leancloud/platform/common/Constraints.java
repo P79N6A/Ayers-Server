@@ -17,5 +17,11 @@ public class Constraints {
   public static final int MAX_OBJECT_SIZE = 16*1024*1024;
   public static final int MAX_QUERY_RESULT_COUNT = 1000;
 
+  public static final String RELATION_TABLE_FORMAT = "_Join:%s:%s:%s";
+
   public static final String DEFAULT_MIME_TYPE = "application/octet-stream";
+
+  public static String getRelationTable(String fromClazz, String toClazz, String field) {
+    return String.format(RELATION_TABLE_FORMAT, toClazz, field, fromClazz);
+  }
 }

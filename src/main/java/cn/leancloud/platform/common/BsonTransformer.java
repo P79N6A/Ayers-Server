@@ -186,19 +186,17 @@ public class BsonTransformer {
                 addOperatorEntry(complexOps, "$inc", key, interval, isCreateOp);
               }
               break;
-            case REST_OP_ADD_RELATION:
-            case REST_OP_REMOVE_RELATION:
             case REST_OP_ADD:
             case REST_OP_REMOVE:
               JsonArray objects = newValue.getJsonArray(LeanObject.ATTR_NAME_OBJECTS);
               if (isCreateOp) {
-                if (op.equals(REST_OP_REMOVE) || op.equals(REST_OP_REMOVE_RELATION)) {
+                if (op.equals(REST_OP_REMOVE)/* || op.equals(REST_OP_REMOVE_RELATION)*/) {
                   // ignore
                 } else {
                   addOperatorEntry(directSetEntries, "$set", key, objects, isCreateOp);
                 }
               } else {
-                if (op.equals(REST_OP_REMOVE) || op.equals(REST_OP_REMOVE_RELATION)) {
+                if (op.equals(REST_OP_REMOVE)/* || op.equals(REST_OP_REMOVE_RELATION)*/) {
                   addOperatorEntry(complexOps, "$pullAll", key, objects, isCreateOp);
                 } else {
                   addOperatorEntry(complexOps, "$push", key,
@@ -224,6 +222,8 @@ public class BsonTransformer {
               } else {
                 addOperatorEntry(directSetEntries, "$unset", key, "", isCreateOp);
               }
+            case REST_OP_ADD_RELATION:
+            case REST_OP_REMOVE_RELATION:
             default:
               break;
           }

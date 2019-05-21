@@ -1,15 +1,16 @@
 package cn.leancloud.platform.persistence.impl;
 
 import cn.leancloud.platform.common.Constraints;
-import cn.leancloud.platform.modules.ClassMetaData;
+import cn.leancloud.platform.utils.JsonFactory;
 import cn.leancloud.platform.utils.StringUtils;
 import cn.leancloud.platform.common.BsonTransformer;
 import cn.leancloud.platform.modules.LeanObject;
-import cn.leancloud.platform.modules.Schema;
 import cn.leancloud.platform.persistence.DataStore;
 import cn.leancloud.platform.persistence.BulkOperation;
 import com.qiniu.util.Json;
 import io.vertx.core.AsyncResult;
+import io.vertx.core.CompositeFuture;
+import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -17,15 +18,22 @@ import io.vertx.core.streams.ReadStream;
 import io.vertx.ext.mongo.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import scala.collection.immutable.StreamIterator;
 
 import java.security.InvalidParameterException;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
+
+import static cn.leancloud.platform.common.BsonTransformer.REST_OP_ADD_RELATION;
+import static cn.leancloud.platform.common.BsonTransformer.REST_OP_REMOVE_RELATION;
+import static cn.leancloud.platform.modules.LeanObject.*;
+import static cn.leancloud.platform.modules.Relation.BUILTIN_ATTR_RELATIONN_RELATED_ID;
+import static cn.leancloud.platform.modules.Relation.BUILTIN_ATTR_RELATION_OWNING_ID;
 
 public class MongoDBDataStore implements DataStore {
   private static final Logger logger = LoggerFactory.getLogger(MongoDBDataStore.class);
   private MongoClient mongoClient;
+
   private static class InvalidParameterResult<T> implements AsyncResult<T> {
     private String errorMessage;
     public InvalidParameterResult(String message) {
@@ -56,23 +64,123 @@ public class MongoDBDataStore implements DataStore {
     this.mongoClient = client;
   }
 
+  private static boolean isRelationOperation(Map.Entry<String, Object> entry) {
+    if (null == entry || null == entry.getValue()) {
+      return false;
+    }
+    if (!(entry.getValue() instanceof JsonObject)) {
+      return false;
+    }
+    JsonObject jsonValue = (JsonObject) entry.getValue();
+    if (!jsonValue.containsKey(ATTR_NAME_OP)) {
+      return false;
+    }
+    String op = jsonValue.getString(ATTR_NAME_OP);
+    return REST_OP_ADD_RELATION.equalsIgnoreCase(op) || REST_OP_REMOVE_RELATION.equalsIgnoreCase(op);
+  }
+
+  private Future processRelationOperationAsync(String clazz, String currentObjectId, Map.Entry<String, Object> entry) {
+    Future tmpFuture = Future.future();
+    String key = entry.getKey();
+    JsonObject jsonValue = (JsonObject) entry.getValue();
+    if (StringUtils.isEmpty(key) || null == jsonValue) {
+      logger.warn("invalid relation operation node. key or value is null");
+      tmpFuture.complete();
+      return tmpFuture;
+    }
+    String op = jsonValue.getString(ATTR_NAME_OP);
+    if (!REST_OP_ADD_RELATION.equalsIgnoreCase(op) && !REST_OP_REMOVE_RELATION.equalsIgnoreCase(op)) {
+      logger.warn("invalid relation operation node. __op is invalid:" + op);
+      tmpFuture.complete();
+      return tmpFuture;
+    }
+    BulkOperation.OpType bulkOperationType = REST_OP_ADD_RELATION.equalsIgnoreCase(op)? BulkOperation.OpType.INSERT
+            : BulkOperation.OpType.DELETE;
+    JsonArray objects = jsonValue.getJsonArray(ATTR_NAME_OBJECTS);
+    if (null == objects || objects.size() < 1) {
+      logger.warn("invalid relation operation node. objects is empty.");
+      tmpFuture.complete();
+      return tmpFuture;
+    }
+    JsonObject sampleObject = objects.getJsonObject(0);
+    if (null == sampleObject || !sampleObject.containsKey(ATTR_NAME_CLASSNAME) || !sampleObject.containsKey(ATTR_NAME_OBJECTID)) {
+      logger.warn("invalid relation operation node. object element or className/objects under it is empty.");
+      tmpFuture.complete();
+      return tmpFuture;
+    }
+    String toClazz = sampleObject.getString(ATTR_NAME_CLASSNAME);
+    if (StringUtils.isEmpty(toClazz)) {
+      logger.warn("invalid relation operation node. className under object element is null");
+      tmpFuture.complete();
+      return tmpFuture;
+    }
+    String relationTableName = Constraints.getRelationTable(clazz, toClazz, key);
+    JsonObject owningId = new JsonObject().put("$id", currentObjectId).put("$ref", clazz);
+    List<BulkOperation> operations = objects.stream().map(obj -> {
+      String relatedObjectId = ((JsonObject)obj).getString(ATTR_NAME_OBJECTID);
+      JsonObject relatedId = new JsonObject().put("$id", relatedObjectId).put("$ref", toClazz);
+      JsonObject bulkOperation = new JsonObject().put(BUILTIN_ATTR_RELATION_OWNING_ID, owningId)
+              .put(BUILTIN_ATTR_RELATIONN_RELATED_ID, relatedId);
+      return new BulkOperation(bulkOperation, bulkOperationType);
+    }).collect(Collectors.toList());
+
+    logger.debug("call bulkWrite with operations:" + Json.encode(operations));
+
+    this.bulkWrite(relationTableName, operations, res ->{
+      if (res.failed()) {
+        logger.warn("failed to bulk-save relation operations. cause:" + res.cause().getMessage());
+      } else {
+        logger.debug("succeed to bulk-save relation operations. result:" + res.result());
+      }
+      tmpFuture.complete();
+    });
+    return tmpFuture;
+  }
+
   public DataStore insertWithOptions(String clazz, JsonObject obj, InsertOption options,
                                      Handler<AsyncResult<JsonObject>> resultHandler) {
     if (StringUtils.isEmpty(clazz) || null == obj || obj.size() < 1) {
       resultHandler.handle(new InvalidParameterResult("class or object is required."));
     } else {
+      logger.debug("begin to insert object:" + obj);
+
+      List<Map.Entry<String, Object>> relationOps = obj.stream()
+              .filter(entry -> isRelationOperation(entry)).collect(Collectors.toList());
+      obj = obj.stream().filter(entry -> !isRelationOperation(entry)).collect(JsonFactory.toJsonObject());
+
+      logger.debug("insert object:" + obj);
+      logger.debug("relation Operations: " + relationOps);
+
       JsonObject encodedObject = BsonTransformer.encode2BsonRequest(obj, BsonTransformer.REQUEST_OP.CREATE);
       final boolean returnNewDoc = (null != options)? options.isReturnNewDocument() : false;
 
       this.mongoClient.insertWithOptions(clazz, encodedObject, WriteOption.ACKNOWLEDGED, event -> {
-        if (null != resultHandler) {
-          resultHandler.handle(event.map(objectId -> {
-            if (returnNewDoc) {
-              return BsonTransformer.decodeBsonObject(new JsonObject().mergeIn(encodedObject));
-            } else {
-              return new JsonObject().put(LeanObject.ATTR_NAME_OBJECTID, objectId);
+        if (relationOps.size() > 0 && event.succeeded()) {
+          String currentObjectId = event.result();
+          List<Future> futures = relationOps.stream()
+                  .map(entry -> processRelationOperationAsync(clazz, currentObjectId, entry))
+                  .collect(Collectors.toList());
+          CompositeFuture.all(futures).setHandler(a -> {
+            if (null != resultHandler) {
+              resultHandler.handle(event.map(objectId -> {
+                if (returnNewDoc) {
+                  return BsonTransformer.decodeBsonObject(new JsonObject().mergeIn(encodedObject));
+                } else {
+                  return new JsonObject().put(LeanObject.ATTR_NAME_OBJECTID, objectId);
+                }
+              }));
             }
-          }));
+          });
+        } else {
+          if (null != resultHandler) {
+            resultHandler.handle(event.map(objectId -> {
+              if (returnNewDoc) {
+                return BsonTransformer.decodeBsonObject(new JsonObject().mergeIn(encodedObject));
+              } else {
+                return new JsonObject().put(LeanObject.ATTR_NAME_OBJECTID, objectId);
+              }
+            }));
+          }
         }
       });
     }
@@ -108,6 +216,12 @@ public class MongoDBDataStore implements DataStore {
     if (StringUtils.isEmpty(clazz) || null == query || null == object) {
       resultHandler.handle(new InvalidParameterResult("class or query or object is required."));
     } else {
+      String currentObjectId = query.getString(ATTR_NAME_OBJECTID);
+
+      List<Map.Entry<String, Object>> relationOps = object.stream()
+              .filter(entry -> isRelationOperation(entry)).collect(Collectors.toList());
+      object = object.stream().filter(entry -> !isRelationOperation(entry)).collect(JsonFactory.toJsonObject());
+
       JsonObject encodedObject = BsonTransformer.encode2BsonRequest(object, BsonTransformer.REQUEST_OP.UPDATE);
       JsonObject condition = BsonTransformer.encode2BsonRequest(query, BsonTransformer.REQUEST_OP.QUERY);
 
@@ -122,8 +236,20 @@ public class MongoDBDataStore implements DataStore {
         if (event.succeeded()) {
           logger.debug(Json.encode(event.result()));
         }
-        if (null != resultHandler) {
-          resultHandler.handle(event.map(MongoClientUpdateResult::getDocModified));
+
+        if (StringUtils.notEmpty(currentObjectId) && relationOps.size() > 0 && event.succeeded()) {
+          List<Future> futures = relationOps.stream()
+                  .map(entry -> processRelationOperationAsync(clazz, currentObjectId, entry))
+                  .collect(Collectors.toList());
+          CompositeFuture.all(futures).setHandler(a -> {
+            if (null != resultHandler) {
+              resultHandler.handle(event.map(MongoClientUpdateResult::getDocModified));
+            }
+          });
+        } else {
+          if (null != resultHandler) {
+            resultHandler.handle(event.map(MongoClientUpdateResult::getDocModified));
+          }
         }
       });
     }
@@ -220,6 +346,7 @@ public class MongoDBDataStore implements DataStore {
     } else {
       JsonObject condition = BsonTransformer.encode2BsonRequest(query, BsonTransformer.REQUEST_OP.QUERY);
       this.mongoClient.removeDocuments(clazz, condition, event -> {
+        // TODO: remember to remove relation table if necessary.
         if (null != resultHandler) {
           resultHandler.handle(event.map(MongoClientDeleteResult::getRemovedCount));
         }
@@ -253,7 +380,23 @@ public class MongoDBDataStore implements DataStore {
     return this;
   }
 
-  public DataStore bulkWrite(String clazz, List<BulkOperation> operations, Handler<AsyncResult<JsonArray>> resultHandler) {
+  public DataStore bulkWrite(String clazz, List<BulkOperation> operations, Handler<AsyncResult<JsonObject>> resultHandler) {
+    if(StringUtils.isEmpty(clazz) || null == operations || operations.size() < 1) {
+      resultHandler.handle(new InvalidParameterResult("class or query is required."));
+    } else {
+      List<io.vertx.ext.mongo.BulkOperation> mongoOperations = operations.stream().map(op -> {
+        JsonObject doc = op.getDocument();
+        BulkOperation.OpType type = op.getType();
+        if (type == BulkOperation.OpType.INSERT) {
+          return io.vertx.ext.mongo.BulkOperation.createInsert(doc);
+        } else {
+          return io.vertx.ext.mongo.BulkOperation.createDelete(doc);
+        }
+      }).collect(Collectors.toList());
+      this.mongoClient.bulkWrite(clazz, mongoOperations, event ->{
+        resultHandler.handle(event.map(mongoClientBulkWriteResult -> mongoClientBulkWriteResult.toJson()));
+      });
+    }
     return this;
   }
 
@@ -262,6 +405,7 @@ public class MongoDBDataStore implements DataStore {
       resultHandler.handle(new InvalidParameterResult<>("class is required."));
     } else {
       this.mongoClient.dropCollection(clazz, resultHandler);
+      // TODO: remember to drop relation class if necessary.
     }
     return this;
   }

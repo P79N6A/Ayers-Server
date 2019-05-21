@@ -1,12 +1,10 @@
 package cn.leancloud.platform.persistence;
 
-import cn.leancloud.platform.modules.Schema;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
-import javafx.util.converter.DateStringConverter;
 
 import java.util.List;
 
@@ -170,7 +168,7 @@ public interface DataStore {
   DataStore removeWithOptions(String clazz, JsonObject query, JsonObject options, Handler<AsyncResult<Long>> resultHandler);
   DataStore count(String clazz, JsonObject query, Handler<AsyncResult<Long>> resultHandler);
 
-  DataStore bulkWrite(String clazz, List<BulkOperation> operations, Handler<AsyncResult<JsonArray>> resultHandler);
+  DataStore bulkWrite(String clazz, List<BulkOperation> operations, Handler<AsyncResult<JsonObject>> resultHandler);
 
   DataStore dropClass(String clazz, Handler<AsyncResult<Void>> resultHandler);
   DataStore createClass(String clazz, Handler<AsyncResult<Void>> resultHandler);

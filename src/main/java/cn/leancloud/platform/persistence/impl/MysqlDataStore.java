@@ -51,7 +51,7 @@ public class MysqlDataStore implements DataStore {
     return this;
   }
 
-  public DataStore bulkWrite(String clazz, List<BulkOperation> operations, Handler<AsyncResult<JsonArray>> resultHandler) {
+  public DataStore bulkWrite(String clazz, List<BulkOperation> operations, Handler<AsyncResult<JsonObject>> resultHandler) {
     return this;
   }
 
