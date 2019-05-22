@@ -9,6 +9,8 @@ import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 
+import java.util.Objects;
+
 public class MetaDataHandler extends CommonHandler {
   public MetaDataHandler(Vertx vertx, RoutingContext routingContext) {
     super(vertx, routingContext);
@@ -36,5 +38,18 @@ public class MetaDataHandler extends CommonHandler {
       }
       handler.handle(response);
     });
+  }
+
+  public void dropClass(String clazz, Handler<AsyncResult<Void>> handler) {
+    Objects.requireNonNull(clazz);
+    Objects.requireNonNull(handler);
+    sendDataOperationWithOption(clazz, null, RequestParse.OP_DROP_CLASS, null, null,
+            true, null, response -> {
+              if (response.succeeded()) {
+                classMetaCache.remove(clazz);
+              }
+              handler.handle(response.map(json -> null));
+            });
+
   }
 }

@@ -115,6 +115,7 @@ public class CommonHandler {
       return false;
     }
     if (RequestParse.OP_CREATE_INDEX.equals(operation) || RequestParse.OP_CREATE_CLASS.equals(operation)
+            || RequestParse.OP_DROP_CLASS.equals(operation) // it's really?
             || RequestParse.OP_DELETE_INDEX.equals(operation)|| RequestParse.OP_LIST_INDEX.equals(operation)) {
       return false;
     }

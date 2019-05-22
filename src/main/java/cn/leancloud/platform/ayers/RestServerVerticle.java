@@ -518,6 +518,18 @@ public class RestServerVerticle extends CommonVerticle {
     });
   }
 
+  private void deleteClazz(RoutingContext context) {
+    String clazz = parseRequestClassname(context);
+    MetaDataHandler handler = new MetaDataHandler(vertx, context);
+    handler.dropClass(clazz, response -> {
+      if (response.failed()) {
+        internalServerError(context, ErrorCodes.INTERNAL_ERROR.toJson());
+      } else {
+        ok(context, "");
+      }
+    });
+  }
+
   /**
    * Common Date Process Function.
    *
@@ -717,6 +729,7 @@ public class RestServerVerticle extends CommonVerticle {
     router.get("/1.1/schemas/:clazz").handler(this::listSchema);
 
     router.post("/1.1/meta/classes").handler(this::createClazz);
+    router.delete("/1.1/meta/classes/:clazz").handler(this::deleteClazz);
 
     router.post("/1.1/indices/:clazz").handler(this::createIndex);
     router.get("/1.1/indices/:clazz").handler(this::listIndex);

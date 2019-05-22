@@ -17,8 +17,6 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.core.json.Json;
 import io.vertx.core.streams.ReadStream;
 import io.vertx.ext.mongo.*;
-import org.bson.conversions.Bson;
-import org.bson.types.ObjectId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -428,12 +426,83 @@ public class MongoDBDataStore implements DataStore {
     return this;
   }
 
+  private <T> AsyncResult<T> generateDummyResult(T v) {
+    return new AsyncResult<T>() {
+      @Override
+      public T result() {
+        return v;
+      }
+
+      @Override
+      public Throwable cause() {
+        return null;
+      }
+
+      @Override
+      public boolean succeeded() {
+        return true;
+      }
+
+      @Override
+      public boolean failed() {
+        return false;
+      }
+    };
+  }
+
+  private void dropJoinClassIfNeed(String clazz, Handler<AsyncResult<Void>> resultHandler) {
+    if (clazz.startsWith("_")) {
+      if (null != resultHandler) {
+        resultHandler.handle(generateDummyResult(null));
+      }
+    } else {
+      this.mongoClient.getCollections(response -> {
+        if (response.succeeded()) {
+          List<String> classes = response.result();
+          List<Future> futures = classes.stream().filter(str -> str.startsWith("_Join:" + clazz) || str.endsWith(":" + clazz)).map(cls -> {
+            Future future = Future.future();
+            this.mongoClient.dropCollection(cls, dropResponse -> {
+              if (dropResponse.failed()) {
+                logger.warn("failed to drop Collection: " + cls + ", cause: " + dropResponse.cause().getMessage());
+              } else {
+                logger.info("succeed to drop Collection: " + cls);
+              }
+              future.complete();
+            });
+            return future;
+          }).collect(Collectors.toList());
+          if (futures.size() < 1) {
+            if (null != resultHandler) {
+              resultHandler.handle(generateDummyResult(null));
+            }
+          } else {
+            CompositeFuture.all(futures).setHandler(res -> {
+              if (null != resultHandler) {
+                resultHandler.handle(generateDummyResult(null));
+              }
+            });
+          }
+        } else {
+          if (null != resultHandler) {
+            resultHandler.handle(generateDummyResult(null));
+          }
+        }
+      });
+    }
+  }
   public DataStore dropClass(String clazz, Handler<AsyncResult<Void>> resultHandler) {
     if (StringUtils.isEmpty(clazz)) {
       resultHandler.handle(new InvalidParameterResult<>("class is required."));
     } else {
-      this.mongoClient.dropCollection(clazz, resultHandler);
-      // TODO: remember to drop relation class if necessary.
+      this.mongoClient.dropCollection(clazz, res -> {
+        if (res.failed()) {
+          if (null != resultHandler) {
+            resultHandler.handle(res);
+          }
+        } else {
+          dropJoinClassIfNeed(clazz, resultHandler);
+        }
+      });
     }
     return this;
   }

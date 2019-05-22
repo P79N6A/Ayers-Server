@@ -119,16 +119,24 @@ public class StorageVerticle extends CommonVerticle {
     JsonObject authData = null;
 
     final DataStore dataStore = dataStoreFactory.getStore();
-//    Instant nowTS = Instant.now();
     JsonObject now = LeanObject.getCurrentDate();
 
     switch (operation) {
+      case RequestParse.OP_DROP_CLASS:
+        dataStore.dropClass(clazz, response -> {
+          if (response.failed()) {
+            message.fail(ErrorCodes.INTERNAL_ERROR.getCode(), response.cause().getMessage());
+          } else {
+            message.reply("{}");
+          }
+        });
+        break;
       case RequestParse.OP_CREATE_CLASS:
         ClassMetaData metaData = new ClassMetaData(updateParam);
         clazz = metaData.getName();
-        dataStore.createClass(clazz, respon -> {
-          if (respon.failed()) {
-            message.fail(ErrorCodes.INTERNAL_ERROR.getCode(), respon.cause().getMessage());
+        dataStore.createClass(clazz, response -> {
+          if (response.failed()) {
+            message.fail(ErrorCodes.INTERNAL_ERROR.getCode(), response.cause().getMessage());
           } else {
             dataStore.insertWithOptions(metaData.getClassName(), updateParam, new DataStore.InsertOption().setReturnNewDocument(fetchWhenSave),
                     res -> {
@@ -137,7 +145,7 @@ public class StorageVerticle extends CommonVerticle {
               } else {
                 message.reply(res.result());
               }
-                    });
+            });
           }
         });
         break;
