@@ -1,5 +1,7 @@
 package cn.leancloud.platform.common;
 
+import cn.leancloud.platform.modules.LeanObject;
+import cn.leancloud.platform.modules.Schema;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
 import junit.framework.TestCase;
@@ -12,6 +14,17 @@ public class TransformerTest extends TestCase {
 
   @Override
   protected void tearDown() throws Exception {
+  }
+
+  public void testRelationTransformer() throws Exception {
+    String clazz = "_Role";
+    String currentObjectId = "5ce4acba4ae68a5a337d4c52";
+    JsonObject owningPointer = new JsonObject().put(LeanObject.ATTR_NAME_TYPE, Schema.DATA_TYPE_POINTER)
+            .put(LeanObject.ATTR_NAME_CLASSNAME, clazz).put(LeanObject.ATTR_NAME_OBJECTID, currentObjectId);
+    System.out.println(owningPointer.encodePrettily());
+    JsonObject owningId = BsonTransformer.encode2BsonRequest(new JsonObject().put("owningId", owningPointer), BsonTransformer.REQUEST_OP.CREATE);
+    System.out.println(owningId.encodePrettily());
+    assertTrue(owningId.getJsonObject("owningId").getString("$id").equals(currentObjectId));
   }
 
   public void testConvert2BsonCreate() throws Exception {

@@ -62,7 +62,7 @@ public class WebClientTests extends TestCase {
     HttpRequest<Buffer> request = this.webClient.get(PORT, HOST, fullPath);
     fillHeaders(request);
     if (null != queryParam) {
-      queryParam.stream().forEach(kv -> request.addQueryParam(kv.getKey(), (String) kv.getValue()));
+      queryParam.stream().forEach(kv -> request.addQueryParam(kv.getKey(), kv.getValue().toString()));
     }
     request.send(response -> {
       if (response.failed()) {

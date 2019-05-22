@@ -1,21 +1,24 @@
 package cn.leancloud.platform.persistence.impl;
 
 import cn.leancloud.platform.common.Constraints;
+import cn.leancloud.platform.modules.Schema;
 import cn.leancloud.platform.utils.JsonFactory;
 import cn.leancloud.platform.utils.StringUtils;
 import cn.leancloud.platform.common.BsonTransformer;
 import cn.leancloud.platform.modules.LeanObject;
 import cn.leancloud.platform.persistence.DataStore;
 import cn.leancloud.platform.persistence.BulkOperation;
-import com.qiniu.util.Json;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import io.vertx.core.json.Json;
 import io.vertx.core.streams.ReadStream;
 import io.vertx.ext.mongo.*;
+import org.bson.conversions.Bson;
+import org.bson.types.ObjectId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -115,13 +118,22 @@ public class MongoDBDataStore implements DataStore {
       return tmpFuture;
     }
     String relationTableName = Constraints.getRelationTable(clazz, toClazz, key);
-    JsonObject owningId = new JsonObject().put("$id", currentObjectId).put("$ref", clazz);
+    JsonObject owningPointer = new JsonObject().put(LeanObject.ATTR_NAME_TYPE, Schema.DATA_TYPE_POINTER)
+            .put(LeanObject.ATTR_NAME_CLASSNAME, clazz).put(LeanObject.ATTR_NAME_OBJECTID, currentObjectId);
+
     List<BulkOperation> operations = objects.stream().map(obj -> {
       String relatedObjectId = ((JsonObject)obj).getString(ATTR_NAME_OBJECTID);
-      JsonObject relatedId = new JsonObject().put("$id", relatedObjectId).put("$ref", toClazz);
-      JsonObject bulkOperation = new JsonObject().put(BUILTIN_ATTR_RELATION_OWNING_ID, owningId)
-              .put(BUILTIN_ATTR_RELATIONN_RELATED_ID, relatedId);
-      return new BulkOperation(bulkOperation, bulkOperationType);
+      JsonObject relatedPointer = new JsonObject().put(LeanObject.ATTR_NAME_TYPE, Schema.DATA_TYPE_POINTER)
+              .put(LeanObject.ATTR_NAME_CLASSNAME, toClazz).put(LeanObject.ATTR_NAME_OBJECTID, relatedObjectId);
+      JsonObject rawBulkOperation = new JsonObject().put(BUILTIN_ATTR_RELATION_OWNING_ID, owningPointer)
+              .put(BUILTIN_ATTR_RELATIONN_RELATED_ID, relatedPointer);
+      JsonObject bulkOperation = BsonTransformer.encode2BsonRequest(rawBulkOperation, BsonTransformer.REQUEST_OP.CREATE);
+      BulkOperation result = new BulkOperation(bulkOperation, bulkOperationType);
+      if (bulkOperationType == BulkOperation.OpType.INSERT) {
+        // TODO: add filter avoid duplicated doc.
+        // result.setFilter(BsonTransformer.encode2BsonRequest(rawBulkOperation, BsonTransformer.REQUEST_OP.QUERY));
+      }
+      return result;
     }).collect(Collectors.toList());
 
     logger.debug("call bulkWrite with operations:" + Json.encode(operations));
@@ -161,6 +173,7 @@ public class MongoDBDataStore implements DataStore {
                   .map(entry -> processRelationOperationAsync(clazz, currentObjectId, entry))
                   .collect(Collectors.toList());
           CompositeFuture.all(futures).setHandler(a -> {
+            logger.debug("relation operation result: " + a);
             if (null != resultHandler) {
               resultHandler.handle(event.map(objectId -> {
                 if (returnNewDoc) {
@@ -222,6 +235,9 @@ public class MongoDBDataStore implements DataStore {
               .filter(entry -> isRelationOperation(entry)).collect(Collectors.toList());
       object = object.stream().filter(entry -> !isRelationOperation(entry)).collect(JsonFactory.toJsonObject());
 
+      logger.debug("update object:" + object);
+      logger.debug("update relation Operations: " + relationOps);
+
       JsonObject encodedObject = BsonTransformer.encode2BsonRequest(object, BsonTransformer.REQUEST_OP.UPDATE);
       JsonObject condition = BsonTransformer.encode2BsonRequest(query, BsonTransformer.REQUEST_OP.QUERY);
 
@@ -238,10 +254,12 @@ public class MongoDBDataStore implements DataStore {
         }
 
         if (StringUtils.notEmpty(currentObjectId) && relationOps.size() > 0 && event.succeeded()) {
+          logger.debug("try to save relation operations.");
           List<Future> futures = relationOps.stream()
                   .map(entry -> processRelationOperationAsync(clazz, currentObjectId, entry))
                   .collect(Collectors.toList());
           CompositeFuture.all(futures).setHandler(a -> {
+            logger.debug("relation operation result: " + a);
             if (null != resultHandler) {
               resultHandler.handle(event.map(MongoClientUpdateResult::getDocModified));
             }
@@ -387,14 +405,24 @@ public class MongoDBDataStore implements DataStore {
       List<io.vertx.ext.mongo.BulkOperation> mongoOperations = operations.stream().map(op -> {
         JsonObject doc = op.getDocument();
         BulkOperation.OpType type = op.getType();
-        if (type == BulkOperation.OpType.INSERT) {
-          return io.vertx.ext.mongo.BulkOperation.createInsert(doc);
+        JsonObject filter = op.getFilter();
+        io.vertx.ext.mongo.BulkOperation result;
+        if (type == BulkOperation.OpType.INSERT || type == BulkOperation.OpType.UPDATE) {
+          if (null != filter) {
+            result = io.vertx.ext.mongo.BulkOperation.createUpdate(filter, doc, true, false);
+          } else {
+            result = io.vertx.ext.mongo.BulkOperation.createInsert(doc);
+          }
         } else {
-          return io.vertx.ext.mongo.BulkOperation.createDelete(doc);
+          result = io.vertx.ext.mongo.BulkOperation.createDelete(doc);
         }
+        return result;
       }).collect(Collectors.toList());
-      this.mongoClient.bulkWrite(clazz, mongoOperations, event ->{
-        resultHandler.handle(event.map(mongoClientBulkWriteResult -> mongoClientBulkWriteResult.toJson()));
+      logger.debug("bulkWrite with mongoOperations: " + Json.encodePrettily(mongoOperations));
+      this.mongoClient.bulkWrite(clazz, mongoOperations, event -> {
+        if (null != resultHandler) {
+          resultHandler.handle(event.map(mongoClientBulkWriteResult -> mongoClientBulkWriteResult.toJson()));
+        }
       });
     }
     return this;

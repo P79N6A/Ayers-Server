@@ -166,7 +166,7 @@ public class RelationTests extends WebClientTests {
             JsonObject deleteUsersAttr = new JsonObject().put("__op", "RemoveRelation").put("objects",
                     Arrays.asList(new JsonObject().put("__type", "Pointer").put("className", "_User")
                             .put("objectId", targetUserObjectId)));
-            updateRoleParam.put("users", usersAttr);
+            updateRoleParam.put("users", deleteUsersAttr);
             put("/1.1/roles/" + targetRoleObjectId, updateRoleParam, roleRes2 -> {
               if (roleRes2.failed()) {
                 System.out.println("failed to remove relation for roles. cause:" + roleRes2.cause().getMessage());

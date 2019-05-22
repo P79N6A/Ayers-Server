@@ -116,6 +116,12 @@ public class DamoclesVerticle extends CommonVerticle {
       } else {
         return Future.succeededFuture(true);
       }
+    }).compose(res -> {
+      if (Constraints.ROLE_CLASS.equals(clazz)) {
+        return makeSureDefaultIndex(clazz, Role.BUILTIN_ATTR_NAME, true, existedIndices, newIndices, dataStore);
+      } else {
+        return Future.succeededFuture(true);
+      }
     }).setHandler(response -> {
       dataStore.close();
       if (newIndices.size() > 0) {
@@ -125,6 +131,27 @@ public class DamoclesVerticle extends CommonVerticle {
         this.classMetaCache.put(clazz, classMetaData);
       }
     });
+  }
+
+  private Future<Boolean> makeSureDefaultIndex(String clazz, String attr, boolean isUnique, DataStore dataStore) {
+    Objects.requireNonNull(clazz);
+    Objects.requireNonNull(attr);
+    Future<Boolean> defaultFuture = Future.future();
+    JsonObject indexJson = new JsonObject().put(attr, 1);
+    DataStore.IndexOption indexOption = new DataStore.IndexOption().setSparse(true).setUnique(isUnique).setName(attr);
+    makeSureIndexCreated(clazz, indexJson, indexOption, null, dataStore, response -> {
+      if (response.failed()) {
+        logger.warn("failed to createSingleObject index. attr=" + attr + ". cause: " + response.cause());
+        defaultFuture.fail(response.cause());
+      } else {
+        if (response.result()) {
+          logger.info("success to createSingleObject index. attr=" + attr);
+        }
+        defaultFuture.complete(response.result());
+      }
+    });
+
+    return defaultFuture;
   }
 
   private Future<Boolean> makeSureDefaultIndex(String clazz, String attr, boolean isUnique, JsonArray existedIndex, JsonArray newIndices,
@@ -524,7 +551,12 @@ public class DamoclesVerticle extends CommonVerticle {
           // FIXME!
           ClassMetaData metaClassMeta = new ClassMetaData(Constraints.METADATA_CLASS);
           dataStore.upsertMetaInfo(Constraints.METADATA_CLASS, metaClassMeta, res -> {
-            dataStore.close();
+            if (res.succeeded()) {
+              makeSureDefaultIndex(Constraints.METADATA_CLASS, "name", true, dataStore)
+                      .setHandler(r -> dataStore.close());
+            } else {
+              dataStore.close();
+            }
           });
         } else {
           List<Future> futures = event.result().stream().map(obj -> {
