@@ -31,6 +31,7 @@ public class LeanObject extends JsonObject{
   public static final String BUILTIN_ATTR_PASSWORD = "password";
   public static final String BUILTIN_ATTR_EMAIL_VERIFIED = "emailVerified";
   public static final String BUILTIN_ATTR_PHONENUM_VERIFIED = "mobilePhoneVerified";
+  public static final String BUILTIN_ATTR_AUTHDATA = "authData";
 
   public static final String BUILTIN_ATTR_USERNAME = "username";
   public static final String BUILTIN_ATTR_EMAIL = "email";

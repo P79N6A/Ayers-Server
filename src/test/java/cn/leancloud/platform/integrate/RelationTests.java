@@ -2,6 +2,7 @@ package cn.leancloud.platform.integrate;
 
 import cn.leancloud.platform.modules.ACL;
 import cn.leancloud.platform.utils.StringUtils;
+import io.vertx.core.Future;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 
@@ -68,6 +69,23 @@ import java.util.concurrent.CountDownLatch;
  * { "_id" : ObjectId("5ce3f0947b968a00730fbfc9"), "owningId" : DBRef("_Role", ObjectId("5ce3f0947b968a00730fbfc6")), "relatedId" : DBRef("_Role", ObjectId("5ce3f011c8959c0069c10322")) }
  * got result in _Join:_User:users:_Role
  * { "_id" : ObjectId("5ce3f0947b968a00730fbfca"), "owningId" : DBRef("_Role", ObjectId("5ce3f0947b968a00730fbfc6")), "relatedId" : DBRef("_User", ObjectId("55a47496e4b05001a7732c5f")) }
+ *
+ *
+ * curl -X GET \
+ -H "X-LC-Id: heQFQ0SwoQqiI3gEAcvKXjeR-gzGzoHsz" \
+ -H "X-LC-Key: lNSjPPPDohJjYMJcQSxi9qAm" \
+ -G \
+ --data-urlencode 'where={"$relatedTo":{"object":{"__type":"Pointer","className":"_Role","objectId":"5ce3f0947b968a00730fbfc6"},"key":"users"}}' \
+ https://heqfq0sw.api.lncld.net/1.1/users
+
+ * curl -X GET \
+ -H "X-LC-Id: heQFQ0SwoQqiI3gEAcvKXjeR-gzGzoHsz" \
+ -H "X-LC-Key: lNSjPPPDohJjYMJcQSxi9qAm" \
+ -G \
+ --data-urlencode 'where={"$relatedTo":{"object":{"__type":"Pointer","className":"_Role","objectId":"5ce3f0947b968a00730fbfc6"},"key":"roles"}}' \
+ https://heqfq0sw.api.lncld.net/1.1/roles
+ * got result as following:
+ * {"results":[{"name":"Manager","createdAt":"2019-05-21T12:33:21.709Z","updatedAt":"2019-05-21T12:33:21.709Z","objectId":"5ce3f011c8959c0069c10322","roles":{"__type":"Relation","className":"_Role"},"users":{"__type":"Relation","className":"_User"}}]}
  */
 
 public class RelationTests extends WebClientTests {
@@ -197,13 +215,13 @@ public class RelationTests extends WebClientTests {
 
     String relationFormat = "{\"$relatedTo\":{\"object\":{\"__type\":\"Pointer\",\"className\":\"%s\",\"objectId\":\"%s\"},\"key\":\"%s\"}}";
     String relationQuery = String.format(relationFormat, from, objectId, field);
-    JsonObject relationQueryJson = new JsonObject(relationQuery);
-    get("/1.1/classes/" + to, relationQueryJson, response -> {
+    JsonObject relationQueryJson = new JsonObject().put("where", new JsonObject(relationQuery));
+    get("/1.1/classes/" + from, relationQueryJson, response -> {
       if (response.failed()) {
-        System.out.println();
+        System.out.println(response.cause());
       } else {
-        long occCount = response.result().getJsonArray("results").stream()
-                .filter( obj -> ((JsonObject)obj).getString("objectId").equals(objectId)).count();
+        long occCount = response.result().getJsonArray("results").size();
+                //.filter( obj -> ((JsonObject)obj).getString("objectId").equals(objectId)).count();
         result.setValue(occCount > 0);
       }
       tmpLatch.countDown();
@@ -212,7 +230,30 @@ public class RelationTests extends WebClientTests {
     return result.getValue();
   }
 
-  public void testRelationQuery() throws Exception {
+  private Future makeSureRelationQuery(String from, String to, String field, String objectId) {
+    String relationFormat = "{\"$relatedTo\":{\"object\":{\"__type\":\"Pointer\",\"className\":\"%s\",\"objectId\":\"%s\"},\"key\":\"%s\"}}";
+    String relationQuery = String.format(relationFormat, from, objectId, field);
+    JsonObject relationQueryJson = new JsonObject().put("where", new JsonObject(relationQuery));
+    Future result = Future.future();
+    get("/1.1/classes/" + from, relationQueryJson, response -> {
+      if (response.failed()) {
+        System.out.println(response.cause());
+        result.fail(response.cause());
+      } else {
+        long occCount = response.result().getJsonArray("results").size();
+        //.filter( obj -> ((JsonObject)obj).getString("objectId").equals(objectId)).count();
+        result.complete(occCount > 0);
+      }
+    });
+    return result;
+  }
+
+  public void testRelationRoleQuery() throws Exception {
+    testSuccessed = makeSureRelationCorrect("_Role", "_Role", "roles", "5ce4b6976def753be18e90bd");
+    assertTrue(testSuccessed);
+  }
+
+  public void testRelationUserQuery() throws Exception {
     String authString = "{\n" +
             "  \"authData\": {\n" +
             "    \"weibo\": {\n" +
@@ -229,17 +270,16 @@ public class RelationTests extends WebClientTests {
         latch.countDown();
       } else {
         JsonObject userObj = userRes.result();
+
         final String targetUserObjectId = userObj.getString("objectId");
         if (StringUtils.isEmpty(targetUserObjectId)) {
           System.out.println("user object is null!!!");
           latch.countDown();
         } else {
-          try {
-            testSuccessed = makeSureRelationCorrect("_Role", "_User", "users", targetUserObjectId);
-          } catch (Exception ex) {
-            ex.printStackTrace();
-          }
-          latch.countDown();
+          makeSureRelationQuery("_Role", "_User", "users", targetUserObjectId).setHandler(res -> {
+            testSuccessed = true;
+            latch.countDown();
+          });
         }
       }
     });

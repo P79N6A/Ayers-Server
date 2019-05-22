@@ -160,4 +160,12 @@ public class Schema extends JsonObject {
   public CompatResult compatibleWith(Schema other) throws ConsistencyViolationException {
     return compatibilityTest(other, true);
   }
+
+  public static boolean isRelationAttribute(Map.Entry<String, Object> entry) {
+    if (null == entry || null == entry.getValue() || !(entry.getValue() instanceof JsonObject)) {
+      return false;
+    }
+    JsonObject value = (JsonObject) entry.getValue();
+    return DATA_TYPE_RELATION.equalsIgnoreCase(value.getString(SCHEMA_KEY_TYPE));
+  }
 }

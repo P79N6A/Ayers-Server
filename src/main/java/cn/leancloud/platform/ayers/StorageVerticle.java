@@ -304,14 +304,6 @@ public class StorageVerticle extends CommonVerticle {
               logger.debug("query result: " + res.result());
               JsonArray results = res.result().stream().map(BsonTransformer::decodeBsonObject).collect(toJsonArray());
               message.reply(new JsonObject().put("results", results));
-//              if (StringUtils.isEmpty(objectId)) {
-//                JsonArray results = resultStream.collect(toJsonArray());
-//
-//              } else {
-//                Optional firstResult = resultStream.findFirst();
-//                logger.debug("first object: " + firstResult);
-//                message.reply(firstResult.orElseGet(dummyJsonGenerator));
-//              }
             }
           });
         }

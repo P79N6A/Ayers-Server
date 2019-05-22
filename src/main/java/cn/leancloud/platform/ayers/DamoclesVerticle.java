@@ -521,7 +521,7 @@ public class DamoclesVerticle extends CommonVerticle {
               } else {
                 message.reply(new JsonObject().put("result", true));
 
-                if (needSaveSchema) {
+                if (needSaveSchema && null != inputSchema) {
                   saveSchema(clazz, inputSchema, cachedClassMetaData);
                 }
               }

@@ -1,7 +1,11 @@
 package cn.leancloud.platform.ayers.handler;
 
 import cn.leancloud.platform.ayers.RequestParse;
+import cn.leancloud.platform.common.Configure;
+import cn.leancloud.platform.common.Constraints;
+import cn.leancloud.platform.modules.ClassMetaData;
 import cn.leancloud.platform.modules.LeanObject;
+import cn.leancloud.platform.modules.Relation;
 import cn.leancloud.platform.modules.Schema;
 import cn.leancloud.platform.utils.JsonFactory;
 import cn.leancloud.platform.utils.JsonUtils;
@@ -43,6 +47,7 @@ public class ObjectQueryHandler extends CommonHandler {
   public static final String OP_DONT_SELECT = "$dontSelect";
   public static final String OP_IN_QUERY = "$inQuery";
   public static final String OP_NOTIN_QUERY = "$notInQuery";
+  public static final String QUERY_RELATED_TO = "$relatedTo";
 
   private static final String[] ALWAYS_PROJECT_KEYS = {"_id", "createdAt", "updatedAt", "ACL"};
 
@@ -201,7 +206,7 @@ public class ObjectQueryHandler extends CommonHandler {
     logger.debug("where-" + condition + ", order-" + orderJson + ", field-" + fieldJson + ", include-" + include);
 
     try {
-      final JsonObject transformedCondition = transformSubQuery(condition);
+      final JsonObject transformedCondition = transformSubQuery(clazz, condition);
       Future<Boolean> future = resolveSubQuery(transformedCondition);
       future.setHandler(res -> {
         if (res.failed()) {
@@ -305,7 +310,11 @@ public class ObjectQueryHandler extends CommonHandler {
                 handler.handle(wrapErrorResult(any.cause()));
               } else {
 //                logger.debug("AllInOne finished. results=" + results);
-                handler.handle(wrapActualResult(new JsonObject().put("results", results)));
+                ClassMetaData classMetaData = ClassMetaData.fromJson(Configure.getInstance().getClassMetaDataCache().get(clazz));
+                Schema schema = classMetaData.getSchema();
+                JsonArray returnJsonObjects = results.stream().map(o -> decorateObject(clazz, schema, (JsonObject) o))
+                        .collect(JsonFactory.toJsonArray());
+                handler.handle(wrapActualResult(new JsonObject().put("results", returnJsonObjects)));
               }
             });
           });
@@ -315,6 +324,31 @@ public class ObjectQueryHandler extends CommonHandler {
       logger.warn("failed to validate subQuery clause. cause:" + ex.getMessage());
       handler.handle(wrapErrorResult(ex));
     }
+  }
+
+  private JsonObject decorateObject(String clazz, Schema schema, JsonObject object) {
+    if (null == object) {
+      return object;
+    }
+    logger.debug("decorate jsonobject:" + object + ", with schema:" + schema + ", clazz:" + clazz);
+
+    JsonObject result = object;
+    result.remove(LeanObject.BUILTIN_ATTR_ACL);
+    if (Constraints.USER_CLASS.equalsIgnoreCase(clazz)) {
+      result.remove(LeanObject.BUILTIN_ATTR_AUTHDATA);
+      result.remove(LeanObject.BUILTIN_ATTR_SESSION_TOKEN);
+    }
+    if (null == schema || schema.size() < 1) {
+      return result;
+    }
+    schema.stream().filter(obj -> Schema.isRelationAttribute(obj)).forEach(obj -> {
+      String attr = obj.getKey();
+      String refClazz = ((JsonObject)obj.getValue()).getString(Schema.SCHEMA_KEY_REF);
+      if (!result.containsKey(attr)) {
+        result.put(attr, new JsonObject().put(LeanObject.ATTR_NAME_TYPE, Schema.DATA_TYPE_RELATION).put(LeanObject.ATTR_NAME_CLASSNAME, refClazz));
+      }
+    });
+    return result;
   }
 
   /**
@@ -379,7 +413,6 @@ public class ObjectQueryHandler extends CommonHandler {
             JsonObject options = isInQuery ? jsonValue.getJsonObject(OP_IN_QUERY) : jsonValue.getJsonObject(OP_NOTIN_QUERY);
             String clazz = options.getString(QUERY_KEY_CLASSNAME);
             String attrName = options.getJsonObject(QUERY_KEY_KEYS).fieldNames().iterator().next();
-            options.getString(QUERY_KEY_SUBQUERY_PROJECT);
             logger.debug("attrName:" + attrName);
             Future<Boolean> subQueryFuture = Future.future();
             execute(clazz, null, options, null, any -> {
@@ -409,7 +442,30 @@ public class ObjectQueryHandler extends CommonHandler {
             });
             return subQueryFuture;
           });
-        } else {
+        } else if (jsonValue.containsKey(QUERY_RELATED_TO)) {
+          future = future.compose(res -> {
+            final String mongoOperator = "$in";
+            JsonObject options = jsonValue.getJsonObject(QUERY_RELATED_TO);
+            String clazz = options.getString(QUERY_KEY_CLASSNAME);
+            String attrName = options.getJsonObject(QUERY_KEY_KEYS).fieldNames().iterator().next();
+            logger.debug("attrName:" + attrName);
+            Future<Boolean> subQueryFuture = Future.future();
+            execute(clazz, null, options, null, any -> {
+              if (any.failed()) {
+                logger.warn("failed to execute subQuery:" + options + ". cause: " + any.cause().getMessage());
+                condition.put(key, new JsonObject().put(mongoOperator, new JsonArray()));
+                subQueryFuture.fail(any.cause());
+              } else {
+                logger.debug("subQuery result:" + any.result().getJsonArray("results"));
+                JsonArray actualValues = any.result().getJsonArray("results").stream()
+                        .map(obj -> ((JsonObject)obj).getJsonObject(attrName).getString(LeanObject.ATTR_NAME_OBJECTID)).collect(JsonFactory.toJsonArray());
+                condition.put(key, new JsonObject().put(mongoOperator, actualValues));
+                subQueryFuture.complete(true);
+              }
+            });
+            return subQueryFuture;
+          });
+        }else {
           future = future.compose(j -> resolveSubQuery(jsonValue));
         }
       } else if (null != value && value instanceof JsonArray) {
@@ -509,13 +565,44 @@ public class ObjectQueryHandler extends CommonHandler {
     return subQuery;
   }
 
-  protected JsonObject transformSubQuery(JsonObject condition) {
+  protected JsonObject transformSubQuery(String currentClazz, JsonObject condition) {
     if (null == condition || condition.size() == 0) {
       return condition;
     }
     JsonObject result = condition.stream().map(entry -> {
       Object value = entry.getValue();
-      if (null != value && value instanceof JsonObject) {
+      String key = entry.getKey();
+      if (QUERY_RELATED_TO.equalsIgnoreCase(key)) {
+        if (null == value || !(value instanceof JsonObject)) {
+          logger.warn("invalid relation query. value is null");
+          throw new IllegalArgumentException("invalid relation query. value is null");
+        }
+        JsonObject tmpValue = (JsonObject) value;
+        JsonObject objectValue = tmpValue.getJsonObject("object");
+        String relatedField = tmpValue.getString("key");
+        if (StringUtils.isEmpty(relatedField) || null == objectValue
+                || !objectValue.containsKey(LeanObject.ATTR_NAME_CLASSNAME) || !objectValue.containsKey(LeanObject.ATTR_NAME_OBJECTID)) {
+          logger.warn("invalid relation query. value is invalid");
+          throw new IllegalArgumentException("invalid relation query. value is invalid");
+        }
+        String fromClazz = objectValue.getString(LeanObject.ATTR_NAME_CLASSNAME);
+        String targetObjectId = objectValue.getString(LeanObject.ATTR_NAME_OBJECTID);
+        String relationTableName = Constraints.getRelationTable(fromClazz, currentClazz, relatedField);
+
+        JsonObject query = new JsonObject().put(QUERY_KEY_CLASSNAME, relationTableName)
+                .put(QUERY_KEY_WHERE, new JsonObject().put(Relation.BUILTIN_ATTR_RELATION_OWNING_ID,
+                                new JsonObject().put(LeanObject.ATTR_NAME_TYPE, Schema.DATA_TYPE_POINTER)
+                                        .put(LeanObject.ATTR_NAME_CLASSNAME, fromClazz)
+                                        .put(LeanObject.ATTR_NAME_OBJECTID, targetObjectId)));
+        QueryOptions options = validateQueryClause(query);
+        if (null == options) {
+          logger.warn("invalid relation query clause for key:" + entry.getKey());
+          throw new IllegalArgumentException("invalid relation Query clause for key:" + entry.getKey());
+        }
+        options.setKeys(new JsonObject().put(Relation.BUILTIN_ATTR_RELATIONN_RELATED_ID, 1));
+        return new AbstractMap.SimpleEntry<String, Object>(LeanObject.ATTR_NAME_OBJECTID,
+                new JsonObject().put(QUERY_RELATED_TO, options.toJson()));
+      } else if (null != value && value instanceof JsonObject) {
         JsonObject tmpValue = (JsonObject) value;
         if (tmpValue.containsKey(OP_SELECT) || tmpValue.containsKey(OP_DONT_SELECT)) {
           boolean isSelect = tmpValue.containsKey(OP_SELECT);
@@ -540,13 +627,12 @@ public class ObjectQueryHandler extends CommonHandler {
           options.setKeys(new JsonObject().put("objectId", 1));
           return new AbstractMap.SimpleEntry<String, Object>(entry.getKey(), new JsonObject().put(operator, options.toJson()));
         } else {
-          return new AbstractMap.SimpleEntry<String, Object>(entry.getKey(), transformSubQuery(tmpValue));
+          return new AbstractMap.SimpleEntry<String, Object>(entry.getKey(), transformSubQuery(currentClazz, tmpValue));
         }
-      }
-      if (null != value && value instanceof JsonArray) {
+      } else if (null != value && value instanceof JsonArray) {
         JsonArray newValue = ((JsonArray) value).stream().map(v -> {
           if (v instanceof JsonObject) {
-            return transformSubQuery((JsonObject) v);
+            return transformSubQuery(currentClazz, (JsonObject) v);
           } else {
             return v;
           }

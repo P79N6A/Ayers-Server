@@ -40,7 +40,7 @@ public class ObjectQueryHandlerTest extends TestCase {
             "\"$or\":[{\"pubUserCertificate\":{\"$gt\":2}},{\"pubUserCertificate\":{\"$lt\":3}}]\n" +
             "}";
     ObjectQueryHandler handler = new ObjectQueryHandler(null, null);
-    JsonObject parsedQuery = handler.transformSubQuery(new JsonObject(query));
+    JsonObject parsedQuery = handler.transformSubQuery("Object", new JsonObject(query));
     System.out.println(parsedQuery);
     assertTrue(null != parsedQuery);
   }
@@ -65,7 +65,7 @@ public class ObjectQueryHandlerTest extends TestCase {
             "\"content\":{\"$inQuery\":{\"query\":{\"where\":{\"image\":{\"$exists\":true}},\"className\":\"Post\"},\"key\":\"Post\"}}\n" +
             "  }";
     ObjectQueryHandler handler = new ObjectQueryHandler(null, null);
-    JsonObject parsedQuery = handler.transformSubQuery(new JsonObject(query));
+    JsonObject parsedQuery = handler.transformSubQuery("Object", new JsonObject(query));
     System.out.println(parsedQuery);
     assertTrue(null != parsedQuery);
   }
@@ -101,7 +101,7 @@ public class ObjectQueryHandlerTest extends TestCase {
             "}";
     ObjectQueryHandler handler = new ObjectQueryHandler(null, null);
     try {
-      JsonObject parsedQuery = handler.transformSubQuery(new JsonObject(query));
+      JsonObject parsedQuery = handler.transformSubQuery("Object", new JsonObject(query));
       System.out.println(parsedQuery);
       fail();
     } catch (IllegalArgumentException ex) {
