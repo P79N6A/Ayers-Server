@@ -61,6 +61,7 @@ public class MysqlDataStore implements DataStore {
   public DataStore createClass(String clazz, Handler<AsyncResult<Void>> resultHandler) {
     return this;
   }
+  public DataStore listClasses(Handler<AsyncResult<JsonObject>> handler) {return this;}
 
   public DataStore dropIndex(String clazz, String indexName, Handler<AsyncResult<Void>> resultHandler) {
     return this;

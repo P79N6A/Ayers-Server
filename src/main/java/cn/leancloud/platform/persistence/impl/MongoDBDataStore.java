@@ -451,45 +451,40 @@ public class MongoDBDataStore implements DataStore {
   }
 
   private void dropJoinClassIfNeed(String clazz, Handler<AsyncResult<Void>> resultHandler) {
-    if (clazz.startsWith("_")) {
-      if (null != resultHandler) {
-        resultHandler.handle(generateDummyResult(null));
-      }
-    } else {
-      this.mongoClient.getCollections(response -> {
-        if (response.succeeded()) {
-          List<String> classes = response.result();
-          List<Future> futures = classes.stream().filter(str -> str.startsWith("_Join:" + clazz) || str.endsWith(":" + clazz)).map(cls -> {
-            Future future = Future.future();
-            this.mongoClient.dropCollection(cls, dropResponse -> {
-              if (dropResponse.failed()) {
-                logger.warn("failed to drop Collection: " + cls + ", cause: " + dropResponse.cause().getMessage());
-              } else {
-                logger.info("succeed to drop Collection: " + cls);
-              }
-              future.complete();
-            });
-            return future;
-          }).collect(Collectors.toList());
-          if (futures.size() < 1) {
-            if (null != resultHandler) {
-              resultHandler.handle(generateDummyResult(null));
+    this.mongoClient.getCollections(response -> {
+      if (response.succeeded()) {
+        List<String> classes = response.result();
+        List<Future> futures = classes.stream().filter(str -> str.startsWith("_Join:" + clazz) || str.endsWith(":" + clazz)).map(cls -> {
+          Future future = Future.future();
+          this.mongoClient.dropCollection(cls, dropResponse -> {
+            if (dropResponse.failed()) {
+              logger.warn("failed to drop Collection: " + cls + ", cause: " + dropResponse.cause().getMessage());
+            } else {
+              logger.info("succeed to drop Collection: " + cls);
             }
-          } else {
-            CompositeFuture.all(futures).setHandler(res -> {
-              if (null != resultHandler) {
-                resultHandler.handle(generateDummyResult(null));
-              }
-            });
-          }
-        } else {
+            future.complete();
+          });
+          return future;
+        }).collect(Collectors.toList());
+        if (futures.size() < 1) {
           if (null != resultHandler) {
             resultHandler.handle(generateDummyResult(null));
           }
+        } else {
+          CompositeFuture.all(futures).setHandler(res -> {
+            if (null != resultHandler) {
+              resultHandler.handle(generateDummyResult(null));
+            }
+          });
         }
-      });
-    }
+      } else {
+        if (null != resultHandler) {
+          resultHandler.handle(generateDummyResult(null));
+        }
+      }
+    });
   }
+
   public DataStore dropClass(String clazz, Handler<AsyncResult<Void>> resultHandler) {
     if (StringUtils.isEmpty(clazz)) {
       resultHandler.handle(new InvalidParameterResult<>("class is required."));
@@ -513,6 +508,11 @@ public class MongoDBDataStore implements DataStore {
     } else {
       this.mongoClient.createCollection(clazz, resultHandler);
     }
+    return this;
+  }
+
+  public DataStore listClasses(Handler<AsyncResult<JsonObject>> handler) {
+    this.mongoClient.getCollections(response -> handler.handle(response.map(list -> new JsonObject().put("results", list))));
     return this;
   }
 

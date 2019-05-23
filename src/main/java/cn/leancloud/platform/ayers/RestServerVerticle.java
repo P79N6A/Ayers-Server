@@ -523,9 +523,21 @@ public class RestServerVerticle extends CommonVerticle {
     MetaDataHandler handler = new MetaDataHandler(vertx, context);
     handler.dropClass(clazz, response -> {
       if (response.failed()) {
+        logger.warn("failed to drop class:" + clazz + ", cause:" + response.cause().getMessage());
         internalServerError(context, ErrorCodes.INTERNAL_ERROR.toJson());
       } else {
         ok(context, "");
+      }
+    });
+  }
+
+  private void listClasses(RoutingContext context) {
+    MetaDataHandler handler = new MetaDataHandler(vertx, context);
+    handler.listAllClass(response -> {
+      if (response.failed()) {
+        internalServerError(context, ErrorCodes.INTERNAL_ERROR.toJson());
+      } else {
+        ok(context, response.result());
       }
     });
   }
@@ -730,6 +742,7 @@ public class RestServerVerticle extends CommonVerticle {
 
     router.post("/1.1/meta/classes").handler(this::createClazz);
     router.delete("/1.1/meta/classes/:clazz").handler(this::deleteClazz);
+    router.get("/1.1/meta/classes").handler(this::listClasses); // add for test.
 
     router.post("/1.1/indices/:clazz").handler(this::createIndex);
     router.get("/1.1/indices/:clazz").handler(this::listIndex);

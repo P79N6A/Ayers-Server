@@ -292,6 +292,23 @@ public class RelationTests extends WebClientTests {
   }
 
   public void testRelationClassDelete() throws Exception {
-    ;
+    delete("/1.1/meta/classes/_Role", null, response -> {
+      if (response.failed()) {
+        latch.countDown();
+        return;
+      }
+      get("/1.1/meta/classes", null, classesRes -> {
+        if (classesRes.failed()) {
+          latch.countDown();
+        } else {
+          long invalidClassCount = classesRes.result().getJsonArray("results").stream()
+                  .filter(cls -> ((String)cls).indexOf("_Role") >= 0).count();
+          testSuccessed = invalidClassCount < 1;
+          latch.countDown();
+        }
+      });
+    });
+    latch.await();
+    assertTrue(testSuccessed);
   }
 }

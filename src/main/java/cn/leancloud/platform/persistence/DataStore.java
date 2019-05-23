@@ -172,6 +172,7 @@ public interface DataStore {
 
   DataStore dropClass(String clazz, Handler<AsyncResult<Void>> resultHandler);
   DataStore createClass(String clazz, Handler<AsyncResult<Void>> resultHandler);
+  DataStore listClasses(Handler<AsyncResult<JsonObject>> handler);
 
   DataStore dropIndex(String clazz, String indexName, Handler<AsyncResult<Void>> resultHandler);
   DataStore createIndexWithOptions(String clazz, JsonObject keys, IndexOption options,

@@ -62,6 +62,7 @@ public class RequestParse {
 
   public static final String OP_CREATE_CLASS = "CREATE_CLASS";
   public static final String OP_DROP_CLASS = "DROP_CLASS";
+  public static final String OP_LIST_CLASS = "LIST_CLASS";
 
   public static final String OP_CREATE_INDEX = "CREATE_INDEX";
   public static final String OP_DELETE_INDEX = "DELETE_INDEX";
@@ -70,6 +71,7 @@ public class RequestParse {
   public static final String OP_TEST_SCHEMA = "TEST_SCHEMA";
   public static final String OP_ADD_SCHEMA = "ADD_SCHEMA";
   public static final String OP_FIND_SCHEMA = "FIND_SCHEMA";
+  public static final String OP_DROP_SCHEMA = "DROP_SCHEMA";
 
   public static final String REQUEST_INDEX_KEYS = "keys";
   public static final String REQUEST_INDEX_OPTION_UNIQUE = "unique";

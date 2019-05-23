@@ -27,6 +27,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static cn.leancloud.platform.common.ErrorCodes.ACL_VIOLATION;
+import static cn.leancloud.platform.common.ErrorCodes.DATABASE_ERROR;
 import static cn.leancloud.platform.common.ErrorCodes.SCHEMA_VIOLATION;
 
 /**
@@ -235,7 +236,7 @@ public class DamoclesVerticle extends CommonVerticle {
       return result;
     }
 
-    JsonObject classMeta = Configure.getInstance().getClassMetaDataCache().get(clazz);
+    JsonObject classMeta = classMetaCache.get(clazz);
     if (null == classMeta) {
       // always allow create class.
       result.complete(true);
@@ -395,12 +396,24 @@ public class DamoclesVerticle extends CommonVerticle {
     String objectId = messageBody.getString(INTERNAL_MSG_ATTR_OBJECT_ID);
     JsonObject param = messageBody.getJsonObject(INTERNAL_MSG_ATTR_UPDATE_PARAM);
     RequestParse.RequestHeaders requestHeaders = RequestParse.RequestHeaders.fromJson(messageBody.getJsonObject(INTERNAL_MSG_ATTR_REQUESTHEADERS));
+    String operation = message.headers().get(INTERNAL_MSG_HEADER_OP).toUpperCase();
 
-    if (StringUtils.isEmpty(clazz)) {
+    if (RequestParse.OP_LIST_CLASS.equals(operation)) {
+      DataStore dataStore = dataStoreFactory.getStore();
+      dataStore.listClasses(response -> {
+        if (response.failed()) {
+          logger.warn("failed to list classes. cause:" + response.cause().getMessage());
+          message.fail(DATABASE_ERROR.getCode(), response.cause().getMessage());
+        } else {
+          message.reply(response.result());
+        }
+      });
+      return;
+    } else if (StringUtils.isEmpty(clazz)) {
       logger.warn("clazz name is empty, ignore schema check...");
       message.fail(ErrorCodes.INVALID_PARAMETER.getCode(), "className is required.");
+      return;
     } else {
-      String operation = message.headers().get(INTERNAL_MSG_HEADER_OP).toUpperCase();
       final boolean encounterNewClazz = null == this.classMetaCache.get(clazz);
       final ClassMetaData cachedClassMetaData = encounterNewClazz ? new ClassMetaData(clazz) : (ClassMetaData)this.classMetaCache.get(clazz);
 
@@ -413,7 +426,8 @@ public class DamoclesVerticle extends CommonVerticle {
           message.reply(cachedClassMetaData.getSchema());
         }
         return;
-      } else if (null == object && !RequestParse.OP_OBJECT_GET.equals(operation) && !RequestParse.OP_OBJECT_DELETE.equals(operation)) {
+      } else if (null == object && !RequestParse.OP_OBJECT_GET.equals(operation)
+              && !RequestParse.OP_OBJECT_DELETE.equals(operation) && !RequestParse.OP_DROP_SCHEMA.equals(operation)) {
         message.fail(ErrorCodes.INVALID_PARAMETER.getCode(), "json param is required.");
         return;
       } else {
@@ -421,6 +435,20 @@ public class DamoclesVerticle extends CommonVerticle {
         Schema cachedSchema = cachedClassMetaData.getSchema();
 
         switch (operation) {
+          case RequestParse.OP_DROP_SCHEMA:
+            DataStore dataStore = dataStoreFactory.getStore();
+            dataStore.removeMetaInfo(clazz, response -> {
+              dataStore.close();
+              if (response.failed()) {
+                logger.warn("failed to remove class metaInfo. class:" + clazz + ", cause:" + response.cause().getMessage());
+                message.fail(DATABASE_ERROR.getCode(), response.cause().getMessage());
+              } else {
+                logger.info("succeed to remove class metaInfo. class:" + clazz);
+                classMetaCache.remove(clazz);
+                message.reply(new JsonObject().put("result", true));
+              }
+            });
+            break;
           case RequestParse.OP_ADD_SCHEMA:
             inputSchema = object.guessSchema();
             if (inputSchema.size() < 1) {

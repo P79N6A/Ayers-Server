@@ -127,7 +127,7 @@ public class StorageVerticle extends CommonVerticle {
           if (response.failed()) {
             message.fail(ErrorCodes.INTERNAL_ERROR.getCode(), response.cause().getMessage());
           } else {
-            message.reply("{}");
+            message.reply(new JsonObject());
           }
         });
         break;

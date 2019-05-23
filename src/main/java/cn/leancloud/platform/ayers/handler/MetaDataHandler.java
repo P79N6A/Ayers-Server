@@ -46,10 +46,17 @@ public class MetaDataHandler extends CommonHandler {
     sendDataOperationWithOption(clazz, null, RequestParse.OP_DROP_CLASS, null, null,
             true, null, response -> {
               if (response.succeeded()) {
-                classMetaCache.remove(clazz);
+                sendSchemaOperation(clazz, RequestParse.OP_DROP_SCHEMA, null, schemaRes -> {
+                  handler.handle(response.map(json -> null));
+                });
+              } else {
+                handler.handle(response.map(json -> null));
               }
-              handler.handle(response.map(json -> null));
             });
 
+  }
+
+  public void listAllClass(Handler<AsyncResult<JsonObject>> handler) {
+    sendSchemaOperation("", RequestParse.OP_LIST_CLASS, null, handler);
   }
 }
