@@ -447,10 +447,11 @@ public class ObjectQueryHandler extends CommonHandler {
             });
             return subQueryFuture;
           });
-        } else if (jsonValue.containsKey(QUERY_RELATED_TO)) {
+        } else if (jsonValue.containsKey(QUERY_RELATED_TO) || jsonValue.containsKey(QUERY_RELATED_BY)) {
           future = future.compose(res -> {
             final String mongoOperator = "$in";
-            JsonObject options = jsonValue.getJsonObject(QUERY_RELATED_TO);
+            JsonObject options = jsonValue.containsKey(QUERY_RELATED_TO) ? jsonValue.getJsonObject(QUERY_RELATED_TO)
+                    : jsonValue.getJsonObject(QUERY_RELATED_BY);
             String clazz = options.getString(QUERY_KEY_CLASSNAME);
             String attrName = options.getJsonObject(QUERY_KEY_KEYS).fieldNames().iterator().next();
             logger.debug("attrName:" + attrName);
@@ -470,7 +471,7 @@ public class ObjectQueryHandler extends CommonHandler {
             });
             return subQueryFuture;
           });
-        }else {
+        } else {
           future = future.compose(j -> resolveSubQuery(jsonValue));
         }
       } else if (null != value && value instanceof JsonArray) {
@@ -577,7 +578,7 @@ public class ObjectQueryHandler extends CommonHandler {
     JsonObject result = condition.stream().map(entry -> {
       Object value = entry.getValue();
       String key = entry.getKey();
-      if (QUERY_RELATED_TO.equalsIgnoreCase(key)) {
+      if (QUERY_RELATED_TO.equalsIgnoreCase(key) || QUERY_RELATED_BY.equalsIgnoreCase(key)) {
         if (null == value || !(value instanceof JsonObject)) {
           logger.warn("invalid relation query. value is null");
           throw new IllegalArgumentException("invalid relation query. value is null");
@@ -590,23 +591,41 @@ public class ObjectQueryHandler extends CommonHandler {
           logger.warn("invalid relation query. value is invalid");
           throw new IllegalArgumentException("invalid relation query. value is invalid");
         }
-        String fromClazz = objectValue.getString(LeanObject.ATTR_NAME_CLASSNAME);
+        String targetClazz = objectValue.getString(LeanObject.ATTR_NAME_CLASSNAME);
         String targetObjectId = objectValue.getString(LeanObject.ATTR_NAME_OBJECTID);
-        String relationTableName = Constraints.getRelationTable(fromClazz, currentClazz, relatedField);
+        if (QUERY_RELATED_TO.equalsIgnoreCase(key)) {
+          String relationTableName = Constraints.getRelationTable(targetClazz, currentClazz, relatedField);
 
-        JsonObject query = new JsonObject().put(QUERY_KEY_CLASSNAME, relationTableName)
-                .put(QUERY_KEY_WHERE, new JsonObject().put(Relation.BUILTIN_ATTR_RELATION_OWNING_ID,
-                                new JsonObject().put(LeanObject.ATTR_NAME_TYPE, Schema.DATA_TYPE_POINTER)
-                                        .put(LeanObject.ATTR_NAME_CLASSNAME, fromClazz)
-                                        .put(LeanObject.ATTR_NAME_OBJECTID, targetObjectId)));
-        QueryOptions options = validateQueryClause(query);
-        if (null == options) {
-          logger.warn("invalid relation query clause for key:" + entry.getKey());
-          throw new IllegalArgumentException("invalid relation Query clause for key:" + entry.getKey());
+          JsonObject query = new JsonObject().put(QUERY_KEY_CLASSNAME, relationTableName)
+                  .put(QUERY_KEY_WHERE, new JsonObject().put(Relation.BUILTIN_ATTR_RELATION_OWNING_ID,
+                          new JsonObject().put(LeanObject.ATTR_NAME_TYPE, Schema.DATA_TYPE_POINTER)
+                                  .put(LeanObject.ATTR_NAME_CLASSNAME, targetClazz)
+                                  .put(LeanObject.ATTR_NAME_OBJECTID, targetObjectId)));
+          QueryOptions options = validateQueryClause(query);
+          if (null == options) {
+            logger.warn("invalid relation query clause for key:" + entry.getKey());
+            throw new IllegalArgumentException("invalid relation Query clause for key:" + entry.getKey());
+          }
+          options.setKeys(new JsonObject().put(Relation.BUILTIN_ATTR_RELATIONN_RELATED_ID, 1));
+          return new AbstractMap.SimpleEntry<String, Object>(LeanObject.ATTR_NAME_OBJECTID,
+                  new JsonObject().put(key, options.toJson()));
+        } else {
+          String relationTableName = Constraints.getRelationTable(currentClazz, targetClazz, relatedField);
+
+          JsonObject query = new JsonObject().put(QUERY_KEY_CLASSNAME, relationTableName)
+                  .put(QUERY_KEY_WHERE, new JsonObject().put(Relation.BUILTIN_ATTR_RELATIONN_RELATED_ID,
+                          new JsonObject().put(LeanObject.ATTR_NAME_TYPE, Schema.DATA_TYPE_POINTER)
+                                  .put(LeanObject.ATTR_NAME_CLASSNAME, targetClazz)
+                                  .put(LeanObject.ATTR_NAME_OBJECTID, targetObjectId)));
+          QueryOptions options = validateQueryClause(query);
+          if (null == options) {
+            logger.warn("invalid relation query clause for key:" + entry.getKey());
+            throw new IllegalArgumentException("invalid relation Query clause for key:" + entry.getKey());
+          }
+          options.setKeys(new JsonObject().put(Relation.BUILTIN_ATTR_RELATION_OWNING_ID, 1));
+          return new AbstractMap.SimpleEntry<String, Object>(LeanObject.ATTR_NAME_OBJECTID,
+                  new JsonObject().put(key, options.toJson()));
         }
-        options.setKeys(new JsonObject().put(Relation.BUILTIN_ATTR_RELATIONN_RELATED_ID, 1));
-        return new AbstractMap.SimpleEntry<String, Object>(LeanObject.ATTR_NAME_OBJECTID,
-                new JsonObject().put(QUERY_RELATED_TO, options.toJson()));
       } else if (null != value && value instanceof JsonObject) {
         JsonObject tmpValue = (JsonObject) value;
         if (tmpValue.containsKey(OP_SELECT) || tmpValue.containsKey(OP_DONT_SELECT)) {

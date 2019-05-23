@@ -223,6 +223,25 @@ public class RelationTests extends WebClientTests {
     return result;
   }
 
+  private Future makeSureRelatedByQuery(String from, String to, String field, String objectId) {
+    String relationFormat = "{\"$relatedBy\":{\"object\":{\"__type\":\"Pointer\",\"className\":\"%s\",\"objectId\":\"%s\"},\"key\":\"%s\"}}";
+    String relationQuery = String.format(relationFormat, to, objectId, field);
+    JsonObject relationQueryJson = new JsonObject().put("where", new JsonObject(relationQuery));
+    Future result = Future.future();
+    get("/1.1/classes/" + from, relationQueryJson, response -> {
+      if (response.failed()) {
+        System.out.println(response.cause());
+        result.fail(response.cause());
+      } else {
+        JsonArray resultArray = response.result().getJsonArray("results");
+        long occCount = null == resultArray? 0: resultArray.size();
+        //.filter( obj -> ((JsonObject)obj).getString("objectId").equals(objectId)).count();
+        result.complete(occCount > 0);
+      }
+    });
+    return result;
+  }
+
   public void testRelationRoleQuery() throws Exception {
     get("/1.1/roles", new JsonObject().put("where", new JsonObject().put("name", "CLevel")), roleResponse -> {
       if (roleResponse.failed()) {
@@ -236,6 +255,29 @@ public class RelationTests extends WebClientTests {
       }
       String roleObjectId = roles.getJsonObject(0).getString("objectId");
       makeSureRelationQuery("_Role", "_Role", "roles", roleObjectId).setHandler(res -> {
+        testSuccessed = true;
+        latch.countDown();
+      });
+    });
+    latch.await();
+    assertTrue(testSuccessed);
+  }
+
+  public void testUserRelatedByQuery() throws Exception {
+    JsonObject authRequest = new JsonObject(authString);
+    post("/1.1/users", authRequest, userRes -> {
+      if (userRes.failed()) {
+        System.out.println("failed to login. cause:" + userRes.cause().getMessage());
+        latch.countDown();
+        return;
+      }
+      JsonObject userObj = userRes.result();
+      final String targetUserObjectId = userObj.getString("objectId");
+      if (StringUtils.isEmpty(targetUserObjectId)) {
+        System.out.println("user object is null!!!");
+        latch.countDown();
+      }
+      makeSureRelatedByQuery("_Role", "_User", Role.BUILTIN_ATTR_RELATION_USER, targetUserObjectId).setHandler(res -> {
         testSuccessed = true;
         latch.countDown();
       });
