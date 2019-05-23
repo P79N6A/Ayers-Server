@@ -28,7 +28,7 @@ public class CommonHandler {
 
   protected Vertx vertx;
   protected RoutingContext routingContext;
-  protected InMemoryLRUCache classMetaCache;
+  protected InMemoryLRUCache<String, JsonObject> classMetaCache;
 
   public CommonHandler(Vertx vertx, RoutingContext context) {
     this.vertx = vertx;

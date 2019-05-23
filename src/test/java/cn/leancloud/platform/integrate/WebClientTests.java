@@ -64,6 +64,9 @@ public class WebClientTests extends TestCase {
     if (null != queryParam) {
       queryParam.stream().forEach(kv -> request.addQueryParam(kv.getKey(), kv.getValue().toString()));
     }
+
+    dumpRequest(request, path, queryParam);
+
     request.send(response -> {
       if (response.failed()) {
         handler.handle(new AsyncResult<JsonObject>() {
@@ -121,9 +124,18 @@ public class WebClientTests extends TestCase {
     });
   }
 
+  private void dumpRequest(HttpRequest request, String path, JsonObject data) {
+    request.headers().entries().stream().forEach(entry -> System.out.println("Header: " + entry.getKey() + ": " + entry.getValue()));
+    System.out.println("Path: " + path);
+    System.out.println(null == data? "" : data.encodePrettily());
+  }
+
   protected void post(String path, JsonObject data, Handler<AsyncResult<JsonObject>> handler) {
     HttpRequest<Buffer> request = this.webClient.post(PORT, HOST, path);
     fillHeaders(request);
+
+    dumpRequest(request, path, data);
+
     request.sendJson(data, response -> {
               if (response.failed()) {
                 handler.handle(new AsyncResult<JsonObject>() {
@@ -184,6 +196,9 @@ public class WebClientTests extends TestCase {
   protected void postWithResultArray(String path, JsonObject data, Handler<AsyncResult<JsonArray>> handler) {
     HttpRequest<Buffer> request = this.webClient.post(PORT, HOST, path);
     fillHeaders(request);
+
+    dumpRequest(request, path, data);
+
     request.sendJson(data, response -> {
       if (response.failed()) {
         handler.handle(new AsyncResult<JsonArray>() {
@@ -244,6 +259,9 @@ public class WebClientTests extends TestCase {
   protected void put(String path, JsonObject data, Handler<AsyncResult<JsonObject>> handler) {
     HttpRequest<Buffer> request = this.webClient.put(PORT, HOST, path);
     fillHeaders(request);
+
+    dumpRequest(request, path, data);
+
     request.sendJsonObject(data, response -> {
       if (response.failed()) {
         handler.handle(new AsyncResult<JsonObject>() {
@@ -304,6 +322,9 @@ public class WebClientTests extends TestCase {
   protected void delete(String path, JsonObject data, Handler<AsyncResult<JsonObject>> handler) {
     HttpRequest<Buffer> request = this.webClient.delete(PORT, HOST, path);
     fillHeaders(request);
+
+    dumpRequest(request, path, data);
+
     request.sendJsonObject(data, response -> {
       if (response.failed()) {
         handler.handle(new AsyncResult<JsonObject>() {

@@ -3,6 +3,7 @@ package cn.leancloud.platform.modules;
 import cn.leancloud.platform.common.BsonTransformer;
 import cn.leancloud.platform.utils.JsonFactory;
 import cn.leancloud.platform.utils.StringUtils;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -136,6 +137,8 @@ public class LeanObject extends JsonObject{
           String className = newValue.getString(ATTR_NAME_CLASSNAME);
           if (StringUtils.notEmpty(className)) {
             return new JsonObject().put(Schema.SCHEMA_KEY_TYPE, Schema.DATA_TYPE_POINTER).put(Schema.SCHEMA_KEY_REF, className);
+          } else {
+            return new JsonObject().put(Schema.SCHEMA_KEY_TYPE, Schema.DATA_TYPE_POINTER);
           }
         } else if (Schema.DATA_TYPE_GEOPOINT.equalsIgnoreCase(type)) {
           return new JsonObject().put(Schema.SCHEMA_KEY_TYPE, Schema.DATA_TYPE_GEOPOINT);
@@ -147,7 +150,16 @@ public class LeanObject extends JsonObject{
         switch (operation.toLowerCase()) {
           case BsonTransformer.REST_OP_ADD_RELATION:
           case BsonTransformer.REST_OP_REMOVE_RELATION:
-            return new JsonObject().put(Schema.SCHEMA_KEY_TYPE, Schema.DATA_TYPE_RELATION);
+            JsonArray objects = newValue.getJsonArray(ATTR_NAME_OBJECTS);
+            JsonObject referredResult = new JsonObject().put(Schema.SCHEMA_KEY_TYPE, Schema.DATA_TYPE_RELATION);
+            if (null != objects && objects.size() > 0) {
+              JsonObject firstValue = objects.getJsonObject(0);
+              String objectClassName = null != firstValue?firstValue.getString(ATTR_NAME_CLASSNAME) : null;
+              if (StringUtils.notEmpty(objectClassName)) {
+                referredResult.put(Schema.SCHEMA_KEY_REF, objectClassName);
+              }
+            }
+            return referredResult;
           case BsonTransformer.REST_OP_ADD:
           case BsonTransformer.REST_OP_ADD_UNIQUE:
           case BsonTransformer.REST_OP_REMOVE:

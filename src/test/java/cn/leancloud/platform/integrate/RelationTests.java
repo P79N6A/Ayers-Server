@@ -1,6 +1,7 @@
 package cn.leancloud.platform.integrate;
 
 import cn.leancloud.platform.modules.ACL;
+import cn.leancloud.platform.modules.Role;
 import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.Future;
 import io.vertx.core.json.JsonArray;
@@ -89,6 +90,16 @@ import java.util.concurrent.CountDownLatch;
  */
 
 public class RelationTests extends WebClientTests {
+  private final String authString = "{\n" +
+          "  \"authData\": {\n" +
+          "    \"weibo\": {\n" +
+          "      \"uid\": \"123456789\",\n" +
+          "      \"access_token\": \"2.00vs3XtCI5FevCff4981adb5jj1lXE\",\n" +
+          "      \"expiration_in\": \"36000\"\n" +
+          "    }\n" +
+          "  }\n" +
+          "}";
+
   @Override
   protected void setUp() throws Exception {
     super.setUp();
@@ -113,15 +124,6 @@ public class RelationTests extends WebClientTests {
       } else {
         JsonObject result = response.result();
         final String targetRoleObjectId = result.getString("objectId");
-        String authString = "{\n" +
-                "  \"authData\": {\n" +
-                "    \"weibo\": {\n" +
-                "      \"uid\": \"123456789\",\n" +
-                "      \"access_token\": \"2.00vs3XtCI5FevCff4981adb5jj1lXE\",\n" +
-                "      \"expiration_in\": \"36000\"\n" +
-                "    }\n" +
-                "  }\n" +
-                "}";
         JsonObject authRequest = new JsonObject(authString);
         post("/1.1/users", authRequest, userRes -> {
           if (userRes.failed()) {
@@ -202,45 +204,18 @@ public class RelationTests extends WebClientTests {
     assertTrue(testSuccessed);
   }
 
-  private boolean makeSureRelationCorrect(String from, String to, String field, String objectId) throws Exception {
-    class innerResult {
-      boolean result;
-      innerResult(boolean v) {this.result = v;}
-      void setValue(boolean v) {this.result = v;}
-      boolean getValue() {return this.result;}
-    }
-
-    final CountDownLatch tmpLatch = new CountDownLatch(1);
-    innerResult result = new innerResult(false);
-
-    String relationFormat = "{\"$relatedTo\":{\"object\":{\"__type\":\"Pointer\",\"className\":\"%s\",\"objectId\":\"%s\"},\"key\":\"%s\"}}";
-    String relationQuery = String.format(relationFormat, from, objectId, field);
-    JsonObject relationQueryJson = new JsonObject().put("where", new JsonObject(relationQuery));
-    get("/1.1/classes/" + from, relationQueryJson, response -> {
-      if (response.failed()) {
-        System.out.println(response.cause());
-      } else {
-        long occCount = response.result().getJsonArray("results").size();
-                //.filter( obj -> ((JsonObject)obj).getString("objectId").equals(objectId)).count();
-        result.setValue(occCount > 0);
-      }
-      tmpLatch.countDown();
-    });
-    tmpLatch.await();
-    return result.getValue();
-  }
-
   private Future makeSureRelationQuery(String from, String to, String field, String objectId) {
     String relationFormat = "{\"$relatedTo\":{\"object\":{\"__type\":\"Pointer\",\"className\":\"%s\",\"objectId\":\"%s\"},\"key\":\"%s\"}}";
     String relationQuery = String.format(relationFormat, from, objectId, field);
     JsonObject relationQueryJson = new JsonObject().put("where", new JsonObject(relationQuery));
     Future result = Future.future();
-    get("/1.1/classes/" + from, relationQueryJson, response -> {
+    get("/1.1/classes/" + to, relationQueryJson, response -> {
       if (response.failed()) {
         System.out.println(response.cause());
         result.fail(response.cause());
       } else {
-        long occCount = response.result().getJsonArray("results").size();
+        JsonArray resultArray = response.result().getJsonArray("results");
+        long occCount = null == resultArray? 0: resultArray.size();
         //.filter( obj -> ((JsonObject)obj).getString("objectId").equals(objectId)).count();
         result.complete(occCount > 0);
       }
@@ -249,20 +224,27 @@ public class RelationTests extends WebClientTests {
   }
 
   public void testRelationRoleQuery() throws Exception {
-    testSuccessed = makeSureRelationCorrect("_Role", "_Role", "roles", "5ce4b6976def753be18e90bd");
+    get("/1.1/roles", new JsonObject().put("where", new JsonObject().put("name", "CLevel")), roleResponse -> {
+      if (roleResponse.failed()) {
+        latch.countDown();
+        return;
+      }
+      JsonArray roles = roleResponse.result().getJsonArray("results");
+      if (null == roles || roles.size() < 1) {
+        latch.countDown();
+        return;
+      }
+      String roleObjectId = roles.getJsonObject(0).getString("objectId");
+      makeSureRelationQuery("_Role", "_Role", "roles", roleObjectId).setHandler(res -> {
+        testSuccessed = true;
+        latch.countDown();
+      });
+    });
+    latch.await();
     assertTrue(testSuccessed);
   }
 
   public void testRelationUserQuery() throws Exception {
-    String authString = "{\n" +
-            "  \"authData\": {\n" +
-            "    \"weibo\": {\n" +
-            "      \"uid\": \"123456789\",\n" +
-            "      \"access_token\": \"2.00vs3XtCI5FevCff4981adb5jj1lXE\",\n" +
-            "      \"expiration_in\": \"36000\"\n" +
-            "    }\n" +
-            "  }\n" +
-            "}";
     JsonObject authRequest = new JsonObject(authString);
     post("/1.1/users", authRequest, userRes -> {
       if (userRes.failed()) {
@@ -270,15 +252,26 @@ public class RelationTests extends WebClientTests {
         latch.countDown();
       } else {
         JsonObject userObj = userRes.result();
-
         final String targetUserObjectId = userObj.getString("objectId");
         if (StringUtils.isEmpty(targetUserObjectId)) {
           System.out.println("user object is null!!!");
           latch.countDown();
         } else {
-          makeSureRelationQuery("_Role", "_User", "users", targetUserObjectId).setHandler(res -> {
-            testSuccessed = true;
-            latch.countDown();
+          get("/1.1/roles", new JsonObject().put("where", new JsonObject().put("name", "Manager")), roleResponse -> {
+            if (roleResponse.failed()) {
+              latch.countDown();
+              return;
+            }
+            JsonArray roles = roleResponse.result().getJsonArray("results");
+            if (null == roles || roles.size() < 1) {
+              latch.countDown();
+              return;
+            }
+            String roleObjectId = roles.getJsonObject(0).getString("objectId");
+            makeSureRelationQuery("_Role", "_User", Role.BUILTIN_ATTR_RELATION_USER, roleObjectId).setHandler(res -> {
+              testSuccessed = true;
+              latch.countDown();
+            });
           });
         }
       }
@@ -289,6 +282,33 @@ public class RelationTests extends WebClientTests {
 
   public void testRelationObjectDelete() throws Exception {
 
+  }
+
+  public void testRelationQueryAndValidateResult() throws Exception {
+    get("/1.1/roles", new JsonObject().put("where", new JsonObject().put("name", "Manager")), roleResponse -> {
+      if (roleResponse.failed()) {
+        latch.countDown();
+        return;
+      }
+      JsonArray roles = roleResponse.result().getJsonArray("results");
+      if (null == roles || roles.size() < 1) {
+        latch.countDown();
+        return;
+      }
+      String roleObjectId = roles.getJsonObject(0).getString("objectId");
+      JsonObject userObject = roles.getJsonObject(0).getJsonObject("users");
+      JsonObject roleObject = roles.getJsonObject(0).getJsonObject("roles");
+      if (StringUtils.notEmpty(roleObjectId) && null != userObject && null != roleObject) {
+        if ("Relation".equals(userObject.getString("__type")) && "Relation".equals(roleObject.getString("__type"))) {
+          if ("_User".equals(userObject.getString("className")) && "_Role".equals(roleObject.getString("className"))) {
+            testSuccessed = true;
+          }
+        }
+      }
+      latch.countDown();
+    });
+    latch.await();
+    assertTrue(testSuccessed);
   }
 
   public void testRelationClassDelete() throws Exception {

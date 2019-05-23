@@ -48,6 +48,7 @@ public class ObjectQueryHandler extends CommonHandler {
   public static final String OP_IN_QUERY = "$inQuery";
   public static final String OP_NOTIN_QUERY = "$notInQuery";
   public static final String QUERY_RELATED_TO = "$relatedTo";
+  public static final String QUERY_RELATED_BY = "$relatedBy";
 
   private static final String[] ALWAYS_PROJECT_KEYS = {"_id", "createdAt", "updatedAt", "ACL"};
 
@@ -219,21 +220,26 @@ public class ObjectQueryHandler extends CommonHandler {
           logger.debug("begin to execute actual queryParam option: " + queryOptions.toJson());
 
           execute(clazz, objectId, queryOptions.toJson(), includeArray, response -> {
-            if (response.failed()) {
+            if (response.failed() || null == response.result()) {
               logger.warn("query failed: " + response.cause().getMessage());
               handler.handle(response);
               return;
             }
-            if (includeArray.size() < 1) {
-              logger.debug("include list is empty, return directly.");
-              handler.handle(response);
-              return;
-            }
+
+            ClassMetaData classMetaData = ClassMetaData.fromJson(classMetaCache.get(clazz));
+            Schema schema = classMetaData.getSchema();
             JsonArray results = response.result().getJsonArray("results");
             int resultCount = (null == results) ? 0 : results.size();
             if (null == results || resultCount < 1) {
               logger.debug("result list is empty, return directly.");
               handler.handle(response);
+              return;
+            }
+            if (includeArray.size() < 1) {
+              logger.debug("include list is empty, return directly.");
+              JsonArray returnJsonObjects = results.stream().map(o -> decorateObject(clazz, schema, (JsonObject) o))
+                      .collect(JsonFactory.toJsonArray());
+              handler.handle(wrapActualResult(new JsonObject().put("results", returnJsonObjects)));
               return;
             }
 //            logger.debug("first results:" + results);
@@ -310,8 +316,6 @@ public class ObjectQueryHandler extends CommonHandler {
                 handler.handle(wrapErrorResult(any.cause()));
               } else {
 //                logger.debug("AllInOne finished. results=" + results);
-                ClassMetaData classMetaData = ClassMetaData.fromJson(Configure.getInstance().getClassMetaDataCache().get(clazz));
-                Schema schema = classMetaData.getSchema();
                 JsonArray returnJsonObjects = results.stream().map(o -> decorateObject(clazz, schema, (JsonObject) o))
                         .collect(JsonFactory.toJsonArray());
                 handler.handle(wrapActualResult(new JsonObject().put("results", returnJsonObjects)));
@@ -332,8 +336,9 @@ public class ObjectQueryHandler extends CommonHandler {
     }
     logger.debug("decorate jsonobject:" + object + ", with schema:" + schema + ", clazz:" + clazz);
 
+    // TODO: remove ACL attr if not required.
+    
     JsonObject result = object;
-    result.remove(LeanObject.BUILTIN_ATTR_ACL);
     if (Constraints.USER_CLASS.equalsIgnoreCase(clazz)) {
       result.remove(LeanObject.BUILTIN_ATTR_AUTHDATA);
       result.remove(LeanObject.BUILTIN_ATTR_SESSION_TOKEN);

@@ -220,12 +220,35 @@ public class DamoclesVerticle extends CommonVerticle {
   }
 
   protected Future<Boolean> checkRolePermission(List<String> roles, JsonObject currentUser) {
-    // TODO: finish me.
-    Future<Boolean> result = Future.failedFuture("can't check role, not implement yet...");
+    Future<Boolean> result = Future.future();
+    if (null == currentUser || null == roles || roles.size() < 1) {
+      result.complete(false);
+    } else {
+      String userObjectId = currentUser.getString(LeanObject.ATTR_NAME_OBJECTID);
+      if (StringUtils.isEmpty(userObjectId)) {
+        result.complete(false);
+      } else {
+        // query user's roles.
+        // maybe we need to cache result in memory for a short term(1 min), depends on requests sampling.
+        DataStore dataStore = dataStoreFactory.getStore();
+        dataStore.find(Constraints.ROLE_CLASS, Role.getUserRelationQuery(userObjectId), response -> {
+          dataStore.close();
+          if (response.failed()) {
+            logger.warn("failed to query user role. cause:" + response.cause().getMessage());
+            result.complete(false);
+          } else {
+            long foundRoleCount = response.result().stream()
+                    .filter(json -> roles.contains(json.getString(Role.BUILTIN_ATTR_NAME))).count();
+            result.complete(foundRoleCount > 0);
+          }
+        });
+      }
+    }
     return result;
   }
 
-  protected Future<Boolean> checkClassPermission(String clazz, JsonObject body, RequestParse.RequestHeaders request, ClassPermission.OP op) {
+  protected Future<Boolean> checkClassPermission(String clazz, JsonObject body, RequestParse.RequestHeaders request,
+                                                 ClassPermission.OP op) {
     Objects.requireNonNull(clazz);
     Objects.requireNonNull(request);
 
@@ -288,7 +311,7 @@ public class DamoclesVerticle extends CommonVerticle {
           if (null == roles || roles.size() < 1) {
             result.fail("no permission for current user.");
           } else {
-            checkRolePermission(roles, user).setHandler(res -> result.handle(res));
+            checkRolePermission(roles, newUser).setHandler(res -> result.handle(res));
           }
         }
       }
