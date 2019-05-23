@@ -1,5 +1,6 @@
 package cn.leancloud.platform.ayers;
 
+import cn.leancloud.platform.ayers.handler.UserRoleQueryHandler;
 import cn.leancloud.platform.cache.InMemoryLRUCache;
 import cn.leancloud.platform.cache.UnifiedCache;
 import cn.leancloud.platform.modules.*;
@@ -24,11 +25,13 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static cn.leancloud.platform.common.ErrorCodes.ACL_VIOLATION;
 import static cn.leancloud.platform.common.ErrorCodes.DATABASE_ERROR;
 import static cn.leancloud.platform.common.ErrorCodes.SCHEMA_VIOLATION;
+import static cn.leancloud.platform.modules.Relation.BUILTIN_ATTR_RELATIONN_RELATED_ID;
 
 /**
  * Class permission / Object ACL rule / Data consistency defender.
@@ -228,17 +231,15 @@ public class DamoclesVerticle extends CommonVerticle {
       if (StringUtils.isEmpty(userObjectId)) {
         result.complete(false);
       } else {
-        // query user's roles.
-        // maybe we need to cache result in memory for a short term(1 min), depends on requests sampling.
         DataStore dataStore = dataStoreFactory.getStore();
-        dataStore.find(Constraints.ROLE_CLASS, Role.getUserRelationQuery(userObjectId), response -> {
+        UserRoleQueryHandler handler = new UserRoleQueryHandler();
+        handler.queryUserRoles(dataStore, userObjectId, response -> {
           dataStore.close();
           if (response.failed()) {
-            logger.warn("failed to query user role. cause:" + response.cause().getMessage());
             result.complete(false);
           } else {
-            long foundRoleCount = response.result().stream()
-                    .filter(json -> roles.contains(json.getString(Role.BUILTIN_ATTR_NAME))).count();
+            List<String> userOwnRoles = response.result();
+            long foundRoleCount = userOwnRoles.stream().filter(role -> roles.contains(role)).count();
             result.complete(foundRoleCount > 0);
           }
         });

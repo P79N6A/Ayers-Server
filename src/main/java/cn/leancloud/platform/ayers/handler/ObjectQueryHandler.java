@@ -337,7 +337,7 @@ public class ObjectQueryHandler extends CommonHandler {
     logger.debug("decorate jsonobject:" + object + ", with schema:" + schema + ", clazz:" + clazz);
 
     // TODO: remove ACL attr if not required.
-    
+
     JsonObject result = object;
     if (Constraints.USER_CLASS.equalsIgnoreCase(clazz)) {
       result.remove(LeanObject.BUILTIN_ATTR_AUTHDATA);
