@@ -176,6 +176,34 @@ public class CommonHandler {
     return headerJson;
   }
 
+  protected void sendDataOperationWithoutCheck(String clazz, String objectId, String operation,
+                                             JsonObject query, JsonObject update, boolean returnNewDocument,
+                                             RequestParse.RequestHeaders headers,
+                                             final Handler<AsyncResult<JsonObject>> handler) {
+    JsonObject request = new JsonObject().put(CommonVerticle.INTERNAL_MSG_ATTR_RETURNNEWDOC, returnNewDocument);
+    if (!StringUtils.isEmpty(clazz)) {
+      request.put(CommonVerticle.INTERNAL_MSG_ATTR_CLASS, clazz);
+    }
+    if (!StringUtils.isEmpty(objectId)) {
+      request.put(CommonVerticle.INTERNAL_MSG_ATTR_OBJECT_ID, objectId);
+    }
+    if (null != query) {
+      request.put(CommonVerticle.INTERNAL_MSG_ATTR_QUERY, query);
+    }
+    if (null != update) {
+      request.put(CommonVerticle.INTERNAL_MSG_ATTR_UPDATE_PARAM, update);
+    }
+    if (null != headers) {
+      request.put(CommonVerticle.INTERNAL_MSG_ATTR_REQUESTHEADERS, headers.toJson());
+    }
+
+    String upperOperation = operation.toUpperCase();
+    DeliveryOptions options = new DeliveryOptions().addHeader(CommonVerticle.INTERNAL_MSG_HEADER_OP, upperOperation);
+    logger.debug("send to storage verticle directly...");
+    vertx.eventBus().send(Configure.MAIL_ADDRESS_DATASTORE_QUEUE, request, options,
+            res -> handler.handle(res.map(v -> (JsonObject) v.body())));
+  }
+
   protected void sendDataOperationWithOption(String clazz, String objectId, String operation,
                                              JsonObject query, JsonObject update, boolean returnNewDocument,
                                              RequestParse.RequestHeaders headers,

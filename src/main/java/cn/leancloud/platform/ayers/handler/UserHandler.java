@@ -4,19 +4,26 @@ import cn.leancloud.platform.ayers.RequestParse;
 import cn.leancloud.platform.cache.UnifiedCache;
 import cn.leancloud.platform.codec.Base64;
 import cn.leancloud.platform.codec.MessageDigest;
+import cn.leancloud.platform.codec.SymmetricEncryptor;
 import cn.leancloud.platform.common.*;
 import cn.leancloud.platform.modules.ACL;
 import cn.leancloud.platform.modules.LeanObject;
 import cn.leancloud.platform.modules.ObjectSpecifics;
+import cn.leancloud.platform.utils.HandlerUtils;
 import cn.leancloud.platform.utils.StringUtils;
+import cn.leancloud.platform.utils.TemplateRenderUtils;
 import io.vertx.core.Handler;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class UserHandler extends CommonHandler {
+  private static final Logger logger = LoggerFactory.getLogger(UserHandler.class);
+
   public static final String PARAM_USERNAME = "username";
   public static final String PARAM_PASSWORD = "password";
   public static final String PARAM_EMAIL = "email";
@@ -25,6 +32,10 @@ public class UserHandler extends CommonHandler {
   public static final String PARAM_SESSION_TOKEN = "session_token";
   public static final String PARAM_AUTH_DATA = "authData";
   public static final String PARAM_AUTH_ANONYMOUS = "anonymous";
+
+  private static final String TOKEN_ATTR_APPID = "appId";
+  private static final String TOKEN_ATTR_OBJID = "objId";
+  private static final String TOKEN_ATTR_DEADLINE = "dl";
 
   public UserHandler(Vertx vertx, RoutingContext context) {
     super(vertx, context);
@@ -161,6 +172,27 @@ public class UserHandler extends CommonHandler {
     sendDataOperationWithOption(Constraints.USER_CLASS, null, operation, null, param, true, headers, res -> {
       if (res.succeeded() && null != res.result()) {
         JsonObject user = res.result();
+
+        String email = user.getString(LeanObject.BUILTIN_ATTR_EMAIL);
+        String userObjectId = user.getString(LeanObject.ATTR_NAME_OBJECTID);
+        if (StringUtils.notEmpty(userObjectId) && StringUtils.notEmpty(email)) {
+          String username = user.getString(LeanObject.BUILTIN_ATTR_USERNAME);
+          String appId = headers.getAppId();
+          JsonObject tokenData = new JsonObject().put(TOKEN_ATTR_APPID, appId).put(TOKEN_ATTR_OBJID, userObjectId);
+          String link = TemplateRenderUtils.generateVerifyUrl(Constraints.EMAIL_VERIFY_PATH, tokenData);
+
+          // send verify email with template
+          JsonObject renderData = new JsonObject().put(TemplateRenderUtils.VAR_APPNAME, "LeanCloud")
+                  .put(TemplateRenderUtils.VAR_USERNAME, username)
+                  .put(TemplateRenderUtils.VAR_EMAIL, email)
+                  .put(TemplateRenderUtils.VAR_LINK, link);
+          TemplateRenderUtils.render(this.vertx, renderData, "templates/verify_email.hbs", renderRes -> {
+            // send through mail channel.
+            logger.debug("need to send email content: " + renderRes.result());
+            // TODO: fix me
+          });
+        }
+
         UnifiedCache.getGlobalInstance().put(user.getString(LeanObject.BUILTIN_ATTR_SESSION_TOKEN), user);
       }
       handler.handle(res);
@@ -206,5 +238,42 @@ public class UserHandler extends CommonHandler {
     });
   }
 
+  private boolean validateAppId(String appId) {
+    return true;
+  }
+
+  public void verifyEmail(String token, Handler<AsyncResult<Boolean>> handler) {
+    if (StringUtils.isEmpty(token)) {
+      handler.handle(HandlerUtils.wrapErrorResult(new IllegalArgumentException("token is null")));
+      return;
+    }
+    try {
+      String decryptData = SymmetricEncryptor.decodeWithDES(token, Configure.getInstance().secretKey());
+      JsonObject tokenJson = new JsonObject(decryptData);
+      String appId = tokenJson.getString(TOKEN_ATTR_APPID);
+      String objectId = tokenJson.getString(TOKEN_ATTR_OBJID);
+      long now = System.currentTimeMillis();
+      long deadline = tokenJson.getLong(TOKEN_ATTR_DEADLINE, now);
+      if (StringUtils.isEmpty(appId) || StringUtils.isEmpty(objectId) || !validateAppId(appId)) {
+        handler.handle(HandlerUtils.wrapErrorResult(new IllegalArgumentException("token is invalid.")));
+      } else if (deadline < now) {
+        handler.handle(HandlerUtils.wrapErrorResult(new IllegalArgumentException("token is expired.")));
+      } else {
+        JsonObject query = new JsonObject().put(LeanObject.ATTR_NAME_OBJECTID, objectId);
+        JsonObject update = new JsonObject().put(LeanObject.BUILTIN_ATTR_EMAIL_VERIFIED, true);
+        sendDataOperationWithoutCheck(Constraints.USER_CLASS, objectId, HttpMethod.PUT.toString(), query, update,
+                false, null, res -> {
+          if (res.failed()) {
+            handler.handle(HandlerUtils.wrapErrorResult(res.cause()));
+          } else {
+            handler.handle(HandlerUtils.wrapActualResult(true));
+          }
+        });
+      }
+    } catch (Exception ex) {
+      logger.debug("illegal token: " + token + ", message:" + ex.getMessage());
+      handler.handle(HandlerUtils.wrapErrorResult(new IllegalArgumentException("token is invalid.")));
+    }
+  }
 
 }

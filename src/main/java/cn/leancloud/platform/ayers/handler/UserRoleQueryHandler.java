@@ -5,6 +5,7 @@ import cn.leancloud.platform.modules.LeanObject;
 import cn.leancloud.platform.modules.Relation;
 import cn.leancloud.platform.modules.Role;
 import cn.leancloud.platform.persistence.DataStore;
+import cn.leancloud.platform.utils.HandlerUtils;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 import io.vertx.core.json.JsonObject;
@@ -23,31 +24,6 @@ import static cn.leancloud.platform.modules.Relation.BUILTIN_ATTR_RELATIONN_RELA
 public class UserRoleQueryHandler {
   private static final Logger logger = LoggerFactory.getLogger(UserRoleQueryHandler.class);
 
-  private AsyncResult<List<String>> wrapResult(List<String> data) {
-    logger.debug("return result: " + data);
-    return new AsyncResult<List<String>>() {
-      @Override
-      public List<String> result() {
-        return data;
-      }
-
-      @Override
-      public Throwable cause() {
-        return null;
-      }
-
-      @Override
-      public boolean succeeded() {
-        return true;
-      }
-
-      @Override
-      public boolean failed() {
-        return false;
-      }
-    };
-  }
-
   public void queryUserRoles(DataStore dataStore, String userObjectId, Handler<AsyncResult<List<String>>> handler) {
     Objects.requireNonNull(dataStore);
     Objects.requireNonNull(userObjectId);
@@ -63,14 +39,14 @@ public class UserRoleQueryHandler {
       } else {
         if (null == response.result()) {
           logger.debug("response is null.");
-          handler.handle(wrapResult(new ArrayList<>()));
+          handler.handle(HandlerUtils.wrapActualResult(new ArrayList<>()));
           return;
         }
         List<String> roleIds = response.result().stream().map(object -> object.getJsonObject(Relation.BUILTIN_ATTR_RELATION_OWNING_ID).getString(LeanObject.ATTR_NAME_OBJECTID))
                 .collect(Collectors.toList());
         if (roleIds.size() < 1) {
           logger.debug("response is empty.");
-          handler.handle(wrapResult(new ArrayList<>()));
+          handler.handle(HandlerUtils.wrapActualResult(new ArrayList<>()));
           return;
         }
         JsonObject roleQuery = new JsonObject().put(LeanObject.ATTR_NAME_OBJECTID, new JsonObject().put("$in", roleIds));
@@ -80,13 +56,13 @@ public class UserRoleQueryHandler {
             handler.handle(secondQueryRes.map(jsonObjects -> null));
           } else {
             if (null == secondQueryRes.result()) {
-              handler.handle(wrapResult(new ArrayList<>()));
+              handler.handle(HandlerUtils.wrapActualResult(new ArrayList<>()));
               return;
             }
             List<String> directRoles = secondQueryRes.result().stream()
                     .map(object -> object.getString(Role.BUILTIN_ATTR_NAME)).collect(Collectors.toList());
             if (directRoles.size() < 1) {
-              handler.handle(wrapResult(new ArrayList<>()));
+              handler.handle(HandlerUtils.wrapActualResult(new ArrayList<>()));
               return;
             }
             List<String> directRoleObjectIds = secondQueryRes.result().stream()
@@ -96,29 +72,30 @@ public class UserRoleQueryHandler {
             dataStore.find(roleRelationTable, relatedByRoleQuery, recurResponse -> {
               if (recurResponse.failed()) {
                 logger.warn("failed to query parent role from relation table. cause: " + recurResponse.cause().getMessage());
-                handler.handle(wrapResult(directRoles));
+                handler.handle(HandlerUtils.wrapActualResult(directRoles));
                 return;
               } else {
                 if (null == recurResponse.result()) {
-                  handler.handle(wrapResult(directRoles));
+                  handler.handle(HandlerUtils.wrapActualResult(directRoles));
                   return;
                 }
                 List<String> parentRoleObjectIds = recurResponse.result().stream().map(object ->
                         object.getJsonObject(BUILTIN_ATTR_RELATIONN_RELATED_ID).getString(LeanObject.ATTR_NAME_OBJECTID))
                         .collect(Collectors.toList());
                 if (parentRoleObjectIds.size() < 1) {
-                  handler.handle(wrapResult(directRoles));
+                  handler.handle(HandlerUtils.wrapActualResult(directRoles));
                   return;
                 }
-                JsonObject parentRoleQuery = new JsonObject().put(LeanObject.ATTR_NAME_OBJECTID, new JsonObject().put("$in", parentRoleObjectIds));
+                JsonObject parentRoleQuery = new JsonObject().put(LeanObject.ATTR_NAME_OBJECTID,
+                        new JsonObject().put("$in", parentRoleObjectIds));
                 dataStore.find(Constraints.ROLE_CLASS, parentRoleQuery, parentResponse -> {
                   if (parentResponse.failed()) {
                     logger.warn("failed to query parent role from role table. cause: " + parentResponse.cause().getMessage());
-                    handler.handle(wrapResult(directRoles));
+                    handler.handle(HandlerUtils.wrapActualResult(directRoles));
                     return;
                   }
                   parentResponse.result().stream().forEach(object -> directRoles.add(object.getString(Role.BUILTIN_ATTR_NAME)));
-                  handler.handle(wrapResult(directRoles));
+                  handler.handle(HandlerUtils.wrapActualResult(directRoles));
                   return;
                 });
               }

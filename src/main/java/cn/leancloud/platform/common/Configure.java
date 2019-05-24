@@ -65,6 +65,10 @@ public class Configure {
     return settings.getString("server.datastoreType", "mongo");
   }
 
+  public String secretKey() {
+    return settings.getString("server.secretKey", "leancloudsec");
+  }
+
   public int datastoreVerticleCount() {
     return settings.getInteger("server.datastoreVerticles", 1);
   }

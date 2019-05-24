@@ -1,4 +1,4 @@
-package cn.leancloud.platform.mongo;
+package cn.leancloud.platform.persistence.impl;
 
 import cn.leancloud.platform.common.BsonTransformer;
 import io.vertx.core.Vertx;

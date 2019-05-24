@@ -314,4 +314,15 @@ public class UserFunctionTests extends WebClientTests {
     latch.await();
     assertTrue(testSuccessed);
   }
+
+  public void testVerifyEmail() throws Exception {
+    get("/emailVerify/5ce3f0947b968a00730fbfca", null, res -> {
+      if (res.succeeded()) {
+        testSuccessed = true;
+      }
+      latch.countDown();
+    });
+    latch.await();
+    assertTrue(testSuccessed);
+  }
 }

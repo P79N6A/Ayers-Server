@@ -35,6 +35,8 @@ import org.slf4j.LoggerFactory;
 import java.time.Instant;
 import java.util.Optional;
 
+import static cn.leancloud.platform.common.Constraints.EMAIL_VERIFY_PATH;
+
 /**
  * RestServer Verticle
  */
@@ -650,6 +652,23 @@ public class RestServerVerticle extends CommonVerticle {
     }
   }
 
+  /**
+   * email verify handler
+   * @return
+   */
+  private void validateEmail(RoutingContext context) {
+    String token = context.request().getParam("token");
+    logger.info("try to validate token: " + token);
+    UserHandler handler = new UserHandler(vertx, context);
+    handler.verifyEmail(token, response -> {
+      if (response.failed()) {
+        badRequest(context, response.cause().getMessage());
+      } else {
+        ok(context, new JsonObject().put("result", "succeed"));
+      }
+    });
+  }
+
   private Future<Void> startHttpServer() {
     Future<Void> future = Future.future();
     httpServer = vertx.createHttpServer(new HttpServerOptions()
@@ -673,6 +692,8 @@ public class RestServerVerticle extends CommonVerticle {
     router.get("/ping").handler(this::healthcheck);
 
     router.route("/static/*").handler(StaticHandler.create("static"));
+
+    router.get(EMAIL_VERIFY_PATH + ":token").handler(this::validateEmail);
 
     router.route("/1.1/*").handler(appKeyValidationHandler)
             .handler(BodyHandler.create().setBodyLimit(2*1024*1024))

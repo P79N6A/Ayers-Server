@@ -111,6 +111,9 @@ public class CommonVerticle extends AbstractVerticle {
   protected void badRequest(RoutingContext context, JsonObject result) {
     response(context, HttpStatus.SC_BAD_REQUEST, null, result);
   }
+  protected void badRequest(RoutingContext context, String result) {
+    response(context, HttpStatus.SC_BAD_REQUEST, null, result);
+  }
   protected void notFound(RoutingContext context, JsonObject result) {
     response(context, HttpStatus.SC_NOT_FOUND, null, result);
   }
