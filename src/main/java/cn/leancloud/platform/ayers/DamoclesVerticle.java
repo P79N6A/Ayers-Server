@@ -600,7 +600,6 @@ public class DamoclesVerticle extends CommonVerticle {
         dataStore.close();
       } else {
         if (event.result().size() < 1) {
-          // FIXME!
           ClassMetaData metaClassMeta = new ClassMetaData(Constraints.METADATA_CLASS);
           dataStore.upsertMetaInfo(Constraints.METADATA_CLASS, metaClassMeta, res -> {
             if (res.succeeded()) {

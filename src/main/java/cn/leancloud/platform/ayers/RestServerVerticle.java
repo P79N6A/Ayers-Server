@@ -601,6 +601,8 @@ public class RestServerVerticle extends CommonVerticle {
           internalServerError(context, ErrorCodes.DATABASE_ERROR.toJson());
         }
       } else {
+        // TODO: remove ACL attr if not required.
+
         JsonObject result = reply.result();
         if (HttpMethod.POST == httpMethod && StringUtils.isEmpty(objectId)) {
           // should response as following:

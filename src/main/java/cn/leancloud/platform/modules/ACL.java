@@ -4,6 +4,7 @@ import cn.leancloud.platform.utils.StringUtils;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +52,14 @@ public class ACL {
       }
       if (permissions.getWritePermission()) {
         put(KEY_WRITE_PERMISSION, true);
+      }
+    }
+
+    boolean grantedOperationPerm(boolean isWriteOp) {
+      if (isWriteOp) {
+        return getWritePermission();
+      } else {
+        return getReadPermission();
       }
     }
 
@@ -176,8 +185,17 @@ public class ACL {
   }
 
   public List<String> getRoleList(boolean isWriteAccess) {
-    // TODO:
-    return null;
+    List<String> roles = new ArrayList<>();
+    permissionsById.keySet().stream().forEach(key -> {
+      if (key.startsWith(ROLE_PREFIX)) {
+        Permissions permissions = permissionsById.get(key);
+        if (permissions.grantedOperationPerm(isWriteAccess)) {
+          String role = key.substring(ROLE_PREFIX.length());
+          roles.add(role);
+        }
+      }
+    });
+    return roles;
   }
 
   /**

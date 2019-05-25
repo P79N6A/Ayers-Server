@@ -41,7 +41,7 @@ public class SimpleRedisClient {
   }
 
   public void connect(Vertx vertx, String host, int port, Handler<AsyncResult<Void>> handler) {
-    // TODO:
+    // TODO(feature in future):
     // we can change options to support redis cluster or sentinel.
     //
     RedisOptions options = new RedisOptions();

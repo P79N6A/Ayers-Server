@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
 import static cn.leancloud.platform.modules.Relation.BUILTIN_ATTR_RELATIONN_RELATED_ID;
 
 /**
- * TODO:
+ * TODO(feature in future):
  *   maybe we need to cache user owing roles in memory for a short term, depends on requests sampling.
  */
 public class UserRoleQueryHandler {
