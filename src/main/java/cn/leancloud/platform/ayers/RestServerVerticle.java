@@ -320,17 +320,16 @@ public class RestServerVerticle extends CommonVerticle {
     });
   }
 
-  // request body as following:
-  // {
-  //  "result":true,
-  //  "token":"w6ZYeC-arS2yNzZ9"
-  // }
   private void fileUploadCallback(RoutingContext context) {
     JsonObject body = parseRequestBody(context);
 
     FileHandler fileHandler = new FileHandler(vertx, context);
     fileHandler.uploadCallback(body, res -> {
-      ok(context, new JsonObject());
+      if (res.failed()) {
+        badRequest(context, res.cause().getMessage());
+      } else {
+        ok(context, res.result());
+      }
     });
   }
 

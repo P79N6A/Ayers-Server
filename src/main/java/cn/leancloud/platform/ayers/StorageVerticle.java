@@ -267,6 +267,7 @@ public class StorageVerticle extends CommonVerticle {
         if (!StringUtils.isEmpty(objectId)) {
           updateParam.put(LeanObject.ATTR_NAME_OBJECTID, objectId);
         }
+        // TODO: for _File class, need to delete source file from qiniu or s3
         dataStore.removeWithOptions(clazz, updateParam, null, res -> {
           dataStore.close();
           if (res.failed()) {
