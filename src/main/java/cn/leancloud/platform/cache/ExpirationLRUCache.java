@@ -30,9 +30,9 @@ public class ExpirationLRUCache<K, V>{
   private InMemoryLRUCache<K, ValueNode<V>> memoryCache;
   private Thread timer;
 
-  public ExpirationLRUCache(long capacity, int maxTTL) {
+  public ExpirationLRUCache(long capacity, int maxMsTTL) {
     this.memoryCache = new InMemoryLRUCache<>(capacity);
-    this.maxTTL = maxTTL;
+    this.maxTTL = maxMsTTL;
     this.timer = new Thread(new Runnable() {
       @Override
       public void run() {

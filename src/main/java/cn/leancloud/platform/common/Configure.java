@@ -16,6 +16,7 @@ public class Configure {
   private static final Logger logger = LoggerFactory.getLogger(Configure.class);
   public static final String MAIL_ADDRESS_DATASTORE_QUEUE = "datastore.queue";
   public static final String MAIL_ADDRESS_DAMOCLES_QUEUE = "damocles.queue";
+  public static final String MAIL_ADDRESS_EMAIL_QUEUE = "email.queue";
 
   private static Configure instance = null;
   private JsonObject settings = new JsonObject();
